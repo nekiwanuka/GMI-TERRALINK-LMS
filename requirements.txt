@@ -1,0 +1,5 @@
+Django==4.2.7
+pywebview==4.4
+Pillow==10.1.0
+python-decouple==3.8
+pyinstaller==6.1.0

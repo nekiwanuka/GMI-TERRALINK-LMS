@@ -1,0 +1,145 @@
+You are a senior full-stack software engineer and system architect.
+
+I want you to build a complete OFFLINE DESKTOP LOGISTICS MANAGEMENT SYSTEM for a company called:
+
+ROSHE GROUP
+
+This system MUST:
+- Work fully offline
+- Be packaged as a Windows .EXE
+- Use SQLite (local database)
+- Allow CSV export
+- Have role-based access (Superuser & Data Entry User)
+- NOT use internet or cloud sync
+- Be built using Python + Django
+- Use PyWebView or similar for desktop wrapper
+- Be installable on multiple computers
+
+──────────────────────────────
+COMPANY DETAILS
+──────────────────────────────
+Company Name: Roshe Group  
+Phone: +256 788 239000 | +8613416137544  
+Email: info@roshegroup.com | roshegroup@gmail.com  
+Address: Plot 13 Mukwano Courts, Buganda Road, floor 2 Room 201–202 I  
+Brand Colors: Dark Blue, Yellow, White  
+
+──────────────────────────────
+SYSTEM REQUIREMENTS
+──────────────────────────────
+
+1. USER ROLES
+
+A. SUPERUSER (ADMIN)
+- Create, edit, delete all records
+- Create users
+- Export CSV reports
+- View all data
+- Manage system settings
+
+B. DATA ENTRY USER
+- Add records only
+- View records
+- Cannot edit or delete
+- Cannot manage users
+
+──────────────────────────────
+2. SYSTEM MODULES
+──────────────────────────────
+
+A. CLIENT MANAGEMENT
+- Client ID
+- Name
+- Contact person
+- Phone
+- Address
+- Date registered
+- Remarks
+
+B. LOADING / CARGO
+- Loading ID
+- Client
+- Loading date
+- Item description
+- Weight
+- Container number
+- Origin
+- Destination
+
+C. TRANSIT MANAGEMENT
+- Vessel name
+- Boarding date
+- ETA to Kampala
+- Status (Awaiting, In Transit, Arrived)
+
+D. PAYMENT MANAGEMENT
+- Amount charged
+- Amount paid
+- Balance
+- Payment date
+- Payment method
+
+E. CONTAINER RETURN
+- Container number
+- Return date
+- Condition
+- Remarks
+- Status
+
+F. REPORTS
+- Client report
+- Shipment report
+- Payment report
+- Outstanding balances
+- Container return report
+- Export to CSV
+
+──────────────────────────────
+3. SYSTEM RULES
+──────────────────────────────
+- Offline only
+- SQLite database
+- No cloud sync
+- CSV export only
+- Role-based access
+- Audit trail for edits
+- Data entry users cannot delete or edit records
+- Admin can do everything
+
+──────────────────────────────
+4. TECH STACK
+──────────────────────────────
+- Python
+- Django
+- SQLite
+- HTML + Bootstrap
+- PyWebView
+- PyInstaller (.exe packaging)
+
+──────────────────────────────
+5. WHAT I WANT YOU TO GENERATE
+──────────────────────────────
+1. Full Django project structure
+2. Database models
+3. User authentication system
+4. Role-based permissions
+5. CRUD logic
+6. UI templates
+7. CSV export feature
+8. Desktop packaging instructions
+9. README file
+10. Installation steps
+11. Final build instructions for .EXE
+
+Make the system clean, professional, scalable, and suitable for a logistics company in Uganda.
+
+Respond with:
+- Folder structure
+- Code files
+- Explanations
+- Commands to run
+- Packaging instructions
+
+Do NOT skip steps.
+Do NOT assume internet usage.
+Build as if for production use.

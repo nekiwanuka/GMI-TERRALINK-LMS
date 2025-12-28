@@ -14,6 +14,8 @@ Roshe Group Logistics Portal is a professional, offline-capable desktop logistic
 - **Reports** - Generate and export comprehensive reports to CSV
 - **Audit Trails** - Complete audit logging for compliance
 
+> Need a release-level snapshot? See the [Completion Report Highlights](PROJECT_SUMMARY.md#completion-report-highlights) for validated metrics and delivery status.
+
 ## 🎯 Features
 
 ### User Roles
