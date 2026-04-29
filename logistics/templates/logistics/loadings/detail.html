@@ -1,19 +1,40 @@
 {% extends "logistics/base.html" %}
 
-{% block title %}{{ loading.loading_id }} - Roshe Group Logistics Portal{% endblock %}
+{% block title %}{{ loading.loading_id }} - GMI TERRALINK Logistics Portal{% endblock %}
 
 {% block content %}
 <div class="container mt-4">
+    {% url 'close_loading' loading.id as close_url_x %}
+    {% url 'reopen_loading' loading.id as reopen_url_x %}
+    {% include "logistics/partials/closure_card.html" with lane_label="Loading" close_url=close_url_x reopen_url=reopen_url_x object_is_closed=loading.is_closed closed_at=loading.closed_at closed_by_name=loading.closed_by.get_full_name closure_notes=loading.closure_notes %}
     <div class="row">
         <div class="col-md-8">
             <div class="card">
                 <div class="card-header d-flex justify-content-between">
                     <h3><i class="bi bi-box"></i> {{ loading.loading_id }}</h3>
-                    {% if user.role == 'superuser' %}
-                    <a href="{% url 'loading_update' loading.id %}" class="btn btn-sm btn-warning">
-                        <i class="bi bi-pencil"></i> Edit
-                    </a>
-                    {% endif %}
+                    <div class="d-flex gap-2">
+                        <a href="{% url 'loading_document' loading.id %}" class="btn btn-sm btn-outline-primary">
+                            <i class="bi bi-file-earmark-pdf"></i>
+                            {% if loading.entry_type == 'GROUPAGE' %}Groupage Note{% else %}Bill of Lading{% endif %}
+                        </a>
+                        <a href="{% url 'loading_packing_list_document' loading.id %}" class="btn btn-sm btn-outline-primary">
+                            <i class="bi bi-file-earmark-break"></i> Packing List
+                        </a>
+                        {% if loading.proof_of_delivery %}
+                        <a href="{% url 'pod_detail' loading.proof_of_delivery.id %}" class="btn btn-sm btn-outline-success">
+                            <i class="bi bi-file-earmark-check"></i> POD {{ loading.proof_of_delivery.pod_number }}
+                        </a>
+                        {% else %}
+                        <a href="{% url 'record_logistics_pod' loading.id %}" class="btn btn-sm btn-success">
+                            <i class="bi bi-clipboard-check"></i> Record POD
+                        </a>
+                        {% endif %}
+                        {% if user.is_superuser or user.role == 'ADMIN' %}
+                        <a href="{% url 'loading_update' loading.id %}" class="btn btn-sm btn-warning">
+                            <i class="bi bi-pencil"></i> Edit
+                        </a>
+                        {% endif %}
+                    </div>
                 </div>
                 <div class="card-body">
                     <div class="row mb-3">
@@ -29,12 +50,37 @@
 
                     <div class="row mb-3">
                         <div class="col-md-6">
+                            <h6 class="text-muted">Entry Type</h6>
+                            <p>{{ loading.get_entry_type_display }}</p>
+                        </div>
+                        <div class="col-md-6">
+                            <h6 class="text-muted">Bill of Lading</h6>
+                            <p>{{ loading.bill_of_lading_number|default:'-' }}</p>
+                        </div>
+                    </div>
+
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <h6 class="text-muted">Groupage Note</h6>
+                            <p>{{ loading.groupage_note_number|default:'-' }}</p>
+                        </div>
+                    </div>
+
+                    <div class="row mb-3">
+                        <div class="col-md-6">
                             <h6 class="text-muted">Origin</h6>
                             <p>{{ loading.origin }}</p>
                         </div>
                         <div class="col-md-6">
                             <h6 class="text-muted">Destination</h6>
                             <p>{{ loading.destination }}</p>
+                        </div>
+                    </div>
+
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <h6 class="text-muted">Warehouse</h6>
+                            <p>{{ loading.warehouse_location|default:'-' }}</p>
                         </div>
                     </div>
 
@@ -52,6 +98,27 @@
                             <p>
                                 {% if loading.weight %}
                                     {{ loading.weight }} KG
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="row mb-3">
+                        <div class="col-md-4">
+                            <h6 class="text-muted">Packages</h6>
+                            <p>{{ loading.packages|default:'-' }}</p>
+                        </div>
+                        <div class="col-md-4">
+                            <h6 class="text-muted">CBM</h6>
+                            <p>{{ loading.cbm|default:'-' }}</p>
+                        </div>
+                        <div class="col-md-4">
+                            <h6 class="text-muted">Chargeable (W/M)</h6>
+                            <p>
+                                {% if chargeable_wm is not None %}
+                                    {{ chargeable_wm|floatformat:3 }}
                                 {% else %}
                                     -
                                 {% endif %}
@@ -79,6 +146,9 @@
                         <a href="{% url 'transit_update' loading.transit.id %}" class="btn btn-sm btn-warning w-100">
                             <i class="bi bi-pencil"></i> Update Transit
                         </a>
+                        <a href="{% url 'transit_detail' loading.transit.id %}" class="btn btn-sm btn-outline-info w-100 mt-1">
+                            <i class="bi bi-clock-history"></i> View Timeline
+                        </a>
                     {% else %}
                         <p class="text-muted">No transit record yet</p>
                         <a href="{% url 'transit_create_with_loading' loading.id %}" class="btn btn-sm btn-primary w-100">
@@ -90,20 +160,57 @@
 
             <div class="card">
                 <div class="card-header">
-                    <h5><i class="bi bi-cash-coin"></i> Payment</h5>
+                    <h5><i class="bi bi-diagram-3"></i> Commercial Flow</h5>
                 </div>
                 <div class="card-body">
-                    {% if has_payment %}
-                        <p>Charged: ${{ loading.payment.amount_charged }}</p>
-                        <p>Paid: ${{ loading.payment.amount_paid }}</p>
-                        <p>Balance: <strong>${{ loading.payment.balance }}</strong></p>
-                        <a href="{% url 'payment_update' loading.payment.id %}" class="btn btn-sm btn-warning w-100">
-                            <i class="bi bi-pencil"></i> Update Payment
+                    {% if flow_transaction %}
+                        <p class="mb-2">Transaction: <strong>{{ flow_transaction.transaction_id }}</strong></p>
+                        <p class="mb-2">Proforma:
+                            {% if proforma %}
+                                <strong>PI-{{ proforma.id }}</strong>
+                            {% else %}
+                                <span class="text-muted">Pending</span>
+                            {% endif %}
+                        </p>
+                        <p class="mb-2">Final Invoice:
+                            {% if final_invoice %}
+                                <strong>FI-{{ final_invoice.id }}</strong>
+                            {% else %}
+                                <span class="text-muted">Pending confirmation</span>
+                            {% endif %}
+                        </p>
+                        <p class="mb-3">Payment:
+                            <span class="badge bg-info"><i class="bi bi-truck"></i> Logistics</span>
+                            {% if final_invoice %}
+                                {% if balance_due is not None and balance_due > 0 %}
+                                    <strong>Balance {{ balance_due|floatformat:2 }} {{ final_invoice.currency }}</strong>
+                                {% else %}
+                                    <strong>Paid in full</strong>
+                                {% endif %}
+                            {% else %}
+                                <span class="text-muted">Starts after final invoice</span>
+                            {% endif %}
+                        </p>
+
+                        {% if proforma %}
+                        <a href="{% url 'logistics_proforma_update' proforma.id %}" class="btn btn-sm btn-primary w-100 mb-2">
+                            <i class="bi bi-pencil-square"></i> Edit Quotation / Proforma
                         </a>
+                        {% endif %}
+                        {% if final_invoice %}
+                        <a href="{% url 'logistics_final_invoice_detail' final_invoice.id %}" class="btn btn-sm btn-outline-dark w-100 mb-2">
+                            <i class="bi bi-receipt-cutoff"></i> Open Final Invoice
+                        </a>
+                        {% endif %}
+                        {% if final_invoice and balance_due is not None and balance_due > 0 %}
+                        <a href="{% url 'sourcing_payment_create_for' flow_transaction.id %}" class="btn btn-sm btn-success w-100">
+                            <i class="bi bi-cash-coin"></i> Record Payment
+                        </a>
+                        {% endif %}
                     {% else %}
-                        <p class="text-muted">No payment record yet</p>
-                        <a href="{% url 'payment_create_with_loading' loading.id %}" class="btn btn-sm btn-primary w-100">
-                            <i class="bi bi-plus"></i> Add Payment
+                        <p class="text-muted">No quotation / invoice flow has been started for this cargo yet.</p>
+                        <a href="{% url 'loading_start_flow' loading.id %}" class="btn btn-sm btn-primary w-100">
+                            <i class="bi bi-play-circle"></i> Start Quotation / Proforma
                         </a>
                     {% endif %}
                 </div>

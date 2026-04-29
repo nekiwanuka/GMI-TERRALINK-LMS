@@ -1,74 +1,191 @@
 {% extends "logistics/base.html" %}
 
-{% block title %}Clients - Roshe Group Logistics Portal{% endblock %}
+{% block title %}Clients - GMI TERRALINK Logistics Portal{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* === Light page header (replaces dark hero) === */
+    .clients-page-head {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 1rem;
+        flex-wrap: wrap;
+        padding: 0.4rem 0.25rem 0.85rem;
+        border-bottom: 1px solid #ece7cd;
+        margin-bottom: 0.9rem;
+    }
+    .clients-page-head h1 {
+        font-size: 1.15rem;
+        font-weight: 700;
+        color: #1a1a1a;
+        margin: 0.15rem 0 0.15rem;
+        line-height: 1.2;
+    }
+    .clients-page-head .eyebrow {
+        font-size: 0.62rem;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        color: #8a8a8a;
+        font-weight: 700;
+    }
+    .clients-page-head p {
+        font-size: 0.8rem;
+        color: #6b6b6b;
+        margin: 0;
+    }
+    .clients-stat-row { display: flex; gap: 0.5rem; align-items: center; }
+    .clients-stat-chip {
+        display: inline-flex;
+        align-items: baseline;
+        gap: 0.4rem;
+        padding: 0.32rem 0.7rem;
+        background: #fbf7e4;
+        border: 1px solid #ece7cd;
+        border-radius: 6px;
+    }
+    .clients-stat-chip strong { font-size: 0.95rem; color: #1a1a1a; font-weight: 700; }
+    .clients-stat-chip span {
+        color: #6b6b6b;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        font-size: 0.62rem;
+    }
+
+    /* === Single unified card (no extra dark header) === */
+    .clients-card { padding: 0.85rem 1rem 0.25rem; }
+    .clients-toolbar { padding: 0 0 0.7rem; border-bottom: 1px solid #f0ecdb; margin-bottom: 0; }
+    .clients-toolbar .input-group-text { background: #fbf7e4; border-color: #ece7cd; }
+    .clients-toolbar .form-control { border-color: #ece7cd; }
+
+    /* === Table polish === */
+    .clients-table { font-size: 0.86rem; margin-bottom: 0; }
+    .clients-table thead th {
+        font-size: 0.66rem;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: #6b6b6b;
+        font-weight: 700;
+        white-space: nowrap;
+        padding: 0.55rem 0.75rem;
+        background: #faf8ef;
+        border-bottom: 1px solid #ece7cd;
+    }
+    .clients-table tbody td { padding: 0.6rem 0.75rem; vertical-align: middle; }
+    .clients-table .client-id-chip {
+        display: inline-block;
+        padding: 0.12rem 0.5rem;
+        background: #fbf7e4;
+        border: 1px solid #ece7cd;
+        border-radius: 999px;
+        font-family: 'Space Grotesk', monospace;
+        font-size: 0.74rem;
+        font-weight: 700;
+        color: #1a1a1a;
+        white-space: nowrap;
+    }
+    .clients-table .client-name { font-weight: 600; color: #1a1a1a; line-height: 1.2; }
+    .clients-table .client-meta { font-size: 0.72rem; color: #8a8a8a; line-height: 1.3; display: block; }
+    .clients-table .country-tag {
+        display: inline-block;
+        padding: 0.1rem 0.5rem;
+        background: #f5f3ec;
+        border-radius: 4px;
+        font-size: 0.72rem;
+        color: #4f4a52;
+        white-space: nowrap;
+    }
+    .clients-table .contact-person { font-size: 0.83rem; color: #1a1a1a; line-height: 1.2; }
+    .clients-table .contact-phone {
+        font-size: 0.72rem;
+        color: #6b6b6b;
+        font-variant-numeric: tabular-nums;
+        display: block;
+    }
+    .clients-table .reg-date { font-size: 0.76rem; color: #6b6b6b; white-space: nowrap; }
+    .client-row-actions { display: inline-flex; gap: 0.25rem; justify-content: flex-end; }
+    .client-row-actions .btn { padding: 0.22rem 0.5rem; line-height: 1; }
+    .client-row-actions .btn i { font-size: 0.82rem; }
+
+    @media (max-width: 768px) {
+        .clients-page-head { flex-direction: column; align-items: flex-start; }
+    }
+</style>
+{% endblock %}
 
 {% block content %}
-<div class="container-fluid">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h1><i class="bi bi-people"></i> Clients</h1>
-        <a href="{% url 'client_create' %}" class="btn btn-primary">
-            <i class="bi bi-plus-circle"></i> Add Client
-        </a>
-    </div>
-
-    <!-- Search Bar -->
-    <div class="card mb-4">
-        <div class="card-body">
-            <form method="get" class="form-inline">
-                <div class="input-group w-100">
-                    <input type="text" name="search" class="form-control" placeholder="Search by Client ID, Name, or Contact Person" value="{{ search }}">
-                    <button type="submit" class="btn btn-primary">
-                        <i class="bi bi-search"></i> Search
-                    </button>
-                    {% if search %}
-                    <a href="{% url 'client_list' %}" class="btn btn-secondary">
-                        <i class="bi bi-x-circle"></i> Clear
-                    </a>
-                    {% endif %}
-                </div>
-            </form>
+<div class="workspace-stack">
+    <header class="clients-page-head">
+        <div>
+            <span class="eyebrow"><i class="bi bi-people-fill me-1"></i>Client registry</span>
+            <h1>Trade accounts</h1>
+            <p>Source of truth for cargo, sourcing, invoicing and payment records.</p>
         </div>
-    </div>
+        <div class="clients-stat-row">
+            <span class="clients-stat-chip"><strong>{{ page_obj.paginator.count }}</strong><span>Total</span></span>
+            <span class="clients-stat-chip"><strong>{% if search %}Filtered{% else %}Live{% endif %}</strong><span>View</span></span>
+        </div>
+    </header>
 
-    <!-- Clients Table -->
-    <div class="card">
+    <section class="card clients-card">
+        <form method="get" class="clients-toolbar">
+            <div class="row g-2 align-items-center">
+                <div class="col-lg-7">
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text"><i class="bi bi-search"></i></span>
+                        <input type="text" name="search" class="form-control" placeholder="Search by client ID, name or contact person" value="{{ search }}">
+                        {% if search %}
+                        <a href="{% url 'client_list' %}" class="btn btn-outline-secondary btn-sm" title="Clear search"><i class="bi bi-x-lg"></i></a>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="col-lg-5">
+                    <div class="d-flex gap-2 justify-content-lg-end">
+                        <button type="submit" class="btn btn-sm btn-outline-dark"><i class="bi bi-funnel me-1"></i>Search</button>
+                        <a href="{% url 'client_create' %}" class="btn btn-sm btn-dark"><i class="bi bi-plus-lg me-1"></i>Add client</a>
+                    </div>
+                </div>
+            </div>
+        </form>
         <div class="table-responsive">
-            <table class="table table-hover mb-0 align-middle">
-                <thead class="table-light">
+            <table class="table table-hover align-middle clients-table">
+                <thead>
                     <tr>
-                        <th>Client ID</th>
+                        <th>ID</th>
                         <th>Client</th>
-                        <th>Company</th>
                         <th>Country</th>
                         <th>Contact</th>
-                        <th>Phone</th>
                         <th>Registered</th>
-                        <th>Actions</th>
+                        <th class="text-end">Actions</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for client in clients %}
                     <tr>
-                        <td><strong>{{ client.client_id }}</strong></td>
+                        <td><span class="client-id-chip">{{ client.client_id }}</span></td>
                         <td>
-                            <div>{{ client.name }}</div>
-                            <small class="text-muted">{{ client.email|default:'No email' }}</small>
+                            <div class="client-name">{{ client.name }}</div>
+                            {% if client.company_name %}<small class="client-meta">{{ client.company_name }}</small>{% endif %}
+                            <small class="client-meta">{{ client.email|default:'No email on file' }}</small>
                         </td>
-                        <td>{{ client.company_name|default:'—' }}</td>
-                        <td>{{ client.get_country_display|default:'—' }}</td>
-                        <td>{{ client.contact_person }}</td>
-                        <td>{{ client.phone }}</td>
-                        <td>{{ client.date_registered|date:"Y-m-d" }}</td>
                         <td>
-                            <div class="d-flex gap-2">
-                                <a href="{% url 'client_detail' client.id %}" class="btn btn-sm btn-info" title="View details">
+                            {% if client.country %}<span class="country-tag">{{ client.get_country_display }}</span>{% else %}<span class="text-muted small">&mdash;</span>{% endif %}
+                        </td>
+                        <td>
+                            <div class="contact-person">{{ client.contact_person|default:'&mdash;' }}</div>
+                            {% if client.phone %}<small class="contact-phone">{{ client.phone }}</small>{% endif %}
+                        </td>
+                        <td><span class="reg-date">{{ client.date_registered|date:"d M Y" }}</span></td>
+                        <td class="text-end">
+                            <div class="client-row-actions" aria-label="Client actions">
+                                <a href="{% url 'client_detail' client.id %}" class="btn btn-sm btn-outline-dark" data-bs-toggle="tooltip" data-bs-placement="top" title="Open client" aria-label="Open client">
                                     <i class="bi bi-eye"></i>
                                 </a>
-                                {% if user.role == 'superuser' %}
-                                <a href="{% url 'client_update' client.id %}" class="btn btn-sm btn-warning" title="Edit client">
+                                {% if user.is_superuser or user.role == 'ADMIN' or user.role == 'DIRECTOR' or user.role == 'superuser' %}
+                                <a href="{% url 'client_update' client.id %}" class="btn btn-sm btn-warning" data-bs-toggle="tooltip" data-bs-placement="top" title="Edit client" aria-label="Edit client">
                                     <i class="bi bi-pencil"></i>
                                 </a>
-                                <a href="{% url 'client_delete' client.id %}" class="btn btn-sm btn-danger" onclick="return confirm('Delete this client?')" title="Delete client">
+                                <a href="{% url 'client_delete' client.id %}" class="btn btn-sm btn-outline-danger" onclick="return confirm('Delete this client? This action cannot be undone.')" data-bs-toggle="tooltip" data-bs-placement="top" title="Delete client" aria-label="Delete client">
                                     <i class="bi bi-trash"></i>
                                 </a>
                                 {% endif %}
@@ -77,13 +194,13 @@
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="7" class="text-center text-muted py-4">No clients found</td>
+                        <td colspan="6" class="text-center text-muted py-5">No clients match the current search.</td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
         </div>
         {% include "logistics/components/pagination.html" %}
-    </div>
+    </section>
 </div>
 {% endblock %}

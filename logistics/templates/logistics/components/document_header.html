@@ -1,0 +1,216 @@
+{% load static %}
+{% comment %}
+Premium branded document header.
+Optional context vars:
+    doc_label        -> shown in big title (e.g. "Cargo Invoice")
+    doc_number       -> e.g. "FI-44"
+    doc_meta         -> small extra reference (e.g. transaction id)
+    doc_status       -> optional status pill text (e.g. "Unpaid")
+    doc_status_class -> optional badge class for the pill
+{% endcomment %}
+<style>
+.gmi-doc-header {
+    background: #ffffff;
+    font-family: 'Plus Jakarta Sans', 'Segoe UI', Arial, sans-serif;
+    color: #2b2730;
+}
+/* Top strip: both office addresses */
+.gmi-doc-addr-strip {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+    background: #f6f3ec;
+    border-bottom: 1px solid #ece5d2;
+    padding: 10px 24px;
+    font-size: 11.5px;
+    line-height: 1.5;
+    color: #2b2730;
+}
+.gmi-doc-addr-strip .addr-block { padding-right: 22px; }
+.gmi-doc-addr-strip .addr-block + .addr-block {
+    padding-left: 22px;
+    padding-right: 0;
+    border-left: 1px solid #e3d9c1;
+}
+.gmi-doc-addr-title {
+    font-size: 9.5px;
+    font-weight: 800;
+    letter-spacing: .12em;
+    color: #8a6d1d;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.gmi-doc-addr-title i { color: #b89028; font-size: 11px; }
+.gmi-doc-addr-strip .addr-line {
+    color: #3a3a3a;
+    display: flex;
+    align-items: flex-start;
+    gap: 7px;
+    margin-top: 2px;
+}
+.gmi-doc-addr-strip .addr-line i {
+    color: #b89028;
+    font-size: 11px;
+    flex-shrink: 0;
+    margin-top: 2px;
+}
+.gmi-doc-addr-strip .addr-line strong { color: #1f1f1f; font-weight: 700; }
+
+/* Hero band: big logo + document title */
+.gmi-doc-hero {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    padding: 10px 22px 10px;
+    background: linear-gradient(180deg, #ffffff 0%, #fbf7eb 100%);
+    border-bottom: 2px solid #d4af37;
+}
+.gmi-doc-brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+.gmi-doc-logo-plate {
+    background: #ffffff;
+    border: 1px solid #ece5d2;
+    border-radius: 5px;
+    padding: 3px 8px;
+    box-shadow: 0 1px 2px rgba(0,0,0,.04);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+.gmi-doc-logo-plate img {
+    height: 48px;
+    width: auto;
+    display: block;
+}
+.gmi-doc-brand-copy .brand-name {
+    font-family: 'Space Grotesk', 'Plus Jakarta Sans', Arial, sans-serif;
+    font-size: 17px;
+    font-weight: 700;
+    color: #1f1f1f;
+    letter-spacing: .02em;
+    line-height: 1.05;
+}
+.gmi-doc-brand-copy .brand-tag {
+    margin-top: 1px;
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: .16em;
+    color: #b89028;
+    font-weight: 700;
+}
+.gmi-doc-title-block {
+    text-align: right;
+    min-width: 180px;
+}
+.gmi-doc-title-block .doc-title {
+    font-family: 'Space Grotesk', 'Plus Jakarta Sans', Arial, sans-serif;
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    color: #67616b;
+    line-height: 1.05;
+}
+.gmi-doc-title-block .doc-number {
+    margin-top: 2px;
+    font-size: 12px;
+    font-weight: 700;
+    color: #c0322b;
+    letter-spacing: .04em;
+}
+.gmi-doc-title-block .doc-meta {
+    margin-top: 1px;
+    font-size: 9.5px;
+    color: #6c6772;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+}
+.gmi-doc-title-block .doc-status {
+    display: inline-block;
+    margin-top: 4px;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    padding: 2px 7px;
+    border-radius: 3px;
+    background: #f5f1e1;
+    color: #6b541b;
+    border: 1px solid #e6d9a8;
+}
+
+/* Service portfolio ribbon (compact) */
+.gmi-doc-services {
+    background: #ffffff;
+    border-bottom: 1px solid #ececec;
+    padding: 4px 22px;
+    font-size: 9.5px;
+    color: #6b6b6b;
+    letter-spacing: .02em;
+}
+.gmi-doc-services strong { color: #b89028; letter-spacing: .06em; }
+
+/* Print tweaks */
+@media print {
+    .gmi-doc-header,
+    .gmi-doc-addr-strip,
+    .gmi-doc-hero,
+    .gmi-doc-services {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+    .gmi-doc-hero { padding: 8px 18px; }
+    .gmi-doc-logo-plate img { height: 42px; }
+    .gmi-doc-brand-copy .brand-name { font-size: 14px; }
+    .gmi-doc-title-block .doc-title { font-size: 15px; }
+    .gmi-doc-title-block .doc-number { font-size: 11px; }
+    .gmi-doc-addr-strip { padding: 8px 18px; font-size: 10.5px; line-height: 1.45; }
+    .gmi-doc-services { padding: 3px 18px; font-size: 8.5px; }
+}
+</style>
+
+<div class="gmi-doc-header">
+    {% comment %} 1) Hero band: big logo + document title {% endcomment %}
+    <div class="gmi-doc-hero">
+        <div class="gmi-doc-brand">
+            <span class="gmi-doc-logo-plate">
+                <img src="{% static 'images/gmi_logo.png' %}" alt="GMI Terralink">
+            </span>
+            <div class="gmi-doc-brand-copy">
+                <div class="brand-name">GMI Terralink</div>
+                <div class="brand-tag">Logistics &middot; Sourcing &middot; Trade</div>
+            </div>
+        </div>
+        <div class="gmi-doc-title-block">
+            {% if doc_label %}<div class="doc-title">{{ doc_label }}</div>{% endif %}
+            {% if doc_number %}<div class="doc-number">{{ doc_number }}</div>{% endif %}
+            {% if doc_meta %}<div class="doc-meta">{{ doc_meta }}</div>{% endif %}
+            {% if doc_status %}<span class="doc-status {{ doc_status_class|default:'' }}">{{ doc_status }}</span>{% endif %}
+        </div>
+    </div>
+
+    {% comment %} 2) Address strip below the hero (with icons) {% endcomment %}
+    <div class="gmi-doc-addr-strip">
+        <div class="addr-block">
+            <div class="gmi-doc-addr-title"><i class="bi bi-geo-alt-fill"></i>China Branch &middot; Guangzhou</div>
+            <div class="addr-line"><i class="bi bi-building"></i><span>B239B (ECAT), Jinsha Block B 2F, Baiyun</span></div>
+            <div class="addr-line"><i class="bi bi-telephone-fill"></i><strong>+86 177 0195 4464</strong></div>
+        </div>
+        <div class="addr-block">
+            <div class="gmi-doc-addr-title"><i class="bi bi-geo-alt-fill"></i>Uganda Branch &middot; Kampala</div>
+            <div class="addr-line"><i class="bi bi-building"></i><span>Plot 10/12, Hamdeen Lwanga Close, Muyenga</span></div>
+            <div class="addr-line"><i class="bi bi-telephone-fill"></i><strong>+256 768 049 940</strong></div>
+            <div class="addr-line"><i class="bi bi-envelope-fill"></i><span>gmiterralinkinfo@gmail.com</span></div>
+            <div class="addr-line"><i class="bi bi-globe"></i><span>www.gmi-terralink.com</span></div>
+        </div>
+    </div>
+
+    {% comment %} Service portfolio ribbon moved to document footer for more table space. {% endcomment %}
+</div>

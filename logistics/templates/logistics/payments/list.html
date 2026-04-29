@@ -1,14 +1,34 @@
 {% extends "logistics/base.html" %}
 
-{% block title %}Payments - Roshe Group Logistics Portal{% endblock %}
+{% block title %}Payments - GMI TERRALINK Logistics Portal{% endblock %}
 
 {% block content %}
 <div class="container-fluid">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h1><i class="bi bi-cash-coin"></i> Payment Management</h1>
-        <a href="{% url 'payment_create' %}" class="btn btn-primary">
-            <i class="bi bi-plus-circle"></i> Add Payment
+        <a href="{% url 'logistics_final_invoice_list' %}" class="btn btn-primary">
+            <i class="bi bi-receipt-cutoff"></i> Pay From Invoice
         </a>
+    </div>
+
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-body">
+            <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+                <span class="badge bg-dark">Logistics Client Flow</span>
+                <span class="text-muted small">Payments are captured from Final Invoices and tracked as receipts.</span>
+            </div>
+            <div class="d-flex flex-wrap align-items-center gap-2">
+                <a href="{% url 'logistics_final_invoice_list' %}" class="btn btn-sm btn-outline-primary"><i class="bi bi-file-earmark-text"></i> 1. Cargo Invoice</a>
+                <span class="text-muted">→</span>
+                <a href="{% url 'logistics_final_invoice_list' %}" class="btn btn-sm btn-outline-primary"><i class="bi bi-credit-card"></i> 2. Record Payment (Invoice)</a>
+                <span class="text-muted">→</span>
+                <a href="{% url 'loading_list' %}" class="btn btn-sm btn-outline-primary"><i class="bi bi-box-seam"></i> 3. Cargo</a>
+                <span class="text-muted">→</span>
+                <a href="{% url 'transit_list' %}" class="btn btn-sm btn-outline-primary"><i class="bi bi-compass"></i> 4. Transit Tracking</a>
+                <span class="text-muted">→</span>
+                <a href="{% url 'receipt_list' %}?source=logistics" class="btn btn-sm btn-outline-primary"><i class="bi bi-receipt"></i> Freight Receipts</a>
+            </div>
+        </div>
     </div>
 
     <!-- Summary Cards -->
@@ -48,6 +68,7 @@
 
     <div class="card mb-4">
         <div class="card-body">
+            {% include "logistics/components/lane_switcher.html" %}
             <form method="get" class="form-inline">
                 <select name="filter" class="form-select">
                     <option value="">All Payments</option>
@@ -67,9 +88,12 @@
             <table class="table table-hover mb-0">
                 <thead class="table-light">
                     <tr>
+                        <th>Invoice</th>
                         <th>Loading ID</th>
                         <th>Client</th>
+                        <th>Type</th>
                         <th>Amount Charged</th>
+                        <th>Billing Basis</th>
                         <th>Amount Paid</th>
                         <th>Balance</th>
                         <th>Payment Date</th>
@@ -80,9 +104,23 @@
                 <tbody>
                     {% for payment in payments %}
                     <tr>
+                        <td>
+                            {% if payment.final_invoice %}
+                            FI-{{ payment.final_invoice.id }}
+                            {% else %}
+                            -
+                            {% endif %}
+                        </td>
                         <td><strong>{{ payment.loading.loading_id }}</strong></td>
                         <td>{{ payment.loading.client.name }}</td>
+                        <td><span class="badge bg-info"><i class="bi bi-truck"></i> Logistics</span></td>
                         <td>${{ payment.amount_charged|floatformat:2 }}</td>
+                        <td>
+                            {{ payment.get_billing_basis_display }}
+                            {% if payment.billing_basis != 'manual' and payment.billing_rate %}
+                            <div class="small text-muted">@ ${{ payment.billing_rate|floatformat:2 }}</div>
+                            {% endif %}
+                        </td>
                         <td>${{ payment.amount_paid|floatformat:2 }}</td>
                         <td>
                             {% if payment.balance > 0 %}
@@ -101,7 +139,7 @@
                                 <a href="{% url 'payment_invoice' payment.id %}" class="btn btn-sm btn-outline-primary">
                                     <i class="bi bi-file-earmark-pdf"></i> Invoice
                                 </a>
-                                {% if user.role == 'superuser' %}
+                                {% if user.is_superuser or user.role == 'ADMIN' %}
                                 <a href="{% url 'payment_update' payment.id %}" class="btn btn-sm btn-warning">
                                     <i class="bi bi-pencil"></i> Edit
                                 </a>
@@ -111,7 +149,7 @@
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="8" class="text-center text-muted py-4">No payments found</td>
+                        <td colspan="11" class="text-center text-muted py-4">No payments found</td>
                     </tr>
                     {% endfor %}
                 </tbody>

@@ -1,0 +1,657 @@
+{% extends "logistics/base.html" %}
+
+{% block title %}{{ transaction.transaction_id }} - GMI TERRALINK Logistics Portal{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <h1 class="mb-0"><i class="bi bi-diagram-3"></i> {{ transaction.transaction_id }}</h1>
+            <small class="text-muted">{{ transaction.customer.name }} — {{ transaction.list_status_display|default:transaction.get_status_display }}</small>
+        </div>
+        <a href="{% url 'transaction_update' transaction.id %}" class="btn btn-warning {% if transaction.is_closed %}disabled{% endif %}">
+            <i class="bi bi-pencil"></i> Edit
+        </a>
+    </div>
+
+    {% url 'close_transaction' transaction.id as close_url_x %}
+    {% url 'reopen_transaction' transaction.id as reopen_url_x %}
+    {% include "logistics/partials/closure_card.html" with lane_label="Trade" close_url=close_url_x reopen_url=reopen_url_x object_is_closed=transaction.is_closed closed_at=transaction.closed_at closed_by_name=transaction.closed_by.get_full_name closure_notes=transaction.closure_notes %}
+
+    <!-- Status summary cards -->
+    <div class="row g-2 mb-4">
+        <div class="col-md-3">
+            <div class="card border-0 bg-light">
+                <div class="card-body py-2">
+                    <small class="text-muted d-block">Customer</small>
+                    <strong>{{ transaction.customer.name }}</strong>
+                    {% if transaction.customer.company_name %}
+                    <div class="text-muted small">{{ transaction.customer.company_name }}</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 bg-light">
+                <div class="card-body py-2">
+                    <small class="text-muted d-block">Status</small>
+                    <span class="badge {{ transaction.list_status_class|default:'bg-primary' }} fs-6">{{ transaction.list_status_display|default:transaction.get_status_display }}</span>
+                    {% if transaction.status == 'SENT_TO_SOURCING' %}
+                    <div class="text-muted small mt-1">
+                        {% if sourcing_entry_count %}
+                        {{ sourcing_entry_count }} sourcing record{{ sourcing_entry_count|pluralize }} active.
+                        {% else %}
+                        Intake is queued but no sourcing work has started yet.
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 bg-light">
+                <div class="card-body py-2">
+                    <small class="text-muted d-block">Est. Delivery</small>
+                    <strong>{{ transaction.estimated_delivery|date:"Y-m-d"|default:"—" }}</strong>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 bg-light">
+                <div class="card-body py-2">
+                    <small class="text-muted d-block">Created By</small>
+                    <strong>{{ transaction.created_by.username }}</strong>
+                    <div class="text-muted small">{{ transaction.created_at|date:"Y-m-d" }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if transaction.description %}
+    <div class="alert alert-secondary py-2 mb-3">
+        <strong>Description:</strong> {{ transaction.description }}
+        {% if transaction.notes %}<br><strong>Notes:</strong> {{ transaction.notes }}{% endif %}
+    </div>
+    {% endif %}
+
+    <!-- ===== WORKFLOW PIPELINE ===== -->
+    <h5 class="mb-3 text-muted"><i class="bi bi-arrow-right-circle"></i> Workflow Pipeline</h5>
+
+    <div class="row g-3">
+
+        <!-- STEP 1: Upload Client PI -->
+        <div class="col-lg-6">
+            <div class="card h-100">
+                <div class="card-header d-flex justify-content-between align-items-center bg-primary text-white">
+                    <span><strong>Step 1 — Client PI Upload</strong></span>
+                    <span class="badge bg-light text-dark">{{ documents.count }} file(s)</span>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted small mb-3">
+                        Upload the client's Purchase Inquiry document. Supported formats: <strong>PDF, Word (.docx), TXT</strong>.
+                        The system will extract the text automatically.
+                    </p>
+                    <form method="post" action="{% url 'transaction_document_upload' transaction.id %}" enctype="multipart/form-data">
+                        {% csrf_token %}
+                        <div class="mb-2">
+                            <label class="form-label fw-semibold">Document Type</label>
+                            <select class="form-select form-select-sm" name="document_type">
+                                <option value="CLIENT_PI" selected>Client Purchase Inquiry (PI)</option>
+                                <option value="INQUIRY">Inquiry</option>
+                                <option value="CLEANED">Cleaned</option>
+                                <option value="INVOICE">Invoice</option>
+                                <option value="RECEIPT">Receipt</option>
+                            </select>
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label fw-semibold">File <small class="text-muted">(PDF / Word / TXT)</small></label>
+                            <input class="form-control form-control-sm" type="file" name="original_file"
+                                   accept=".pdf,.docx,.doc,.txt" required>
+                        </div>
+                        <button class="btn btn-primary btn-sm w-100" type="submit">
+                            <i class="bi bi-cloud-upload"></i> Upload &amp; Extract
+                        </button>
+                    </form>
+                </div>
+                {% if documents %}
+                <div class="card-footer p-0">
+                    <ul class="list-group list-group-flush">
+                        {% for doc in documents %}
+                        <li class="list-group-item d-flex justify-content-between align-items-center px-3 py-2">
+                            <div>
+                                <span class="badge {% if doc.document_type == 'CLIENT_PI' %}bg-primary{% else %}bg-secondary{% endif %} me-1">
+                                    {{ doc.get_document_type_display }}
+                                </span>
+                                <small>{{ doc.original_file.name|default:"—" }}</small>
+                            </div>
+                            <small class="text-muted">{{ doc.timestamp|date:"d M Y H:i" }}</small>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- STEP 2: Extracted / Structured PI Preview (Editable) -->
+        <div class="col-lg-6">
+            <div class="card h-100">
+                <div class="card-header bg-info text-white d-flex justify-content-between align-items-center">
+                    <strong>Step 2 — Review &amp; Edit PI Content</strong>
+                    {% if pi_documents and pi_documents.first.structured_data %}
+                    <span class="badge bg-white text-info" style="font-size:0.72rem;">Auto-extracted — edit if needed</span>
+                    {% endif %}
+                </div>
+                <div class="card-body">
+                    {% if pi_documents %}
+                        {% with latest_pi=pi_documents.first %}
+                        {% if latest_pi.structured_data and latest_pi.structured_data.items %}
+                            {# ─── Editable structured form ─── #}
+                            <form method="post" action="{% url 'document_edit_pi' latest_pi.pk %}">
+                                {% csrf_token %}
+                                <div class="row g-2 mb-2" style="font-size:0.82rem;">
+                                    <div class="col-12">
+                                        <label class="form-label mb-0 text-muted">Entry Number</label>
+                                        <input type="text" class="form-control form-control-sm bg-light"
+                                               value="{{ transaction.transaction_id }}" readonly>
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label mb-0 text-muted">Client Name</label>
+                                        <input type="text" name="client_name" class="form-control form-control-sm"
+                                               value="{{ latest_pi.structured_data.client_name }}">
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label mb-0 text-muted">Contact Person</label>
+                                        <input type="text" name="contact_person" class="form-control form-control-sm"
+                                               value="{{ latest_pi.structured_data.contact_person }}">
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label mb-0 text-muted">Phone</label>
+                                        <input type="text" name="phone" class="form-control form-control-sm"
+                                               value="{{ latest_pi.structured_data.phone }}">
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label mb-0 text-muted">Email</label>
+                                        <input type="email" name="email" class="form-control form-control-sm"
+                                               value="{{ latest_pi.structured_data.email }}">
+                                    </div>
+                                    <div class="col-8">
+                                        <label class="form-label mb-0 text-muted">Subject</label>
+                                        <input type="text" name="subject" class="form-control form-control-sm"
+                                               value="{{ latest_pi.structured_data.subject }}">
+                                    </div>
+                                    <div class="col-4">
+                                        <label class="form-label mb-0 text-muted">Deadline</label>
+                                        <input type="text" name="deadline" class="form-control form-control-sm"
+                                               value="{{ latest_pi.structured_data.deadline }}"
+                                               placeholder="e.g. May 5, 2026">
+                                    </div>
+                                    <div class="col-12">
+                                        <label class="form-label mb-0 text-muted">
+                                            Requested Items <small>(one per line)</small>
+                                        </label>
+                                        <textarea name="items_text" class="form-control form-control-sm"
+                                                  rows="5" spellcheck="false"
+                                                  style="font-family:'Courier New',monospace;font-size:0.8rem;">{% for item in latest_pi.structured_data.items %}{{ item.name }}
+{% endfor %}</textarea>
+                                    </div>
+                                </div>
+                                <div class="d-flex gap-2">
+                                    <button type="submit" name="next_step" value="sourcing" class="btn btn-sm btn-outline-secondary flex-fill">
+                                        <i class="bi bi-file-earmark-text"></i> Generate Sourcing Document
+                                    </button>
+                                    <button type="submit" name="next_step" value="proforma" class="btn btn-sm btn-success flex-fill">
+                                        <i class="bi bi-arrow-right"></i> Create Proforma Invoice
+                                    </button>
+                                </div>
+                            </form>
+
+                            {% if latest_pi.structured_data.requirements %}
+                            <details class="mt-2">
+                                <summary class="text-muted" style="font-size:0.8rem;cursor:pointer;">
+                                    Quotation Requirements ({{ latest_pi.structured_data.requirements|length }})
+                                </summary>
+                                <ul class="mt-1 ps-3" style="font-size:0.78rem;">
+                                    {% for req in latest_pi.structured_data.requirements %}
+                                    <li>{{ req }}</li>
+                                    {% endfor %}
+                                </ul>
+                            </details>
+                            {% endif %}
+
+                        {% elif latest_pi.extracted_text %}
+                            {# Fallback: raw text preview with explicit next-step options #}
+                            <div class="d-flex justify-content-between align-items-start mb-2 gap-2 flex-wrap">
+                                <small class="text-muted"><em>{{ latest_pi.original_file.name }}</em></small>
+                                <div class="d-flex gap-2 flex-wrap">
+                                    <a href="{% url 'sourcing_create' %}?from_doc={{ latest_pi.pk }}" class="btn btn-sm btn-outline-secondary">
+                                        <i class="bi bi-file-earmark-text"></i> Generate Sourcing Document
+                                    </a>
+                                    <a href="{% if transaction.source_loading %}{% url 'logistics_proforma_create' %}{% else %}{% url 'sourcing_proforma_create' %}{% endif %}?from_doc={{ latest_pi.pk }}" class="btn btn-sm btn-success">
+                                        <i class="bi bi-arrow-right"></i> Create Proforma Invoice
+                                    </a>
+                                </div>
+                            </div>
+                            <pre class="border rounded p-2 bg-light" style="max-height:220px;overflow-y:auto;font-size:0.78rem;white-space:pre-wrap;">{{ latest_pi.extracted_text|truncatechars:1500 }}</pre>
+                        {% else %}
+                            <div class="alert alert-warning mb-0">
+                                <i class="bi bi-exclamation-circle"></i>
+                                PI uploaded but no text could be extracted (scanned image?).
+                                <div class="d-flex gap-2 mt-2">
+                                    <a href="{% url 'sourcing_create' %}?transaction={{ transaction.pk }}" class="btn btn-sm btn-outline-secondary">
+                                        Generate Sourcing Document
+                                    </a>
+                                    <a href="{% if transaction.source_loading %}{% url 'logistics_proforma_create' %}{% else %}{% url 'sourcing_proforma_create' %}{% endif %}?transaction={{ transaction.pk }}" class="btn btn-sm btn-outline-primary">
+                                        Create Proforma Manually
+                                    </a>
+                                </div>
+                            </div>
+                        {% endif %}
+                        {% endwith %}
+                    {% else %}
+                        <div class="text-muted text-center py-4">
+                            <i class="bi bi-file-earmark-arrow-up fs-2 d-block mb-2"></i>
+                            Upload a Client PI to see extracted content here.
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- STEP 3: Proforma / Quotation -->
+        <div class="col-lg-6">
+            <div class="card h-100">
+                <div class="card-header d-flex justify-content-between align-items-center bg-success text-white">
+                    <strong>Step 3 — Create Quotation (Proforma)</strong>
+                    <a href="{% if transaction.source_loading %}{% url 'logistics_proforma_create' %}{% else %}{% url 'sourcing_proforma_create' %}{% endif %}?transaction={{ transaction.pk }}" class="btn btn-sm btn-light">
+                        <i class="bi bi-plus"></i> New Proforma
+                    </a>
+                </div>
+                <div class="card-body p-0">
+                    {% if proformas %}
+                    <ul class="list-group list-group-flush">
+                        {% for pi in proformas %}
+                        <li class="list-group-item d-flex justify-content-between align-items-center px-3">
+                            <div>
+                                <strong>PI-{{ pi.pk }} — {{ pi.subtotal }}</strong>
+                                <span class="badge {% if pi.status == 'SENT' %}bg-success{% else %}bg-secondary{% endif %} ms-1">{{ pi.status }}</span>
+                                <small class="text-muted d-block">Valid: {{ pi.validity_date }}</small>
+                            </div>
+                            <div class="btn-group btn-group-sm">
+                                <a href="{% if pi.loading %}{% url 'logistics_proforma_update' pi.pk %}{% else %}{% url 'sourcing_proforma_update' pi.pk %}{% endif %}" class="btn btn-outline-secondary">Edit</a>
+                                {% if pi.status != 'SENT' %}
+                                <a href="{% if pi.loading %}{% url 'logistics_proforma_confirm' pi.pk %}{% else %}{% url 'sourcing_proforma_confirm' pi.pk %}{% endif %}" class="btn btn-outline-success">Client PO Received</a>
+                                {% endif %}
+                                <a href="{% if pi.loading %}{% url 'logistics_proforma_pdf' pi.pk %}{% else %}{% url 'sourcing_proforma_pdf' pi.pk %}{% endif %}" class="btn btn-outline-primary">PDF</a>
+                            </div>
+                        </li>
+                        {% endfor %}
+
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-header d-flex justify-content-between align-items-center bg-dark text-white">
+                                <strong>Extracted Document Archive</strong>
+                                <span class="badge bg-light text-dark">{{ document_archives|length }} archived</span>
+                            </div>
+                            <div class="card-body p-0">
+                                {% if document_archives %}
+                                <div class="table-responsive">
+                                    <table class="table table-sm align-middle mb-0">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th>Type</th>
+                                                <th>Source File</th>
+                                                <th>Extracted Snapshot</th>
+                                                <th>Archived By</th>
+                                                <th>When</th>
+                                                <th class="text-end">Access</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for archive in document_archives %}
+                                            <tr>
+                                                <td>
+                                                    <span class="badge {% if archive.document_type == 'CLIENT_PI' %}bg-primary{% else %}bg-secondary{% endif %}">
+                                                        {{ archive.get_document_type_display }}
+                                                    </span>
+                                                </td>
+                                                <td>
+                                                    <div class="fw-semibold">{{ archive.original_filename }}</div>
+                                                    <small class="text-muted">Linked to {{ archive.document }}</small>
+                                                </td>
+                                                <td>
+                                                    {% if archive.structured_data and archive.structured_data.items %}
+                                                    <small class="text-success">Structured data captured with {{ archive.structured_data.items|length }} item{{ archive.structured_data.items|length|pluralize }}.</small>
+                                                    {% elif archive.extracted_text %}
+                                                    <small class="text-muted">{{ archive.extracted_text|truncatechars:120 }}</small>
+                                                    {% else %}
+                                                    <small class="text-muted">No extracted text stored.</small>
+                                                    {% endif %}
+                                                </td>
+                                                <td>{{ archive.archived_by.username }}</td>
+                                                <td>{{ archive.created_at|date:"d M Y H:i" }}</td>
+                                                <td class="text-end">
+                                                    <a href="{{ archive.archived_file.url }}" class="btn btn-sm btn-outline-dark" target="_blank">Open File</a>
+                                                </td>
+                                            </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                                {% else %}
+                                <div class="p-3 text-muted text-center">
+                                    Extracted uploads will appear here as archived snapshots once documents are uploaded and processed.
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    </ul>
+                    {% else %}
+                    <div class="text-muted text-center py-4">
+                        <i class="bi bi-file-earmark-text fs-2 d-block mb-2"></i>
+                        No proforma invoices yet.
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- STEP 4: Final Invoice -->
+        {% if final_invoices %}
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-dark text-white d-flex justify-content-between">
+                    <strong>Step 4 — Final Invoice (after client PO)</strong>
+                    <a href="{% if transaction.source_loading %}{% url 'logistics_final_invoice_create' %}{% else %}{% url 'sourcing_final_invoice_create' %}{% endif %}?transaction={{ transaction.pk }}" class="btn btn-sm btn-light">
+                        <i class="bi bi-plus"></i> New Final Invoice
+                    </a>
+                </div>
+                <div class="card-body p-0">
+                    <ul class="list-group list-group-flush">
+                        {% for fi in final_invoices %}
+                        <li class="list-group-item d-flex justify-content-between align-items-center px-3">
+                            <div>
+                                <strong>FI-{{ fi.pk }} — {{ fi.subtotal }}</strong>
+                                <span class="badge {% if fi.is_confirmed %}bg-success{% else %}bg-warning text-dark{% endif %} ms-1">
+                                    {% if fi.is_confirmed %}Confirmed{% else %}Draft{% endif %}
+                                </span>
+                                <small class="text-muted d-block">Sourcing: {{ fi.sourcing_fee }} | Handling: {{ fi.service_fee }} | Shipping: {{ fi.shipping_cost }} | Total: {{ fi.total_amount }} {{ fi.currency }}</small>
+                            </div>
+                            <div class="btn-group btn-group-sm">
+                                {% if fi.can_edit_invoice %}
+                                <a href="{% if fi.loading %}{% url 'logistics_final_invoice_update' fi.pk %}{% else %}{% url 'sourcing_final_invoice_update' fi.pk %}{% endif %}" class="btn btn-outline-secondary">Edit</a>
+                                {% else %}
+                                <button type="button" class="btn btn-outline-secondary" disabled title="Invoice has payment(s) and is locked from editing.">Locked</button>
+                                {% endif %}
+                                <a href="{% if fi.loading %}{% url 'logistics_final_invoice_pdf' fi.pk %}{% else %}{% url 'sourcing_final_invoice_pdf' fi.pk %}{% endif %}" class="btn btn-outline-primary">PDF</a>
+                                <a href="{% url 'sourcing_payment_create_for' transaction.pk %}" class="btn btn-outline-success">Record Trade Payment</a>
+                            </div>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- STEP 5: Trade Payments -->
+        <div class="col-lg-6">
+            <div class="card h-100">
+                <div class="card-header bg-warning text-dark d-flex justify-content-between align-items-center">
+                    <strong>Step 5 — Client Payment</strong>
+                    <a href="{% url 'sourcing_payment_create_for' transaction.pk %}" class="btn btn-sm btn-dark">
+                        <i class="bi bi-cash-coin"></i> Record Payment
+                    </a>
+                </div>
+                <div class="card-body">
+                    {% if latest_invoice %}
+                    <div class="small mb-2"><strong>Invoice Total:</strong> {{ latest_invoice.total_amount }} {{ latest_invoice.currency }}</div>
+                    <div class="small mb-2"><strong>Paid:</strong> {{ trade_total_paid }} {{ latest_invoice.currency }}</div>
+                    <div class="small"><strong>Balance:</strong> {{ trade_balance }} {{ latest_invoice.currency }}</div>
+                    {% if trade_balance > 0 %}
+                    <div class="alert alert-warning py-2 mt-3 mb-0">Partial payment allowed until full settlement.</div>
+                    {% else %}
+                    <div class="alert alert-success py-2 mt-3 mb-0">Fully paid. Procurement can proceed.</div>
+                    {% endif %}
+                    {% else %}
+                    <div class="text-muted">Create the final invoice first before recording payment.</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- STEP 6: Shipping Charge Rule -->
+        <div class="col-lg-6">
+            <div class="card h-100">
+                <div class="card-header bg-secondary text-white"><strong>Step 6 — Shipping Charge Decision</strong></div>
+                <div class="card-body">
+                    {% if latest_invoice %}
+                        {% if shipping_charge_included %}
+                        <div class="alert alert-success mb-0">
+                            Shipping and/or processing fees are already included in the final invoice.
+                            <strong>Do not charge freight again</strong> in later shipping payment steps.
+                        </div>
+                        {% else %}
+                        <div class="alert alert-info mb-0">
+                            Final invoice has no shipping/processing charge.
+                            Freight/payment charge should be applied during shipping stage.
+                        </div>
+                        {% endif %}
+                    {% else %}
+                    <div class="text-muted">No final invoice yet. Shipping-charge rule applies after invoice creation.</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
+                    <strong>Step 7 — Fulfillment Workflow</strong>
+                    {% if fulfillment_order %}
+                    <div class="d-flex gap-2">
+                        <a href="{% url 'fulfillment_line_create' fulfillment_order.pk %}" class="btn btn-sm btn-light">
+                            <i class="bi bi-box-seam"></i> Allocate Stock
+                        </a>
+                        <a href="{% url 'shipment_leg_create' fulfillment_order.pk %}" class="btn btn-sm btn-outline-light">
+                            <i class="bi bi-signpost-split"></i> Add Leg
+                        </a>
+                        <a href="{% url 'fulfillment_timeline' fulfillment_order.pk %}" class="btn btn-sm btn-outline-light">
+                            <i class="bi bi-clock-history"></i> Timeline
+                        </a>
+                        {% if fulfillment_order.proof_of_delivery %}
+                        <a href="{% url 'pod_detail' fulfillment_order.proof_of_delivery.id %}" class="btn btn-sm btn-success">
+                            <i class="bi bi-file-earmark-check"></i> POD {{ fulfillment_order.proof_of_delivery.pod_number }}
+                        </a>
+                        {% else %}
+                        <a href="{% url 'record_trading_pod' fulfillment_order.pk %}" class="btn btn-sm btn-success">
+                            <i class="bi bi-clipboard-check"></i> Record POD
+                        </a>
+                        {% endif %}
+                        <a href="{% url 'fulfillment_order_update' fulfillment_order.pk %}" class="btn btn-sm btn-warning">
+                            <i class="bi bi-pencil"></i> Update Workflow
+                        </a>
+                    </div>
+                    {% else %}
+                    <a href="{% url 'fulfillment_order_create' transaction.pk %}" class="btn btn-sm btn-light">
+                        <i class="bi bi-plus-circle"></i> Start Fulfillment
+                    </a>
+                    {% endif %}
+                </div>
+                <div class="card-body">
+                    {% if fulfillment_order %}
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-3">
+                            <div class="border rounded p-3 h-100 bg-light">
+                                <small class="text-muted d-block">Status</small>
+                                <strong>{{ fulfillment_order.get_status_display }}</strong>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="border rounded p-3 h-100 bg-light">
+                                <small class="text-muted d-block">Final Invoice</small>
+                                <strong>{{ fulfillment_order.source_reference }}</strong>
+                                <div class="text-muted small">Receipt: {{ fulfillment_receipt_numbers_display }}</div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="border rounded p-3 h-100 bg-light">
+                                <small class="text-muted d-block">Port Of Loading</small>
+                                <strong>{{ fulfillment_order.port_of_loading|default:"-" }}</strong>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="border rounded p-3 h-100 bg-light">
+                                <small class="text-muted d-block">Destination Port</small>
+                                <strong>{{ fulfillment_order.destination_port|default:"-" }}</strong>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="border rounded p-3 h-100 bg-light">
+                                <small class="text-muted d-block">Inland Destination</small>
+                                <strong>{{ fulfillment_order.inland_destination|default:"-" }}</strong>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row g-3">
+                        <div class="col-lg-6">
+                            <div class="card border-0 shadow-sm h-100">
+                                <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                                    <strong>Warehouse Allocation</strong>
+                                    <span class="badge bg-secondary">{{ fulfillment_order.total_allocated }} allocated</span>
+                                </div>
+                                <div class="card-body p-0">
+                                    {% if not fulfillment_order.requires_warehouse_handling and not fulfillment_lines %}
+                                    <div class="p-3 text-muted text-center">This workflow is driven by final invoice {{ fulfillment_order.source_reference }}. Warehouse allocation is optional and can be skipped.</div>
+                                    {% elif fulfillment_lines %}
+                                    <div class="table-responsive">
+                                        <table class="table table-sm align-middle mb-0">
+                                            <thead class="table-light">
+                                                <tr>
+                                                    <th>Item</th>
+                                                    <th class="text-center">Allocated</th>
+                                                    <th class="text-center">Dispatched</th>
+                                                    <th class="text-center">Delivered</th>
+                                                    <th class="text-end"></th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {% for line in fulfillment_lines %}
+                                                <tr>
+                                                    <td>
+                                                        <div class="fw-semibold">{{ line.inventory_item.item_name }}</div>
+                                                        <small class="text-muted">{{ line.inventory_item.item_code }} | Available now: {{ line.inventory_item.available_quantity }}</small>
+                                                    </td>
+                                                    <td class="text-center">{{ line.quantity_allocated }}</td>
+                                                    <td class="text-center">{{ line.quantity_dispatched }}</td>
+                                                    <td class="text-center">{{ line.quantity_delivered }}</td>
+                                                    <td class="text-end">
+                                                        <a href="{% url 'fulfillment_line_update' line.pk %}" class="btn btn-sm btn-outline-secondary">Update</a>
+                                                    </td>
+                                                </tr>
+                                                {% endfor %}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    {% else %}
+                                    <div class="p-3 text-muted text-center">No warehouse stock has been allocated to this fulfillment workflow yet.</div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-lg-6">
+                            <div class="card border-0 shadow-sm h-100">
+                                <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                                    <strong>Shipment Legs</strong>
+                                    <span class="badge bg-secondary">{{ shipment_legs|length }} leg{{ shipment_legs|length|pluralize }}</span>
+                                </div>
+                                <div class="card-body p-0">
+                                    {% if shipment_legs %}
+                                    <div class="table-responsive">
+                                        <table class="table table-sm align-middle mb-0">
+                                            <thead class="table-light">
+                                                <tr>
+                                                    <th>Leg</th>
+                                                    <th>Route</th>
+                                                    <th>Status</th>
+                                                    <th class="text-end"></th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {% for leg in shipment_legs %}
+                                                <tr>
+                                                    <td>
+                                                        <div class="fw-semibold">{{ leg.sequence }}. {{ leg.get_leg_type_display }}</div>
+                                                        <small class="text-muted">{{ leg.vehicle_or_vessel|default:leg.carrier|default:"-" }}</small>
+                                                    </td>
+                                                    <td>
+                                                        <div>{{ leg.origin }}</div>
+                                                        <small class="text-muted">to {{ leg.destination }}</small>
+                                                    </td>
+                                                    <td>
+                                                        <span class="badge bg-{% if leg.status == 'COMPLETED' or leg.status == 'ARRIVED' %}success{% elif leg.status == 'IN_TRANSIT' %}primary{% else %}secondary{% endif %}">{{ leg.get_status_display }}</span>
+                                                    </td>
+                                                    <td class="text-end">
+                                                        <a href="{% url 'shipment_leg_update' leg.pk %}" class="btn btn-sm btn-outline-secondary">Update</a>
+                                                    </td>
+                                                </tr>
+                                                {% endfor %}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    {% else %}
+                                    <div class="p-3 text-muted text-center">No movement legs have been added yet. Add warehouse-to-port, sea-freight, and inland legs here.</div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {% if final_invoice_purchase_orders %}
+                    <div class="mt-3 border rounded p-3 bg-light-subtle">
+                        <div class="fw-semibold mb-2">Related Purchase Orders Under This Invoice</div>
+                        <div class="d-flex flex-wrap gap-2">
+                            {% for purchase_order in final_invoice_purchase_orders %}
+                            <a href="{% url 'purchase_order_detail' purchase_order.pk %}" class="btn btn-sm btn-outline-secondary">
+                                {{ purchase_order.po_number }} - {{ purchase_order.supplier_name }}
+                            </a>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    {% if transaction_inventory_items %}
+                    <div class="mt-3 border rounded p-3 bg-light-subtle">
+                        <div class="fw-semibold mb-2">Transaction Warehouse Stock</div>
+                        <div class="row g-2">
+                            {% for item in transaction_inventory_items %}
+                            <div class="col-md-4">
+                                <div class="border rounded bg-white p-2 h-100">
+                                    <div class="fw-semibold">{{ item.item_name }}</div>
+                                    <small class="text-muted d-block">{{ item.item_code }}</small>
+                                    <small class="d-block">In warehouse: {{ item.quantity_in_warehouse }}</small>
+                                    <small class="d-block">Allocated: {{ item.allocated_quantity }}</small>
+                                    <small class="d-block">Available: {{ item.available_quantity }}</small>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+                    {% else %}
+                    <div class="text-muted">
+                        Start a dedicated fulfillment workflow for this transaction from the final invoice. Related purchase orders remain downstream procurement records under that invoice.
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+    </div><!-- end row -->
+</div>
+{% endblock %}

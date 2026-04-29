@@ -1,122 +1,127 @@
 {% extends "logistics/base.html" %}
 
-{% block title %}{% if title %}{{ title }}{% else %}Client{% endif %} - Roshe Group Logistics Portal{% endblock %}
+{% block title %}{% if title %}{{ title }}{% else %}Client{% endif %} - GMI TERRALINK Logistics Portal{% endblock %}
 
 {% block content %}
-<div class="container mt-4">
-    <div class="row justify-content-center">
-        <div class="col-md-8">
-            <div class="card">
-                <div class="card-header">
-                    <h3><i class="bi bi-person-plus"></i> {{ title }}</h3>
+<div class="workspace-stack">
+    <section class="workspace-hero">
+        <div class="workspace-hero-grid">
+            <div class="workspace-hero-copy">
+                <span class="eyebrow-label"><i class="bi bi-person-vcard-fill"></i> Client profile editor</span>
+                <h1>{{ title }}</h1>
+                <p>Capture the commercial identity, contact ownership and account metadata that downstream modules will use for transactions, freight handling and invoices.</p>
+            </div>
+            <div class="workspace-badge-row">
+                <div class="workspace-badge">
+                    <strong>{% if client %}{{ client.client_id }}{% else %}Auto{% endif %}</strong>
+                    <span>Client ID</span>
                 </div>
-                <div class="card-body">
+            </div>
+        </div>
+    </section>
+
+    <div class="row g-4">
+        <div class="col-xl-8">
+            <section class="card workspace-card mb-0">
+                <div class="card-header">
+                    <div>
+                        <h3 class="mb-1">Account details</h3>
+                        <small class="text-white-50">Required fields are used throughout the operational workflow.</small>
+                    </div>
+                </div>
+                <div class="card-body p-4">
                     <form method="post">
                         {% csrf_token %}
-                        
+
                         {% if form.non_field_errors %}
-                        <div class="alert alert-danger">
-                            {{ form.non_field_errors }}
-                        </div>
+                        <div class="alert alert-danger">{{ form.non_field_errors }}</div>
                         {% endif %}
 
                         {% if client %}
-                        <div class="mb-3">
-                            <label class="form-label">Client ID</label>
-                            <input type="text" class="form-control" value="{{ client.client_id }}" readonly>
+                        <div class="detail-item mb-4">
+                            <span class="label">Existing client ID</span>
+                            <span class="value">{{ client.client_id }}</span>
                         </div>
                         {% else %}
-                        <div class="alert alert-info">
-                            Client ID will be auto-generated (10 letters/numbers) when you save.
-                        </div>
+                        <div class="alert alert-info">Client ID is generated automatically when the record is saved.</div>
                         {% endif %}
 
-                        <div class="mb-3">
-                            <label for="{{ form.name.id_for_label }}" class="form-label">Client Name *</label>
-                            {{ form.name }}
-                            {% if form.name.errors %}
-                            <div class="text-danger">{{ form.name.errors }}</div>
-                            {% endif %}
-                        </div>
+                        <div class="row g-3">
+                            <div class="col-12">
+                                <label for="{{ form.name.id_for_label }}" class="form-label">Client Name</label>
+                                {{ form.name }}
+                                {% if form.name.errors %}<div class="text-danger small mt-1">{{ form.name.errors }}</div>{% endif %}
+                            </div>
 
-                        <div class="row">
                             <div class="col-md-6">
-                                <div class="mb-3">
-                                    <label for="{{ form.company_name.id_for_label }}" class="form-label">Company</label>
-                                    {{ form.company_name }}
-                                    {% if form.company_name.errors %}
-                                    <div class="text-danger">{{ form.company_name.errors }}</div>
-                                    {% endif %}
-                                </div>
+                                <label for="{{ form.company_name.id_for_label }}" class="form-label">Company</label>
+                                {{ form.company_name }}
+                                {% if form.company_name.errors %}<div class="text-danger small mt-1">{{ form.company_name.errors }}</div>{% endif %}
                             </div>
                             <div class="col-md-6">
-                                <div class="mb-3">
-                                    <label for="{{ form.country.id_for_label }}" class="form-label">Country</label>
-                                    {{ form.country }}
-                                    {% if form.country.errors %}
-                                    <div class="text-danger">{{ form.country.errors }}</div>
-                                    {% endif %}
-                                </div>
+                                <label for="{{ form.country.id_for_label }}" class="form-label">Country</label>
+                                {{ form.country }}
+                                {% if form.country.errors %}<div class="text-danger small mt-1">{{ form.country.errors }}</div>{% endif %}
                             </div>
-                        </div>
 
-                        <div class="row">
                             <div class="col-md-4">
-                                <div class="mb-3">
-                                    <label for="{{ form.contact_person.id_for_label }}" class="form-label">Contact Person *</label>
-                                    {{ form.contact_person }}
-                                    {% if form.contact_person.errors %}
-                                    <div class="text-danger">{{ form.contact_person.errors }}</div>
-                                    {% endif %}
-                                </div>
+                                <label for="{{ form.contact_person.id_for_label }}" class="form-label">Contact Person</label>
+                                {{ form.contact_person }}
+                                {% if form.contact_person.errors %}<div class="text-danger small mt-1">{{ form.contact_person.errors }}</div>{% endif %}
                             </div>
                             <div class="col-md-4">
-                                <div class="mb-3">
-                                    <label for="{{ form.phone.id_for_label }}" class="form-label">Phone *</label>
-                                    {{ form.phone }}
-                                    {% if form.phone.errors %}
-                                    <div class="text-danger">{{ form.phone.errors }}</div>
-                                    {% endif %}
-                                </div>
+                                <label for="{{ form.phone.id_for_label }}" class="form-label">Phone</label>
+                                {{ form.phone }}
+                                {% if form.phone.errors %}<div class="text-danger small mt-1">{{ form.phone.errors }}</div>{% endif %}
                             </div>
                             <div class="col-md-4">
-                                <div class="mb-3">
-                                    <label for="{{ form.email.id_for_label }}" class="form-label">Email</label>
-                                    {{ form.email }}
-                                    {% if form.email.errors %}
-                                    <div class="text-danger">{{ form.email.errors }}</div>
-                                    {% endif %}
-                                </div>
+                                <label for="{{ form.email.id_for_label }}" class="form-label">Email</label>
+                                {{ form.email }}
+                                {% if form.email.errors %}<div class="text-danger small mt-1">{{ form.email.errors }}</div>{% endif %}
+                            </div>
+
+                            <div class="col-12">
+                                <label for="{{ form.address.id_for_label }}" class="form-label">Address</label>
+                                {{ form.address }}
+                                {% if form.address.errors %}<div class="text-danger small mt-1">{{ form.address.errors }}</div>{% endif %}
+                            </div>
+
+                            <div class="col-12">
+                                <label for="{{ form.remarks.id_for_label }}" class="form-label">Remarks</label>
+                                {{ form.remarks }}
+                                {% if form.remarks.errors %}<div class="text-danger small mt-1">{{ form.remarks.errors }}</div>{% endif %}
                             </div>
                         </div>
 
-                        <div class="mb-3">
-                            <label for="{{ form.address.id_for_label }}" class="form-label">Address *</label>
-                            {{ form.address }}
-                            {% if form.address.errors %}
-                            <div class="text-danger">{{ form.address.errors }}</div>
-                            {% endif %}
-                        </div>
-
-                        <div class="mb-3">
-                            <label for="{{ form.remarks.id_for_label }}" class="form-label">Remarks</label>
-                            {{ form.remarks }}
-                            {% if form.remarks.errors %}
-                            <div class="text-danger">{{ form.remarks.errors }}</div>
-                            {% endif %}
-                        </div>
-
-                        <div class="d-grid gap-2 d-md-flex justify-content-md-end">
-                            <a href="{% url 'client_list' %}" class="btn btn-secondary">
-                                <i class="bi bi-x-circle"></i> Cancel
-                            </a>
-                            <button type="submit" class="btn btn-primary">
-                                <i class="bi bi-check-circle"></i> Save Client
-                            </button>
+                        <div class="d-flex justify-content-end gap-2 mt-4">
+                            <a href="{% url 'client_list' %}" class="btn btn-outline-secondary"><i class="bi bi-arrow-left me-2"></i>Back</a>
+                            <button type="submit" class="btn btn-primary"><i class="bi bi-check-circle me-2"></i>Save Client</button>
                         </div>
                     </form>
                 </div>
-            </div>
+            </section>
+        </div>
+
+        <div class="col-xl-4">
+            <section class="surface-panel h-100">
+                <div class="panel-header">
+                    <h3 class="panel-title"><i class="bi bi-info-circle me-2"></i>What matters here</h3>
+                </div>
+                <div class="workspace-stack">
+                    <div class="detail-item">
+                        <span class="label">Operational use</span>
+                        <span class="value">Client data flows into transactions, cargo records, invoices and receipts.</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="label">Data quality</span>
+                        <span class="value">Consistent company, phone and country information reduces document corrections later.</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="label">Recommended practice</span>
+                        <span class="value">Use the contact person field for the operational owner who approves shipments or invoices.</span>
+                    </div>
+                </div>
+            </section>
         </div>
     </div>
 </div>

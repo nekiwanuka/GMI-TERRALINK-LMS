@@ -1,0 +1,26 @@
+{% extends "logistics/base.html" %}
+{% block title %}Delete Supplier Payment{% endblock %}
+{% block content %}
+<div class="container mt-4" style="max-width:600px;">
+  <div class="card shadow-sm border-danger">
+    <div class="card-header bg-danger text-white">
+      <strong>Delete supplier payment</strong>
+    </div>
+    <div class="card-body">
+      <p>Permanently remove this payment record?</p>
+      <ul>
+        <li>PO: <strong>{{ payment.purchase_order.po_number }}</strong></li>
+        <li>Supplier: {{ payment.supplier_name|default:payment.purchase_order.supplier_name }}</li>
+        <li>Amount: <strong>{{ payment.amount }} {{ payment.currency }}</strong></li>
+        <li>Paid at: {{ payment.paid_at|date:"Y-m-d H:i" }}</li>
+        <li>Reference: {{ payment.reference|default:"—" }}</li>
+      </ul>
+      <form method="post">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-danger">Delete</button>
+        <a href="{% url 'purchase_order_detail' payment.purchase_order.pk %}" class="btn btn-outline-secondary">Cancel</a>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

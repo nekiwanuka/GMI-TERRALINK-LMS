@@ -1,0 +1,87 @@
+{% extends "logistics/base.html" %}
+
+{% block title %}Fulfillment - GMI TERRALINK Logistics Portal{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="mb-0"><i class="bi bi-signpost-split"></i> Fulfillment</h1>
+            <small class="text-muted">Invoice-driven port dispatch, sea freight and inland delivery in one workflow.</small>
+        </div>
+        <a href="{% url 'workflow_guide' %}" class="btn btn-sm btn-outline-secondary">Open Workflow Guide</a>
+    </div>
+
+    <div class="card shadow-sm">
+        <div class="card-header bg-light d-flex justify-content-between align-items-center gap-3 flex-wrap">
+            <strong>Fulfillment Orders</strong>
+            <div class="ms-auto">
+                {% include "logistics/components/lane_switcher.html" %}
+            </div>
+            <form method="get" class="d-flex gap-2 align-items-center">
+                <input type="text" name="invoice" class="form-control form-control-sm" placeholder="Filter by FI id" value="{{ invoice_filter }}">
+                <select name="status" class="form-select form-select-sm" onchange="this.form.submit()">
+                    <option value="">All statuses</option>
+                    {% for status_value, status_label in status_choices %}
+                    <option value="{{ status_value }}" {% if status == status_value %}selected{% endif %}>{{ status_label }}</option>
+                    {% endfor %}
+                </select>
+            </form>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Transaction</th>
+                        <th>Client</th>
+                        <th>Invoice</th>
+                        <th>Status</th>
+                        <th>Route</th>
+                        <th class="text-center">Allocated</th>
+                        <th class="text-center">Dispatched</th>
+                        <th class="text-center">Delivered</th>
+                        <th>Updated</th>
+                        <th class="text-end"></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for order in orders %}
+                    <tr>
+                        <td>
+                            <div class="fw-semibold">{{ order.transaction.transaction_id }}</div>
+                            <small class="text-muted">{{ order.consignee|default:"No consignee" }}</small>
+                        </td>
+                        <td>{{ order.transaction.customer.name }}</td>
+                        <td>
+                            <div class="fw-semibold">{{ order.source_reference }}</div>
+                            <small class="text-muted">{% if order.final_invoice %}{{ order.final_invoice.transaction.customer.name }} - {{ order.final_invoice.transaction.transaction_id }}{% endif %}</small>
+                            <div class="text-muted small">Receipt: {{ order.receipt_numbers_display }}</div>
+                        </td>
+                        <td><span class="badge bg-{% if order.status == 'DELIVERED' %}success{% elif order.status == 'SEA_TRANSIT' or order.status == 'INLAND_TRANSIT' %}primary{% elif order.status == 'AT_PORT' or order.status == 'AT_DESTINATION_PORT' %}info text-dark{% else %}secondary{% endif %}">{{ order.get_status_display }}</span></td>
+                        <td>
+                            <div>{{ order.port_of_loading|default:"-" }}</div>
+                            <small class="text-muted">{{ order.destination_port|default:"-" }}{% if order.inland_destination %} -> {{ order.inland_destination }}{% endif %}</small>
+                        </td>
+                        <td class="text-center">{{ order.total_allocated }}</td>
+                        <td class="text-center">{{ order.total_dispatched }}</td>
+                        <td class="text-center">{{ order.total_delivered }}</td>
+                        <td>{{ order.updated_at|date:"Y-m-d" }}</td>
+                        <td class="text-end">
+                            <div class="btn-group btn-group-sm">
+                                <a class="btn btn-outline-secondary" href="{% url 'transaction_detail' order.transaction.pk %}">Open</a>
+                                <a class="btn btn-warning" href="{% url 'fulfillment_order_update' order.pk %}">Update</a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="10" class="text-center text-muted py-4">No fulfillment workflows found.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% include "logistics/components/pagination.html" %}
+    </div>
+</div>
+{% endblock %}

@@ -1,6 +1,6 @@
 {% extends "logistics/base.html" %}
 
-{% block title %}{% if title %}{{ title }}{% else %}Cargo{% endif %} - Roshe Group Logistics Portal{% endblock %}
+{% block title %}{% if title %}{{ title }}{% else %}Cargo{% endif %} - GMI TERRALINK Logistics Portal{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -47,6 +47,37 @@
         color: #6c757d;
         margin-top: 0.35rem;
     }
+
+    .workflow-tabs {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.75rem;
+        margin-bottom: 1.25rem;
+    }
+
+    .workflow-tab {
+        border: 1px solid #dbe2ea;
+        background: #f7f9fc;
+        border-radius: 0.75rem;
+        padding: 0.75rem 1rem;
+        text-align: left;
+        font-weight: 600;
+        color: #334155;
+    }
+
+    .workflow-tab.active {
+        border-color: #0d6efd;
+        background: #eaf2ff;
+        color: #0d3b84;
+    }
+
+    .workflow-panel {
+        display: none;
+    }
+
+    .workflow-panel.active {
+        display: block;
+    }
 </style>
 {% endblock %}
 
@@ -56,6 +87,7 @@
         <div class="col-md-10">
             <div class="card">
                 <div class="card-header d-flex flex-column flex-md-row align-items-md-center justify-content-between">
+                                                {% if form.warehouse_location.errors %}<div class="text-danger">{{ form.warehouse_location.errors }}</div>{% endif %}
                     <div>
                         <h3 class="mb-1"><i class="bi bi-box-seam"></i> {{ title }}</h3>
                         <p class="mb-0 small text-light">Capture the shipment overview, routing, and cargo description in one pass.</p>
@@ -65,6 +97,9 @@
                 <div class="card-body">
                     <form method="post" novalidate>
                         {% csrf_token %}
+                        <div class="d-none">
+                            {{ form.entry_type }}
+                        </div>
                         
                         {% if form.non_field_errors %}
                         <div class="alert alert-danger">
@@ -74,15 +109,98 @@
 
                         <div class="loading-form-section">
                             <div class="section-heading">
-                                <span class="section-eyebrow">01 · Shipment Overview</span>
+                                <span class="section-eyebrow">01 · Select Workflow</span>
+                            </div>
+                            <div class="workflow-tabs" role="tablist" aria-label="Cargo workflow tabs">
+                                <button type="button" class="workflow-tab" data-workflow="FULL_CONTAINER" id="workflow-full-tab">
+                                    Full Container
+                                </button>
+                                <button type="button" class="workflow-tab" data-workflow="GROUPAGE" id="workflow-groupage-tab">
+                                    Groupage
+                                </button>
+                            </div>
+
+                            <div class="workflow-panel" data-workflow-panel="FULL_CONTAINER" id="workflow-full-panel">
+                                <div class="card border-primary-subtle mb-3">
+                                    <div class="card-body">
+                                        <h6 class="text-primary mb-3">Full Container Entry</h6>
+                                        <div class="row g-3">
+                                            <div class="col-md-6">
+                                                <label for="{{ form.loading_id.id_for_label }}" class="form-label">Entry Number *</label>
+                                                {{ form.loading_id }}
+                                                {% if form.loading_id.errors %}<div class="text-danger">{{ form.loading_id.errors }}</div>{% endif %}
+                                                <p class="field-hint">Auto-generated as CFC-GMI-UG-YY-##.</p>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label for="{{ form.bill_of_lading_number.id_for_label }}" class="form-label">Bill of Lading</label>
+                                                {{ form.bill_of_lading_number }}
+                                                {% if form.bill_of_lading_number.errors %}<div class="text-danger">{{ form.bill_of_lading_number.errors }}</div>{% endif %}
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label for="{{ form.container_number.id_for_label }}" class="form-label">Container Number *</label>
+                                                {{ form.container_number }}
+                                                {% if form.container_number.errors %}<div class="text-danger">{{ form.container_number.errors }}</div>{% endif %}
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label for="{{ form.container_size.id_for_label }}" class="form-label">Container Size</label>
+                                                {{ form.container_size }}
+                                                {% if form.container_size.errors %}<div class="text-danger">{{ form.container_size.errors }}</div>{% endif %}
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label for="{{ form.warehouse_location.id_for_label }}" class="form-label">Warehouse *</label>
+                                                {{ form.warehouse_location }}
+                                                {% if form.warehouse_location.errors %}<div class="text-danger">{{ form.warehouse_location.errors }}</div>{% endif %}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="workflow-panel" data-workflow-panel="GROUPAGE" id="workflow-groupage-panel">
+                                <div class="card border-info-subtle mb-3">
+                                    <div class="card-body">
+                                        <h6 class="text-info-emphasis mb-3">Groupage Entry</h6>
+                                        <div class="row g-3">
+                                            <div class="col-md-6">
+                                                <label for="{{ form.loading_id.id_for_label }}" class="form-label">Entry Number *</label>
+                                                <input type="text" id="id_loading_id_preview" class="form-control" readonly>
+                                                <p class="field-hint">Auto-generated as CGP-GMI-UG-YY-##.</p>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label for="{{ form.groupage_note_number.id_for_label }}" class="form-label">Groupage Note</label>
+                                                {{ form.groupage_note_number }}
+                                                {% if form.groupage_note_number.errors %}<div class="text-danger">{{ form.groupage_note_number.errors }}</div>{% endif %}
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label for="{{ form.packages.id_for_label }}" class="form-label">Packages *</label>
+                                                {{ form.packages }}
+                                                {% if form.packages.errors %}<div class="text-danger">{{ form.packages.errors }}</div>{% endif %}
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label for="{{ form.weight.id_for_label }}" class="form-label">Weight (KG) *</label>
+                                                {{ form.weight }}
+                                                {% if form.weight.errors %}<div class="text-danger">{{ form.weight.errors }}</div>{% endif %}
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label for="{{ form.cbm.id_for_label }}" class="form-label">CBM *</label>
+                                                {{ form.cbm }}
+                                                {% if form.cbm.errors %}<div class="text-danger">{{ form.cbm.errors }}</div>{% endif %}
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label for="{{ form.warehouse_location.id_for_label }}" class="form-label">Warehouse *</label>
+                                                <input type="text" id="id_warehouse_location_groupage" class="form-control" placeholder="Warehouse">
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="loading-form-section">
+                            <div class="section-heading">
+                                <span class="section-eyebrow">02 · Shared Shipment Details</span>
                             </div>
                             <div class="row g-4">
-                                <div class="col-md-6">
-                                    <label for="{{ form.loading_id.id_for_label }}" class="form-label">Loading ID *</label>
-                                    {{ form.loading_id }}
-                                    {% if form.loading_id.errors %}<div class="text-danger">{{ form.loading_id.errors }}</div>{% endif %}
-                                    <p class="field-hint">Use your internal reference or let the system auto-generate a unique code.</p>
-                                </div>
                                 <div class="col-md-6">
                                     <label for="{{ form.client.id_for_label }}" class="form-label">Client *</label>
                                     {{ form.client }}
@@ -92,31 +210,6 @@
                                     <label for="{{ form.loading_date.id_for_label }}" class="form-label">Loading Date *</label>
                                     {{ form.loading_date }}
                                     {% if form.loading_date.errors %}<div class="text-danger">{{ form.loading_date.errors }}</div>{% endif %}
-                                </div>
-                                <div class="col-md-6">
-                                    <label for="{{ form.weight.id_for_label }}" class="form-label">Weight (KG)</label>
-                                    {{ form.weight }}
-                                    {% if form.weight.errors %}<div class="text-danger">{{ form.weight.errors }}</div>{% endif %}
-                                    <p class="field-hint">Leave blank if weight is pending confirmation.</p>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="loading-form-section">
-                            <div class="section-heading">
-                                <span class="section-eyebrow">02 · Equipment & Route</span>
-                            </div>
-                            <div class="row g-4">
-                                <div class="col-md-6">
-                                    <label for="{{ form.container_number.id_for_label }}" class="form-label">Container Number *</label>
-                                    {{ form.container_number }}
-                                    {% if form.container_number.errors %}<div class="text-danger">{{ form.container_number.errors }}</div>{% endif %}
-                                </div>
-                                <div class="col-md-6">
-                                    <label for="{{ form.container_size.id_for_label }}" class="form-label">Container Size</label>
-                                    {{ form.container_size }}
-                                    {% if form.container_size.errors %}<div class="text-danger">{{ form.container_size.errors }}</div>{% endif %}
-                                    <p class="field-hint">Optional — helps downstream billing and container tracking.</p>
                                 </div>
                                 <div class="col-md-6">
                                     <label for="{{ form.origin.id_for_label }}" class="form-label">Origin *</label>
@@ -155,4 +248,112 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    const entryType = document.getElementById("id_entry_type");
+    const warehouse = document.getElementById("id_warehouse_location");
+    const warehouseGroupage = document.getElementById("id_warehouse_location_groupage");
+    const packages = document.getElementById("id_packages");
+    const weight = document.getElementById("id_weight");
+    const cbm = document.getElementById("id_cbm");
+    const containerNumber = document.getElementById("id_container_number");
+    const loadingId = document.getElementById("id_loading_id");
+    const loadingIdPreview = document.getElementById("id_loading_id_preview");
+    const tabs = document.querySelectorAll(".workflow-tab");
+    const panels = document.querySelectorAll(".workflow-panel");
+
+    function applyWorkflow(type) {
+        if (!entryType || !type) {
+            return;
+        }
+        entryType.value = type;
+
+        const isFullContainer = type === "FULL_CONTAINER";
+        const isGroupage = type === "GROUPAGE";
+
+        tabs.forEach(function (tab) {
+            tab.classList.toggle("active", tab.dataset.workflow === type);
+        });
+        panels.forEach(function (panel) {
+            panel.classList.toggle("active", panel.dataset.workflowPanel === type);
+        });
+
+        if (warehouse) {
+            warehouse.required = isFullContainer || isGroupage;
+        }
+        if (warehouseGroupage && warehouse) {
+            if (isGroupage) {
+                warehouseGroupage.value = warehouse.value;
+            }
+        }
+
+        if (weight) {
+            weight.required = isGroupage;
+        }
+
+        if (cbm) {
+            cbm.required = isGroupage;
+        }
+
+        if (packages) {
+            packages.required = isGroupage;
+        }
+
+        if (containerNumber) {
+            containerNumber.required = isFullContainer;
+        }
+
+        if (loadingIdPreview && loadingId) {
+            loadingIdPreview.value = loadingId.value;
+        }
+    }
+
+    tabs.forEach(function (tab) {
+        tab.addEventListener("click", function () {
+            applyWorkflow(tab.dataset.workflow);
+        });
+    });
+
+    if (warehouseGroupage && warehouse) {
+        warehouseGroupage.addEventListener("input", function () {
+            if (entryType && entryType.value === "GROUPAGE") {
+                warehouse.value = warehouseGroupage.value;
+            }
+        });
+        warehouse.addEventListener("input", function () {
+            if (entryType && entryType.value === "FULL_CONTAINER") {
+                warehouseGroupage.value = warehouse.value;
+            }
+        });
+    }
+
+    if (loadingId) {
+        loadingId.addEventListener("input", function () {
+            if (loadingIdPreview) {
+                loadingIdPreview.value = loadingId.value;
+            }
+        });
+    }
+
+    if (entryType && (entryType.value === "FULL_CONTAINER" || entryType.value === "GROUPAGE")) {
+        applyWorkflow(entryType.value);
+    } else {
+        applyWorkflow("FULL_CONTAINER");
+    }
+
+    if (entryType && entryType.disabled) {
+        tabs.forEach(function (tab) {
+            tab.disabled = true;
+        });
+        if (entryType.value === "GROUPAGE") {
+            applyWorkflow("GROUPAGE");
+        } else {
+            applyWorkflow("FULL_CONTAINER");
+        }
+    }
+});
+</script>
 {% endblock %}

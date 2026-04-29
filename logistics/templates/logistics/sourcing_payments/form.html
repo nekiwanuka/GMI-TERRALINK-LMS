@@ -1,0 +1,356 @@
+{% extends "logistics/base.html" %}
+{% block title %}Record Trade Payment — GMI TERRALINK{% endblock %}
+
+{% block extra_css %}
+<style>
+.calc-box { background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 10px; }
+.calc-box .metric { font-size: .84rem; color: #6c757d; }
+.calc-box .value { font-size: 1.15rem; font-weight: 700; color: #4f4a52; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container" style="max-width:860px;">
+    <h2 class="mb-4"><i class="bi bi-cash-coin"></i> {{ title }}</h2>
+
+    <div class="card shadow-sm">
+        <div class="card-body">
+            <p class="text-muted mb-4">
+                Trade payments are used to receive client money against a confirmed sourcing/final invoice. The system tracks the amount due, partial or full settlement, cash received, change returned, and remaining balance automatically.
+            </p>
+
+            {% if selected_transaction and selected_invoice %}
+            <div class="row g-3 mb-4">
+                <div class="col-md-4">
+                    <div class="calc-box p-3 h-100">
+                        <div class="metric">Client</div>
+                        <div class="value" style="font-size:1rem;">{{ selected_transaction.customer.name }}</div>
+                        <div class="small text-muted">{{ selected_transaction.transaction_id }}</div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="calc-box p-3 h-100">
+                        <div class="metric">Invoice Total</div>
+                        <div class="value">{{ selected_invoice.total_amount }} {{ selected_invoice.currency }}</div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="calc-box p-3 h-100">
+                        <div class="metric">Amount Due Now</div>
+                        <div class="value" id="due-display">{{ amount_due|default:0 }} {{ selected_invoice.currency }}</div>
+                        <div class="small text-muted" id="paid-display">Already paid: {{ total_paid|default:0 }} {{ selected_invoice.currency }}</div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <form method="post" id="trade-payment-form">
+                {% csrf_token %}
+
+                {% if form.non_field_errors %}
+                <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+                {% endif %}
+
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">Transaction</label>
+                        {{ form.transaction }}
+                        {% if form.transaction.errors %}<div class="text-danger small mt-1">{{ form.transaction.errors }}</div>{% endif %}
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">Final Invoice</label>
+                        {{ form.final_invoice }}
+                        {% if form.final_invoice.errors %}<div class="text-danger small mt-1">{{ form.final_invoice.errors }}</div>{% endif %}
+                    </div>
+
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">Amount Due</label>
+                        {{ form.amount_due_snapshot }}
+                    </div>
+                    <div class="col-md-4 d-flex align-items-end">
+                        <div class="w-100">
+                            <label class="form-label fw-semibold">Payment Mode</label>
+                            <div class="d-flex gap-2">
+                                <button type="button" class="btn btn-dark btn-sm" id="btn-full-payment">Full Payment</button>
+                                <button type="button" class="btn btn-outline-dark btn-sm" id="btn-partial-payment">Partial Payment</button>
+                            </div>
+                            <div class="form-check mt-2 visually-hidden">
+                                {{ form.is_full_payment }}
+                                <label class="form-check-label fw-semibold" for="{{ form.is_full_payment.id_for_label }}">Full payment</label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">Currency</label>
+                        {{ form.currency }}
+                        {% if form.currency.errors %}<div class="text-danger small mt-1">{{ form.currency.errors }}</div>{% endif %}
+                    </div>
+
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">Payment Amount</label>
+                        {{ form.amount }}
+                        {% if form.amount.errors %}<div class="text-danger small mt-1">{{ form.amount.errors }}</div>{% endif %}
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">Payment Method</label>
+                        {{ form.payment_method }}
+                        {% if form.payment_method.errors %}<div class="text-danger small mt-1">{{ form.payment_method.errors }}</div>{% endif %}
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">Payment Date</label>
+                        {{ form.payment_date }}
+                        {% if form.payment_date.errors %}<div class="text-danger small mt-1">{{ form.payment_date.errors }}</div>{% endif %}
+                    </div>
+
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">Cash Given In</label>
+                        {{ form.cash_received }}
+                        {% if form.cash_received.errors %}<div class="text-danger small mt-1">{{ form.cash_received.errors }}</div>{% endif %}
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">Change To Return</label>
+                        {{ form.change_given }}
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">Balance After Payment</label>
+                        {{ form.balance_after }}
+                    </div>
+
+                    <div class="col-12">
+                        <div class="row g-3">
+                            <div class="col-md-4">
+                                <div class="calc-box p-3 h-100">
+                                    <div class="metric">Cash Given In</div>
+                                    <div class="value" id="cash-display">0.00</div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="calc-box p-3 h-100">
+                                    <div class="metric">Change To Return</div>
+                                    <div class="value" id="change-display">0.00</div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="calc-box p-3 h-100">
+                                    <div class="metric">Balance After Payment</div>
+                                    <div class="value" id="balance-display">0.00</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">Reference</label>
+                        {{ form.reference }}
+                        {% if form.reference.errors %}<div class="text-danger small mt-1">{{ form.reference.errors }}</div>{% endif %}
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">Notes</label>
+                        {{ form.notes }}
+                        {% if form.notes.errors %}<div class="text-danger small mt-1">{{ form.notes.errors }}</div>{% endif %}
+                    </div>
+                </div>
+
+                <div class="d-flex gap-2 mt-4">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-check-lg"></i> Record Payment
+                    </button>
+                    <a href="{% url 'transaction_list' %}" class="btn btn-outline-secondary">Cancel</a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    const dueInfoUrl = '{{ due_info_url }}';
+    const transactionInput = document.getElementById('id_transaction');
+    const invoiceInput = document.getElementById('id_final_invoice');
+    const dueInput = document.getElementById('id_amount_due_snapshot');
+    const fullInput = document.getElementById('id_is_full_payment');
+    const amountInput = document.getElementById('id_amount');
+    const methodInput = document.getElementById('id_payment_method');
+    const cashInput = document.getElementById('id_cash_received');
+    const changeInput = document.getElementById('id_change_given');
+    const balanceInput = document.getElementById('id_balance_after');
+    const currencyInput = document.getElementById('id_currency');
+    const dueDisplay = document.getElementById('due-display');
+    const paidDisplay = document.getElementById('paid-display');
+    const cashDisplay = document.getElementById('cash-display');
+    const changeDisplay = document.getElementById('change-display');
+    const balanceDisplay = document.getElementById('balance-display');
+    const fullPaymentButton = document.getElementById('btn-full-payment');
+    const partialPaymentButton = document.getElementById('btn-partial-payment');
+    let wasCashMode = false;
+
+    if (!dueInput || !amountInput || !changeInput || !balanceInput) {
+        return;
+    }
+
+    function numValue(input) {
+        const value = parseFloat(input.value);
+        return Number.isFinite(value) ? value : 0;
+    }
+
+    function updatePaymentCalc() {
+        const due = numValue(dueInput);
+        if (fullInput && fullInput.checked) {
+            amountInput.value = due.toFixed(2);
+        }
+        const amount = numValue(amountInput);
+        const balance = Math.max(due - amount, 0);
+        const isCash = methodInput && methodInput.value === 'cash';
+        let cashReceived = cashInput ? numValue(cashInput) : 0;
+
+        if (isCash && fullInput && fullInput.checked && cashInput && !cashInput.value) {
+            cashInput.value = amount.toFixed(2);
+            cashReceived = amount;
+        }
+
+        const change = isCash ? Math.max(cashReceived - amount, 0) : 0;
+        balanceInput.value = balance.toFixed(2);
+        changeInput.value = change.toFixed(2);
+
+        if (cashDisplay) {
+            cashDisplay.textContent = isCash ? cashReceived.toFixed(2) : '0.00';
+        }
+        if (changeDisplay) {
+            changeDisplay.textContent = change.toFixed(2);
+        }
+        if (balanceDisplay) {
+            balanceDisplay.textContent = balance.toFixed(2);
+        }
+
+        if (cashInput) {
+            cashInput.disabled = !isCash;
+            if (isCash && !wasCashMode) {
+                window.requestAnimationFrame(() => {
+                    cashInput.focus();
+                    cashInput.select();
+                });
+            }
+            if (!isCash) {
+                cashInput.value = '';
+            }
+        }
+
+        wasCashMode = isCash;
+    }
+
+    async function refreshDueAmount() {
+        if (!transactionInput || !transactionInput.value) {
+            dueInput.value = '0.00';
+            if (dueDisplay) {
+                dueDisplay.textContent = '0.00';
+            }
+            if (paidDisplay) {
+                paidDisplay.textContent = 'Already paid: 0.00';
+            }
+            updatePaymentCalc();
+            return;
+        }
+
+        const params = new URLSearchParams({ transaction_id: transactionInput.value });
+        if (invoiceInput && invoiceInput.value) {
+            params.set('invoice_id', invoiceInput.value);
+        }
+
+        try {
+            const response = await fetch(`${dueInfoUrl}?${params.toString()}`, {
+                headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            });
+            const data = await response.json();
+            if (!response.ok || data.ok === false) {
+                return;
+            }
+            const due = Number.parseFloat(data.amount_due);
+
+            if (Number.isFinite(due)) {
+                dueInput.value = due.toFixed(2);
+            }
+
+            if (invoiceInput && data.invoice_id) {
+                invoiceInput.value = String(data.invoice_id);
+            }
+
+            if (currencyInput && data.currency) {
+                currencyInput.value = data.currency;
+            }
+
+            if (dueDisplay && data.currency && Number.isFinite(due)) {
+                dueDisplay.textContent = `${due.toFixed(2)} ${data.currency}`;
+            }
+
+            if (paidDisplay && data.currency && data.total_paid !== undefined) {
+                paidDisplay.textContent = `Already paid: ${data.total_paid} ${data.currency}`;
+            }
+
+            updatePaymentCalc();
+        } catch (error) {
+            // Keep existing values if due-info fetch fails.
+        }
+    }
+
+    function updatePaymentModeButtons() {
+        if (!fullPaymentButton || !partialPaymentButton || !fullInput) {
+            return;
+        }
+        if (fullInput.checked) {
+            fullPaymentButton.classList.remove('btn-outline-dark');
+            fullPaymentButton.classList.add('btn-dark');
+            partialPaymentButton.classList.remove('btn-dark');
+            partialPaymentButton.classList.add('btn-outline-dark');
+        } else {
+            fullPaymentButton.classList.remove('btn-dark');
+            fullPaymentButton.classList.add('btn-outline-dark');
+            partialPaymentButton.classList.remove('btn-outline-dark');
+            partialPaymentButton.classList.add('btn-dark');
+        }
+    }
+
+    [dueInput, amountInput, cashInput, methodInput, fullInput].forEach((input) => {
+        if (input) input.addEventListener('input', updatePaymentCalc);
+        if (input) input.addEventListener('change', updatePaymentCalc);
+    });
+
+    if (transactionInput) {
+        transactionInput.addEventListener('change', () => {
+            if (invoiceInput) {
+                invoiceInput.value = '';
+            }
+            refreshDueAmount();
+        });
+    }
+    if (invoiceInput) {
+        invoiceInput.addEventListener('change', refreshDueAmount);
+    }
+
+    if (fullPaymentButton && fullInput) {
+        fullPaymentButton.addEventListener('click', () => {
+            fullInput.checked = true;
+            updatePaymentCalc();
+            updatePaymentModeButtons();
+        });
+    }
+
+    if (partialPaymentButton && fullInput) {
+        partialPaymentButton.addEventListener('click', () => {
+            fullInput.checked = false;
+            updatePaymentCalc();
+            updatePaymentModeButtons();
+        });
+    }
+
+    if (fullInput) {
+        fullInput.addEventListener('change', updatePaymentModeButtons);
+    }
+
+    updatePaymentCalc();
+    updatePaymentModeButtons();
+    refreshDueAmount();
+})();
+</script>
+{% endblock %}

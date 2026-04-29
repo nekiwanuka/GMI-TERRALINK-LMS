@@ -1,0 +1,61 @@
+{% extends "logistics/base.html" %}
+
+{% block title %}Final Invoices - GMI TERRALINK Logistics Portal{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1><i class="bi bi-receipt-cutoff"></i> Final Invoices</h1>
+        <a href="{% if active_lane == 'logistics' %}{% url 'logistics_final_invoice_create' %}{% else %}{% url 'sourcing_final_invoice_create' %}{% endif %}" class="btn btn-primary">New Final Invoice</a>
+    </div>
+
+    <div class="card">
+        {% include "logistics/components/lane_switcher.html" %}
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Transaction</th>
+                        <th>Cargo</th>
+                        <th>Customer</th>
+                        <th>Total</th>
+                        <th>Currency</th>
+                        <th>Shipping</th>
+                        <th>Payment Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for inv in invoices %}
+                    <tr>
+                        <td>{{ inv.transaction.transaction_id }}</td>
+                        <td>{% if inv.loading %}{{ inv.loading.loading_id }}{% else %}-{% endif %}</td>
+                        <td>{{ inv.transaction.customer.name }}</td>
+                        <td>{{ inv.total_amount }}</td>
+                        <td>{{ inv.currency }}</td>
+                        <td>{{ inv.get_shipping_mode_display }}</td>
+                        <td><span class="badge {{ inv.payment_status_class }}">{{ inv.payment_status_label }}</span></td>
+                        <td>
+                            <a class="btn btn-sm btn-outline-dark" href="{% if inv.loading %}{% url 'logistics_final_invoice_detail' inv.id %}{% else %}{% url 'sourcing_final_invoice_detail' inv.id %}{% endif %}">Open</a>
+                            <a class="btn btn-sm btn-outline-primary" href="{% if inv.loading %}{% url 'logistics_final_invoice_pdf' inv.id %}{% else %}{% url 'sourcing_final_invoice_pdf' inv.id %}{% endif %}">PDF</a>
+                            {% if inv.can_edit_invoice %}
+                            <a class="btn btn-sm btn-warning" href="{% if inv.loading %}{% url 'logistics_final_invoice_update' inv.id %}{% else %}{% url 'sourcing_final_invoice_update' inv.id %}{% endif %}">Edit</a>
+                            {% else %}
+                            <button type="button" class="btn btn-sm btn-outline-secondary" disabled title="Invoice has payment(s) and is locked from editing.">Locked</button>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="8" class="text-center text-muted py-4">No final invoices yet</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% include "logistics/components/pagination.html" %}
+    </div>
+
+    <div class="mt-3">
+        <a href="{% if active_lane == 'logistics' %}{% url 'logistics_proforma_list' %}{% else %}{% url 'sourcing_proforma_list' %}{% endif %}" class="btn btn-outline-dark">Back to Proforma Invoices</a>
+    </div>
+</div>
+{% endblock %}

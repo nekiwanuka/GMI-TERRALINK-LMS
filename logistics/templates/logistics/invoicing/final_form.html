@@ -1,0 +1,299 @@
+{% extends "logistics/base.html" %}
+
+{% block title %}{{ title }} - GMI TERRALINK Logistics Portal{% endblock %}
+
+{% block extra_css %}
+<style>
+.section-card {
+    border: 1px solid #e9ecef;
+    border-radius: 10px;
+}
+.line-items-section {
+    border: 1px solid #dee2e6;
+    border-radius: 10px;
+    padding: 1.25rem;
+}
+.line-items-section .section-title {
+    font-size: 1rem;
+    font-weight: 600;
+    margin-bottom: 0;
+}
+.line-items-section .section-sub {
+    font-size: 0.82rem;
+    color: #6c757d;
+}
+#line-items-table th {
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    background: #f8f9fa;
+}
+#line-items-table td input,
+#invoice-settings input,
+#invoice-settings select {
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    font-size: 0.88rem;
+    padding: .45rem .55rem;
+    width: 100%;
+}
+#line-items-table td input:focus,
+#invoice-settings input:focus,
+#invoice-settings select:focus {
+    border-color: #86b7fe;
+    outline: none;
+    box-shadow: 0 0 0 .15rem rgba(13,110,253,.15);
+}
+#line-items-table .row-total,
+#items-subtotal,
+#grand-total {
+    background: #f8f9fa !important;
+    font-weight: 600;
+}
+.remove-row-btn {
+    border: 1px solid #f5c6cb;
+    color: #dc3545;
+    background: #fff;
+    border-radius: 6px;
+    width: 28px;
+    height: 28px;
+    line-height: 1;
+    font-size: 1rem;
+    cursor: pointer;
+}
+.remove-row-btn:hover {
+    background: #dc3545;
+    color: #fff;
+}
+.metric-card {
+    border: 1px solid #e9ecef;
+    border-radius: 10px;
+    padding: 1rem;
+    background: #fafafa;
+}
+.metric-card .label {
+    display: block;
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: #6c757d;
+    margin-bottom: .35rem;
+}
+.metric-card .value {
+    font-size: 1.15rem;
+    font-weight: 700;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row justify-content-center">
+        <div class="col-xl-10">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <div>
+                    <h1 class="mb-0"><i class="bi bi-receipt-cutoff"></i> {{ title }}</h1>
+                    <small class="text-muted">Use the same structured invoice builder style as proformas, without raw JSON editing.</small>
+                    <div class="mt-1">
+                        <small class="text-muted"><i class="bi bi-lock"></i> Locked after first payment: once any payment is recorded (partial or full), this invoice can no longer be edited.</small>
+                    </div>
+                </div>
+                <a href="{% if invoice %}{% if invoice.loading %}{% url 'logistics_final_invoice_detail' invoice.pk %}{% else %}{% url 'sourcing_final_invoice_detail' invoice.pk %}{% endif %}{% else %}{% if '/logistics/' in request.path %}{% url 'logistics_final_invoice_list' %}{% else %}{% url 'sourcing_final_invoice_list' %}{% endif %}{% endif %}" class="btn btn-outline-secondary">Back</a>
+            </div>
+
+            <form method="post" class="card shadow-sm">
+                {% csrf_token %}
+                <div class="card-body p-4">
+                    <div class="row g-3 mb-4" id="invoice-settings">
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Transaction</label>
+                            <select name="transaction" class="form-select" required>
+                                <option value="">Select transaction</option>
+                                {% for tx in transactions %}
+                                <option value="{{ tx.pk }}" {% if form_values.transaction_id|stringformat:'s' == tx.pk|stringformat:'s' %}selected{% endif %}>
+                                    {{ tx.transaction_id }} - {{ tx.customer.name }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label fw-semibold">Currency</label>
+                            <input type="text" name="currency" class="form-control" value="{{ form_values.currency }}" required>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold">Shipping Mode</label>
+                            <select name="shipping_mode" class="form-select">
+                                {% for value,label in shipping_mode_choices %}
+                                <option value="{{ value }}" {% if form_values.shipping_mode == value %}selected{% endif %}>{{ label }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold">Route</label>
+                            <input type="text" name="route" class="form-control" value="{{ form_values.route }}">
+                        </div>
+                    </div>
+
+                    <div class="line-items-section mb-4">
+                        <div class="d-flex justify-content-between align-items-start mb-3">
+                            <div>
+                                <div class="section-title">Invoice Line Items</div>
+                                <div class="section-sub">Add one row per billable item. Total is calculated from quantity × unit price.</div>
+                            </div>
+                            <button type="button" class="btn btn-sm btn-dark" id="add-row-btn">
+                                <i class="bi bi-plus-lg"></i> Add Row
+                            </button>
+                        </div>
+
+                        <div class="table-responsive">
+                            <table class="table table-bordered align-middle mb-0" id="line-items-table">
+                                <thead>
+                                    <tr>
+                                        <th style="width:44%;">Item</th>
+                                        <th style="width:12%;">Qty</th>
+                                        <th style="width:18%;">Unit Price</th>
+                                        <th style="width:18%;">Line Total</th>
+                                        <th style="width:8%;"></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for item in line_items %}
+                                    <tr>
+                                        <td><input type="text" name="item_desc[]" class="form-control" value="{{ item.description }}" required></td>
+                                        <td><input type="number" step="0.01" min="0" name="item_qty[]" class="form-control row-qty" value="{{ item.quantity|default:'1' }}"></td>
+                                        <td><input type="number" step="0.01" min="0" name="item_unit_price[]" class="form-control row-unit-price" value="{% firstof item.unit_price item.amount item.total '0' %}"></td>
+                                        <td><input type="text" class="form-control row-total" readonly></td>
+                                        <td class="text-center"><button type="button" class="remove-row-btn">&times;</button></td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="row g-3 align-items-stretch mb-3">
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Items Subtotal</label>
+                            <input type="text" id="items-subtotal" class="form-control" readonly>
+                            <div class="form-text">Calculated from all line items.</div>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Sourcing Fee</label>
+                            <input type="number" step="0.01" min="0" name="sourcing_fee" class="form-control total-input" value="{{ form_values.sourcing_fee }}">
+                            <div class="form-text">Optional sourcing charge billed on this invoice.</div>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Shipping Cost</label>
+                            <input type="number" step="0.01" min="0" name="shipping_cost" class="form-control total-input" value="{{ form_values.shipping_cost }}">
+                            <div class="form-text">Additional shipping fee billed on this invoice.</div>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Handling Fee</label>
+                            <input type="number" step="0.01" min="0" name="service_fee" class="form-control total-input" value="{{ form_values.service_fee }}">
+                            <div class="form-text">Handling or coordination fee billed to the client.</div>
+                        </div>
+                    </div>
+
+                    <div class="row g-3 mb-2">
+                        <div class="col-md-4">
+                            <div class="metric-card h-100">
+                                <span class="label">Invoice Grand Total</span>
+                                <div class="value"><span id="grand-total">0.00</span> <span id="grand-total-currency">{{ form_values.currency|default:'USD' }}</span></div>
+                            </div>
+                        </div>
+                        <div class="col-md-4 d-flex align-items-center">
+                            <div class="form-check mt-3">
+                                <input type="checkbox" name="is_confirmed" class="form-check-input" id="is-confirmed-checkbox" {% if form_values.is_confirmed %}checked{% endif %}>
+                                <label class="form-check-label" for="is-confirmed-checkbox">Confirm invoice now and lock future edits</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card-footer bg-white d-flex justify-content-between align-items-center px-4 py-3">
+                    <small class="text-muted">Final invoices now use structured row editing like proformas instead of raw JSON-style content.</small>
+                    <div class="d-flex gap-2">
+                        <a href="{% if invoice %}{% if invoice.loading %}{% url 'logistics_final_invoice_detail' invoice.pk %}{% else %}{% url 'sourcing_final_invoice_detail' invoice.pk %}{% endif %}{% else %}{% if '/logistics/' in request.path %}{% url 'logistics_final_invoice_list' %}{% else %}{% url 'sourcing_final_invoice_list' %}{% endif %}{% endif %}" class="btn btn-outline-secondary">Cancel</a>
+                        <button type="submit" class="btn btn-primary">Save Final Invoice</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    const tableBody = document.querySelector('#line-items-table tbody');
+    const addRowBtn = document.getElementById('add-row-btn');
+    const subtotalField = document.getElementById('items-subtotal');
+    const grandTotalField = document.getElementById('grand-total');
+    const currencyField = document.querySelector('input[name="currency"]');
+    const grandTotalCurrency = document.getElementById('grand-total-currency');
+    const totalInputs = document.querySelectorAll('.total-input');
+
+    function numberValue(input) {
+        const value = parseFloat(input.value);
+        return Number.isFinite(value) ? value : 0;
+    }
+
+    function updateRow(row) {
+        const qtyInput = row.querySelector('.row-qty');
+        const unitInput = row.querySelector('.row-unit-price');
+        const totalInput = row.querySelector('.row-total');
+        const lineTotal = numberValue(qtyInput) * numberValue(unitInput);
+        totalInput.value = lineTotal.toFixed(2);
+        return lineTotal;
+    }
+
+    function updateTotals() {
+        let subtotal = 0;
+        tableBody.querySelectorAll('tr').forEach((row) => {
+            subtotal += updateRow(row);
+        });
+        subtotalField.value = subtotal.toFixed(2);
+
+        let grandTotal = subtotal;
+        totalInputs.forEach((input) => {
+            grandTotal += numberValue(input);
+        });
+        grandTotalField.textContent = grandTotal.toFixed(2);
+        grandTotalCurrency.textContent = (currencyField.value || 'USD').trim() || 'USD';
+    }
+
+    function bindRow(row) {
+        row.querySelectorAll('.row-qty, .row-unit-price').forEach((input) => {
+            input.addEventListener('input', updateTotals);
+        });
+        row.querySelector('.remove-row-btn').addEventListener('click', () => {
+            if (tableBody.querySelectorAll('tr').length > 1) {
+                row.remove();
+                updateTotals();
+            }
+        });
+    }
+
+    addRowBtn.addEventListener('click', () => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td><input type="text" name="item_desc[]" class="form-control" required></td>
+            <td><input type="number" step="0.01" min="0" name="item_qty[]" class="form-control row-qty" value="1"></td>
+            <td><input type="number" step="0.01" min="0" name="item_unit_price[]" class="form-control row-unit-price" value="0"></td>
+            <td><input type="text" class="form-control row-total" readonly></td>
+            <td class="text-center"><button type="button" class="remove-row-btn">&times;</button></td>
+        `;
+        tableBody.appendChild(row);
+        bindRow(row);
+        updateTotals();
+    });
+
+    tableBody.querySelectorAll('tr').forEach(bindRow);
+    totalInputs.forEach((input) => input.addEventListener('input', updateTotals));
+    currencyField.addEventListener('input', updateTotals);
+    updateTotals();
+})();
+</script>
+{% endblock %}

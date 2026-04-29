@@ -1,0 +1,135 @@
+{% extends "logistics/base.html" %}
+{% load static %}
+
+{% block title %}GMI Terralink | Global Logistics Operations{% endblock %}
+
+{% block content %}
+<section class="container py-4 py-lg-5">
+    <div class="landing-hero landing-colorway-a">
+        <div class="row align-items-center g-4 position-relative" style="z-index: 1;">
+            <div class="col-lg-7">
+                <span class="section-kicker landing-kicker"><i class="bi bi-stars"></i> Freight operations, sourcing control, payment visibility</span>
+                <h1 class="hero-display">Move cargo and cashflow with one operating system.</h1>
+                <p class="hero-copy">GMI Terralink unifies logistics tracking, client operations, supplier sourcing, invoicing and payment management into one disciplined workspace designed for cross-border trade teams.</p>
+                <div class="hero-actions">
+                    <a href="{% url 'login' %}" class="btn btn-warning btn-lg"><i class="bi bi-box-arrow-in-right me-2"></i>Access The Platform</a>
+                    <a href="#platform-overview" class="btn btn-outline-light btn-lg">Explore Capabilities</a>
+                </div>
+                <div class="hero-metrics">
+                    <div class="hero-metric">
+                        <strong>{{ total_clients }}</strong>
+                        <span>client accounts tracked</span>
+                    </div>
+                    <div class="hero-metric">
+                        <strong>{{ total_loadings }}</strong>
+                        <span>cargo records managed</span>
+                    </div>
+                    <div class="hero-metric">
+                        <strong>{{ total_transactions }}</strong>
+                        <span>trade transactions handled</span>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-5 d-flex justify-content-lg-end">
+                <div class="hero-brand-mark landing-colorway-b">
+                    <img src="{% static 'images/gmi_logo.png' %}" alt="GMI Terralink mark" class="img-fluid mb-3">
+                    <div class="small text-uppercase fw-bold text-muted mb-2" style="letter-spacing: .18em;">Operational promise</div>
+                    <h3 class="mb-3">Fast visibility. Clean approvals. Professional client-facing output.</h3>
+                    <p class="mb-0 text-muted">From cargo intake to supplier payment reconciliation, every stage is presented in a clean, executive-ready interface designed to reduce friction and improve control.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="container pb-4 pb-lg-5">
+    <div class="landing-lane-wrap">
+        <div class="landing-lane-title">Operational lane</div>
+        <div class="landing-lane-grid">
+            <div class="landing-lane-chip lane-chip-invoice"><i class="bi bi-file-earmark-text"></i> Invoice</div>
+            <div class="landing-lane-arrow"><i class="bi bi-arrow-right"></i></div>
+            <div class="landing-lane-chip lane-chip-payment"><i class="bi bi-credit-card"></i> Payment</div>
+            <div class="landing-lane-arrow"><i class="bi bi-arrow-right"></i></div>
+            <div class="landing-lane-chip lane-chip-cargo"><i class="bi bi-box-seam"></i> Cargo</div>
+            <div class="landing-lane-arrow"><i class="bi bi-arrow-right"></i></div>
+            <div class="landing-lane-chip lane-chip-transit"><i class="bi bi-compass"></i> Transit</div>
+        </div>
+    </div>
+</section>
+
+<section class="container pb-4 pb-lg-5" id="platform-overview">
+    <div class="page-title-row">
+        <div>
+            <span class="section-kicker"><i class="bi bi-grid-3x3-gap"></i> Platform Overview</span>
+            <h2>Built for modern trade operations</h2>
+            <p class="page-subtitle">The interface is organized around the real workflow of freight, sourcing, invoicing and finance teams instead of generic admin screens.</p>
+        </div>
+        <a href="{% url 'login' %}" class="btn btn-primary"><i class="bi bi-shield-lock me-2"></i>Secure Sign In</a>
+    </div>
+    <div class="feature-grid">
+        <article class="feature-card">
+            <div class="feature-icon"><i class="bi bi-ship"></i></div>
+            <h3>Logistics command</h3>
+            <p class="text-muted mb-0">Track cargo registration, in-transit progress, container returns and freight payment verification from a single navigation system.</p>
+        </article>
+        <article class="feature-card">
+            <div class="feature-icon"><i class="bi bi-diagram-3"></i></div>
+            <h3>Trade workflow</h3>
+            <p class="text-muted mb-0">Manage inquiries, sourcing, client transactions, warehouse entries and supplier coordination without context switching.</p>
+        </article>
+        <article class="feature-card">
+            <div class="feature-icon"><i class="bi bi-receipt-cutoff"></i></div>
+            <h3>Executive-ready documents</h3>
+            <p class="text-muted mb-0">Generate polished proformas, final invoices, purchase orders and receipts within a branded system that matches the company identity.</p>
+        </article>
+    </div>
+</section>
+
+<section class="container pb-4 pb-lg-5">
+    <div class="metric-grid">
+        <article class="metric-card">
+            <div class="section-kicker mb-2"><i class="bi bi-people"></i> Clients</div>
+            <h3 class="mb-2">Relationship history in one place</h3>
+            <p class="text-muted mb-0">Structured records, searchable contact details and linked operations history keep the client context visible across teams.</p>
+        </article>
+        <article class="metric-card">
+            <div class="section-kicker mb-2"><i class="bi bi-box-seam"></i> Cargo</div>
+            <h3 class="mb-2">Shipment oversight</h3>
+            <p class="text-muted mb-0">Clear registries for loadings, transit milestones and return obligations improve operational discipline and exception handling.</p>
+        </article>
+        <article class="metric-card">
+            <div class="section-kicker mb-2"><i class="bi bi-credit-card-2-front"></i> Finance</div>
+            <h3 class="mb-2">Payment accountability</h3>
+            <p class="text-muted mb-0">Receipts, verification states and balances stay visible to the right roles without mixing financial views into unrelated screens.</p>
+        </article>
+        <article class="metric-card">
+            <div class="section-kicker mb-2"><i class="bi bi-bar-chart"></i> Reporting</div>
+            <h3 class="mb-2">Director-level visibility</h3>
+            <p class="text-muted mb-0">Operational metrics and revenue insights are available in a dashboard that looks credible in front of internal stakeholders and clients.</p>
+        </article>
+    </div>
+</section>
+
+<section class="container pb-5">
+    <div class="surface-panel">
+        <div class="page-title-row mb-4">
+            <div>
+                <span class="section-kicker"><i class="bi bi-stack"></i> Core Modules</span>
+                <h2>One interface, multiple business layers</h2>
+            </div>
+        </div>
+        <div class="module-grid">
+            <article class="module-card">
+                <div class="module-icon"><i class="bi bi-truck"></i></div>
+                <h3>Logistics and Freight</h3>
+                <p class="text-muted mb-0">Clients, cargo, transits, container returns and freight payments stay tightly connected for better operational traceability.</p>
+            </article>
+            <article class="module-card">
+                <div class="module-icon"><i class="bi bi-globe-americas"></i></div>
+                <h3>Sourcing and Trade</h3>
+                <p class="text-muted mb-0">Transactions, supplier products, warehouse records, trade payments and document generation all follow the same branded UX language.</p>
+            </article>
+        </div>
+    </div>
+</section>
+{% endblock %}

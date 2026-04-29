@@ -1,9 +1,9 @@
-@echo off
+﻿@echo off
 REM Build script for creating Windows executable
 
 echo.
 echo ================================================
-echo Building Roshe Group Logistics Portal Windows Executable
+echo Building GMI TERRALINK Logistics Portal Windows Executable
 echo ================================================
 echo.
 
@@ -22,7 +22,7 @@ python manage.py collectstatic --noinput
 REM Build executable
 echo.
 echo Building executable... This may take a few minutes...
-pyinstaller roshe_logistics.spec
+pyinstaller gmi_terralink.spec
 
 echo.
 echo ================================================

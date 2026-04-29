@@ -1,0 +1,33 @@
+{% extends "logistics/base.html" %}
+{% block title %}Reverse / Refund Receipt {{ receipt.receipt_number }} — GMI TERRALINK{% endblock %}
+{% block content %}
+<div class="container" style="max-width:600px;">
+    <h2 class="mb-4 text-danger"><i class="bi bi-x-circle"></i> Reverse / Refund Receipt</h2>
+
+    <div class="card border-danger mb-4">
+        <div class="card-header bg-danger text-white">Authorisation Warning</div>
+        <div class="card-body">
+            <p>You are about to reverse receipt <strong>{{ receipt.receipt_number }}</strong>
+               issued to <strong>{{ receipt.issued_to }}</strong> for
+               <strong>{{ receipt.currency }} {{ receipt.amount|floatformat:2 }}</strong>.</p>
+            <p class="text-danger"><strong>This action is restricted to the Director or an authorised officer.
+               The receipt record will remain in the system marked as reversed/refunded.</strong></p>
+        </div>
+    </div>
+
+    <form method="post">
+        {% csrf_token %}
+        <div class="mb-3">
+            <label class="form-label fw-bold">Reason for Reversal / Refund <span class="text-danger">*</span></label>
+            <textarea name="reversal_notes" class="form-control" rows="3"
+                      placeholder="State the reason for reversing or refunding this receipt…" required></textarea>
+        </div>
+        <div class="d-flex gap-2">
+            <button type="submit" class="btn btn-danger">
+                <i class="bi bi-check-lg"></i> Confirm Reversal / Refund
+            </button>
+            <a href="{% url 'receipt_detail' receipt.pk %}" class="btn btn-outline-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

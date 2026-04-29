@@ -1,6 +1,6 @@
 {% extends "logistics/base.html" %}
 
-{% block title %}{% if title %}{{ title }}{% else %}Payment{% endif %} - Roshe Group Logistics Portal{% endblock %}
+{% block title %}{% if title %}{{ title }}{% else %}Payment{% endif %} - GMI TERRALINK Logistics Portal{% endblock %}
 
 {% block content %}
 <div class="container mt-4">
@@ -11,13 +11,50 @@
                     <h3><i class="bi bi-cash-coin"></i> {{ title }}</h3>
                 </div>
                 <div class="card-body">
+                    {% if not can_create_payment %}
+                    <div class="alert alert-warning" role="alert">
+                        <strong>Payment creation is blocked.</strong> Create a final invoice and ensure cargo exists for the same client before recording a payment.
+                    </div>
+                    {% endif %}
                     <form method="post">
                         {% csrf_token %}
+
+                        <div class="mb-3">
+                            <label for="{{ form.final_invoice.id_for_label }}" class="form-label">Invoice *</label>
+                            {{ form.final_invoice }}
+                            {% if form.final_invoice.errors %}<div class="text-danger">{{ form.final_invoice.errors }}</div>{% endif %}
+                        </div>
                         
                         <div class="mb-3">
                             <label for="{{ form.loading.id_for_label }}" class="form-label">Loading *</label>
                             {{ form.loading }}
                             {% if form.loading.errors %}<div class="text-danger">{{ form.loading.errors }}</div>{% endif %}
+                        </div>
+
+                        <div class="card bg-light border-0 mb-3" id="groupage-billing-card">
+                            <div class="card-body">
+                                <h6 class="mb-3"><i class="bi bi-rulers me-2"></i>Groupage Billing Basis</h6>
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="mb-3">
+                                            <label for="{{ form.billing_basis.id_for_label }}" class="form-label">Charge By</label>
+                                            {{ form.billing_basis }}
+                                            {% if form.billing_basis.errors %}<div class="text-danger">{{ form.billing_basis.errors }}</div>{% endif %}
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="mb-3">
+                                            <label for="{{ form.billing_rate.id_for_label }}" class="form-label">Rate</label>
+                                            {{ form.billing_rate }}
+                                            {% if form.billing_rate.errors %}<div class="text-danger">{{ form.billing_rate.errors }}</div>{% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="small text-muted" id="groupage-billing-help">
+                                    Select Weight (KG) or CBM to calculate freight from the recorded loading measurements.
+                                </div>
+                                <div class="small mt-2" id="groupage-billing-preview"></div>
+                            </div>
                         </div>
 
                         <div class="row">
@@ -26,6 +63,7 @@
                                     <label for="{{ form.amount_charged.id_for_label }}" class="form-label">Amount Charged *</label>
                                     {{ form.amount_charged }}
                                     {% if form.amount_charged.errors %}<div class="text-danger">{{ form.amount_charged.errors }}</div>{% endif %}
+                                    {% if form.amount_charged.help_text %}<small class="text-muted">{{ form.amount_charged.help_text }}</small>{% endif %}
                                 </div>
                             </div>
                             <div class="col-md-6">
@@ -68,7 +106,7 @@
                             <a href="{% url 'payment_list' %}" class="btn btn-secondary">
                                 <i class="bi bi-x-circle"></i> Cancel
                             </a>
-                            <button type="submit" class="btn btn-primary">
+                            <button type="submit" class="btn btn-primary" {% if not can_create_payment %}disabled{% endif %}>
                                 <i class="bi bi-check-circle"></i> Save Payment
                             </button>
                             {% if payment %}
@@ -83,4 +121,127 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    const loadingField = document.getElementById("id_loading");
+    const invoiceField = document.getElementById("id_final_invoice");
+    const billingBasisField = document.getElementById("id_billing_basis");
+    const billingRateField = document.getElementById("id_billing_rate");
+    const amountChargedField = document.getElementById("id_amount_charged");
+    const groupageCard = document.getElementById("groupage-billing-card");
+    const billingPreview = document.getElementById("groupage-billing-preview");
+    const loadingMeta = {{ loading_meta_json|safe }};
+    const invoiceMeta = {{ invoice_meta_json|safe }};
+
+    function getSelectedLoadingMeta() {
+        if (!loadingField) {
+            return null;
+        }
+        return loadingMeta[String(loadingField.value)] || null;
+    }
+
+    function formatAmount(value) {
+        const numeric = Number(value);
+        if (Number.isNaN(numeric)) {
+            return "";
+        }
+        return numeric.toFixed(2);
+    }
+
+    function updateBillingUI() {
+        const meta = getSelectedLoadingMeta();
+        const isGroupage = meta && meta.entry_type === "GROUPAGE";
+        const basis = billingBasisField ? billingBasisField.value : "manual";
+        const rate = billingRateField ? Number(billingRateField.value || 0) : 0;
+
+        if (groupageCard) {
+            groupageCard.style.display = isGroupage ? "block" : "none";
+        }
+
+        if (!isGroupage) {
+            if (billingBasisField) {
+                billingBasisField.value = "manual";
+            }
+            if (billingRateField) {
+                billingRateField.value = "";
+            }
+            if (billingPreview) {
+                billingPreview.textContent = "";
+            }
+            if (amountChargedField) {
+                amountChargedField.readOnly = false;
+            }
+            return;
+        }
+
+        const quantity = basis === "kg" ? Number(meta.weight || 0) : Number(meta.cbm || 0);
+        const unitLabel = basis === "kg" ? "KG" : basis === "cbm" ? "CBM" : "manual amount";
+        const useAutoCalculation = basis === "kg" || basis === "cbm";
+
+        if (amountChargedField) {
+            amountChargedField.readOnly = useAutoCalculation;
+        }
+
+        if (useAutoCalculation) {
+            const total = quantity * rate;
+            if (amountChargedField && !Number.isNaN(total)) {
+                amountChargedField.value = formatAmount(total);
+            }
+            if (billingPreview) {
+                billingPreview.innerHTML = "<strong>Preview:</strong> " + quantity + " " + unitLabel + " x rate = $" + formatAmount(total);
+            }
+        } else if (billingPreview) {
+            billingPreview.innerHTML = "<strong>Manual billing</strong> for this groupage loading. Recorded measurements remain available for reference.";
+        }
+    }
+
+    function syncInvoicesForLoading() {
+        if (!loadingField || !invoiceField) {
+            return;
+        }
+        const selectedLoading = loadingMeta[String(loadingField.value)] || null;
+        const selectedClientId = selectedLoading ? selectedLoading.client_id : null;
+        let hasVisibleInvoice = false;
+        let firstVisibleValue = "";
+
+        Array.from(invoiceField.options).forEach(function (option) {
+            if (!option.value) {
+                option.hidden = false;
+                return;
+            }
+            const meta = invoiceMeta[String(option.value)] || null;
+            const show = !!meta && meta.client_id === selectedClientId;
+            option.hidden = !show;
+            if (show) {
+                hasVisibleInvoice = true;
+                if (!firstVisibleValue) {
+                    firstVisibleValue = option.value;
+                }
+            }
+        });
+
+        const selectedOption = invoiceField.options[invoiceField.selectedIndex];
+        if (!selectedOption || selectedOption.hidden) {
+            invoiceField.value = hasVisibleInvoice ? firstVisibleValue : "";
+        }
+    }
+
+    [loadingField, billingBasisField, billingRateField].forEach(function (field) {
+        if (field) {
+            field.addEventListener("change", updateBillingUI);
+            field.addEventListener("input", updateBillingUI);
+        }
+    });
+    if (loadingField) {
+        loadingField.addEventListener("change", syncInvoicesForLoading);
+        loadingField.addEventListener("input", syncInvoicesForLoading);
+    }
+
+    syncInvoicesForLoading();
+    updateBillingUI();
+});
+</script>
 {% endblock %}

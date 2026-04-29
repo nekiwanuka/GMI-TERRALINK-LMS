@@ -1,0 +1,34 @@
+{% extends "logistics/base.html" %}
+
+{% block title %}{{ title }} - GMI TERRALINK Logistics Portal{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="card shadow-sm">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h4 class="mb-0">{{ title }}</h4>
+                    <span class="text-muted small">{{ transaction.transaction_id }} | {{ transaction.customer.name }}</span>
+                </div>
+                <div class="card-body">
+                    <form method="post">
+                        {% csrf_token %}
+                        <div class="row g-3">
+                            <div class="col-12"><label class="form-label">Warehouse Item</label>{{ form.inventory_item }}</div>
+                            <div class="col-md-4"><label class="form-label">Allocated Quantity</label>{{ form.quantity_allocated }}</div>
+                            <div class="col-md-4"><label class="form-label">Dispatched Quantity</label>{{ form.quantity_dispatched }}</div>
+                            <div class="col-md-4"><label class="form-label">Delivered Quantity</label>{{ form.quantity_delivered }}</div>
+                            <div class="col-12"><label class="form-label">Notes</label>{{ form.notes }}</div>
+                        </div>
+                        <div class="d-flex justify-content-end gap-2 mt-4">
+                            <a href="{% url 'transaction_detail' transaction.pk %}" class="btn btn-secondary">Back</a>
+                            <button class="btn btn-primary" type="submit">Save Allocation</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

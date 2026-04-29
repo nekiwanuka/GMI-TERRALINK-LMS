@@ -1,0 +1,73 @@
+{% extends "logistics/base.html" %}
+
+{% block title %}Transactions - GMI TERRALINK Logistics Portal{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1><i class="bi bi-diagram-3"></i> Transactions</h1>
+        <a href="{% url 'transaction_create' %}" class="btn btn-primary">
+            <i class="bi bi-plus-circle"></i> New Transaction
+        </a>
+    </div>
+
+    <div class="card mb-3">
+        <div class="card-body">
+            {% include "logistics/components/lane_switcher.html" %}
+            <form method="get" class="row g-2">
+                <div class="col-md-6">
+                    <input type="text" class="form-control" name="search" value="{{ search }}" placeholder="Search by entry number or client">
+                </div>
+                <div class="col-md-4">
+                    <select class="form-select" name="status">
+                        <option value="">All statuses</option>
+                        {% for value, label in status_choices %}
+                        <option value="{{ value }}" {% if status_filter == value %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2 d-grid">
+                    <button class="btn btn-primary" type="submit">Filter</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Entry Number</th>
+                        <th>Customer</th>
+                        <th>Status</th>
+                        <th>Est. Delivery</th>
+                        <th>Created</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for tx in transactions %}
+                    <tr>
+                        <td><strong>{{ tx.transaction_id }}</strong></td>
+                        <td>{{ tx.customer.name }}</td>
+                        <td><span class="badge {{ tx.list_status_class|default:'bg-dark' }}">{{ tx.list_status_display|default:tx.get_status_display }}</span></td>
+                        <td>{{ tx.estimated_delivery|date:"Y-m-d"|default:"-" }}</td>
+                        <td>{{ tx.created_at|date:"Y-m-d H:i" }}</td>
+                        <td>
+                            <a class="btn btn-sm btn-outline-primary" href="{% url 'transaction_detail' tx.id %}">View</a>
+                            <a class="btn btn-sm btn-warning" href="{% url 'transaction_update' tx.id %}">Edit</a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="6" class="text-center text-muted py-4">No transactions found</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% include "logistics/components/pagination.html" %}
+    </div>
+</div>
+{% endblock %}

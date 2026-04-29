@@ -1,0 +1,129 @@
+{% extends "logistics/base.html" %}
+
+{% block title %}Receipts — GMI TERRALINK{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1><i class="bi bi-receipt"></i> Receipts</h1>
+        <div class="d-flex gap-2">
+            <a href="{% url 'receipt_list' %}?source=all{% if payment_filter != 'all' %}&payment_filter={{ payment_filter }}{% endif %}{% if search %}&search={{ search|urlencode }}{% endif %}"
+               class="btn {% if source_filter == 'all' %}btn-secondary{% else %}btn-outline-secondary{% endif %}">
+                <i class="bi bi-collection"></i> All Sources
+            </a>
+            <a href="{% url 'receipt_list' %}?source=logistics{% if payment_filter != 'all' %}&payment_filter={{ payment_filter }}{% endif %}{% if search %}&search={{ search|urlencode }}{% endif %}"
+               class="btn {% if source_filter == 'logistics' %}btn-primary{% else %}btn-outline-primary{% endif %}">
+                <i class="bi bi-truck"></i> Logistics Freight
+            </a>
+            <a href="{% url 'receipt_list' %}?source=sourcing{% if payment_filter != 'all' %}&payment_filter={{ payment_filter }}{% endif %}{% if search %}&search={{ search|urlencode }}{% endif %}"
+               class="btn {% if source_filter == 'sourcing' %}btn-success{% else %}btn-outline-success{% endif %}">
+                <i class="bi bi-globe2"></i> Sourcing Trade
+            </a>
+            <a href="{% url 'receipt_list' %}?payment_filter=all{% if search %}&search={{ search|urlencode }}{% endif %}"
+               class="btn {% if payment_filter == 'all' %}btn-secondary{% else %}btn-outline-secondary{% endif %}">
+                <i class="bi bi-list"></i> All
+            </a>
+            <a href="{% url 'receipt_list' %}?payment_filter=full{% if search %}&search={{ search|urlencode }}{% endif %}"
+               class="btn {% if payment_filter == 'full' %}btn-dark{% else %}btn-outline-dark{% endif %}">
+                <i class="bi bi-cash-stack"></i> Full Payment
+            </a>
+            <a href="{% url 'receipt_list' %}?payment_filter=partial{% if search %}&search={{ search|urlencode }}{% endif %}"
+               class="btn {% if payment_filter == 'partial' %}btn-dark{% else %}btn-outline-dark{% endif %}">
+                <i class="bi bi-wallet2"></i> Partial Payment
+            </a>
+        </div>
+    </div>
+
+    <!-- Search -->
+    <div class="card mb-3">
+        <div class="card-body py-2">
+            <form method="get" class="row g-2 align-items-end">
+                <input type="hidden" name="source" value="{{ source_filter|default:'all' }}">
+                <input type="hidden" name="payment_filter" value="{{ payment_filter|default:'all' }}">
+                <div class="col-md-4">
+                    <input type="text" name="search" value="{{ search }}"
+                           class="form-control" placeholder="Search receipt number or client…">
+                </div>
+                <div class="col-auto">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-search"></i> Search
+                    </button>
+                    {% if search or payment_filter != 'all' %}
+                    <a href="{% url 'receipt_list' %}" class="btn btn-outline-secondary ms-1">Clear</a>
+                    {% endif %}
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>Receipt #</th>
+                            <th>Issued To</th>
+                            <th>Amount</th>
+                            <th>Balance</th>
+                            <th>Currency</th>
+                            <th>Type</th>
+                            <th>Date</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for receipt in receipts %}
+                        <tr>
+                            <td><strong>{{ receipt.receipt_number }}</strong></td>
+                            <td>{{ receipt.issued_to }}</td>
+                            <td>{{ receipt.amount|floatformat:2 }}</td>
+                            <td>
+                                {% if receipt.sourcing_payment and not receipt.sourcing_payment.is_full_payment %}
+                                    {{ receipt.sourcing_payment.balance_after|floatformat:2 }}
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                            <td>{{ receipt.currency }}</td>
+                            <td>
+                                {% if receipt.logistics_payment %}
+                                    <span class="badge bg-info">Logistics</span>
+                                {% else %}
+                                    <span class="badge bg-success">Sourcing</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ receipt.issued_at|date:"d M Y H:i" }}</td>
+                            <td>
+                                {% if receipt.is_reversed %}
+                                    <span class="badge bg-danger">Reversed</span>
+                                {% else %}
+                                    <span class="badge bg-success">Valid</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <a href="{% url 'receipt_detail' receipt.pk %}"
+                                   class="btn btn-sm btn-outline-primary">
+                                    <i class="bi bi-eye"></i>
+                                </a>
+                                <a href="{% url 'receipt_pdf' receipt.pk %}"
+                                   class="btn btn-sm btn-outline-secondary">
+                                    <i class="bi bi-file-pdf"></i>
+                                </a>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="9" class="text-center text-muted py-4">No receipts found.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    {% include "logistics/components/pagination.html" %}
+</div>
+{% endblock %}

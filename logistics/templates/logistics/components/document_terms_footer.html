@@ -1,0 +1,68 @@
+<style>
+.gmi-doc-foot {
+    border-top: 1px solid #e9ecef;
+    margin-top: 16px;
+    padding-top: 8px;
+    font-size: 0.71rem;
+    color: #6c757d;
+    line-height: 1.4;
+}
+.gmi-doc-foot .terms div { margin-bottom: 2px; }
+.gmi-doc-foot .gmi-services-ribbon {
+    margin-top: 6px;
+    padding: 5px 10px;
+    background: #fbf7e4;
+    border: 1px solid #ece7cd;
+    border-radius: 6px;
+    font-size: 0.7rem;
+    color: #4a4a4a;
+    text-align: center;
+}
+.gmi-doc-foot .gmi-services-ribbon strong { color: #b89028; letter-spacing: .04em; }
+.gmi-doc-foot .gmi-doc-validation {
+    margin-top: 6px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    padding-top: 4px;
+    border-top: 1px dashed #d9d4c2;
+    font-size: 0.62rem;
+    letter-spacing: .04em;
+    color: #8a8a8a;
+    text-transform: uppercase;
+}
+.gmi-doc-foot .gmi-doc-validation .code {
+    font-family: 'Space Grotesk', 'Courier New', monospace;
+    font-size: 0.66rem;
+    letter-spacing: .12em;
+    color: #4f4a52;
+    font-weight: 700;
+    background: #f5f1e1;
+    border: 1px solid #e6d9a8;
+    border-radius: 4px;
+    padding: 2px 7px;
+}
+@media print {
+    .gmi-doc-foot .gmi-services-ribbon,
+    .gmi-doc-foot .gmi-doc-validation .code {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+}
+</style>
+<div class="gmi-doc-foot">
+    <div class="terms">
+        <div><strong>International Terms &amp; Conditions:</strong> Prices are quoted Ex-Works unless otherwise agreed in writing. Bank charges, customs duties, taxes, demurrage, and destination fees are for the buyer account unless expressly included.</div>
+        <div>Delivery timelines are estimates and may vary due to carrier schedules, port operations, customs controls, force majeure, or regulatory actions. Claims for shortages or damage must be submitted in writing within 3 business days of delivery.</div>
+        <div>Disputes are resolved amicably first, failing which arbitration applies under mutually agreed commercial rules. Email confirmations and signed copies form part of the binding commercial record.</div>
+    </div>
+    <div class="gmi-services-ribbon">
+        <strong>Service Portfolio:</strong>
+        Procurement &middot; Sea &amp; Air Freight Logistics &middot; Mining &amp; Equipment Solutions &middot; Translation Services &middot; Money Transfer
+    </div>
+    <div class="gmi-doc-validation">
+        <span>This is a system-generated document &middot; valid without manual signature when accompanied by an authorised signatory mark.</span>
+        <span class="code">GMI-{{ request.path|slugify|upper|slice:"-10:"|default:"DOC" }}-{% now "ymd" %}</span>
+    </div>
+</div>

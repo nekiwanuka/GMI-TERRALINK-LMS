@@ -5,8 +5,15 @@
 <div class="container-fluid">
     <div class="d-flex justify-content-between align-items-center mb-3">
         <div>
-            <h2 class="mb-0">Payment #{% if payment.invoice_number %}{{ payment.invoice_number }}{% else %}Draft{% endif %}</h2>
-            <small class="text-muted">Loading ID: {{ payment.loading.loading_id }} &middot; Client: {{ payment.loading.client.name }}</small>
+            <h2 class="mb-0">
+                Payment #{% if payment.invoice_number %}{{ payment.invoice_number }}{% else %}Draft{% endif %}
+                <span class="badge bg-info align-middle ms-2" style="font-size:0.55em;"><i class="bi bi-truck"></i> Logistics</span>
+            </h2>
+            <small class="text-muted">
+                Invoice: {% if payment.final_invoice %}FI-{{ payment.final_invoice.id }}{% else %}-{% endif %}
+                &middot; Loading ID: {{ payment.loading.loading_id }}
+                &middot; Client: {{ payment.loading.client.name }}
+            </small>
         </div>
         <div class="btn-group">
             <a href="{% url 'payment_invoice' payment.pk %}" class="btn btn-outline-primary" target="_blank">
@@ -34,6 +41,12 @@
                         <dd class="col-6 text-end {% if payment.balance > 0 %}text-danger{% else %}text-success{% endif %} fw-bold">${{ payment.balance|floatformat:2|intcomma }}</dd>
                         <dt class="col-6">Payment Method</dt>
                         <dd class="col-6 text-end">{{ payment.get_payment_method_display|default:'—' }}</dd>
+                        <dt class="col-6">Attached Invoice</dt>
+                        <dd class="col-6 text-end">{% if payment.final_invoice %}FI-{{ payment.final_invoice.id }}{% else %}—{% endif %}</dd>
+                        <dt class="col-6">Billing Basis</dt>
+                        <dd class="col-6 text-end">{{ payment.get_billing_basis_display }}</dd>
+                        <dt class="col-6">Billing Rate</dt>
+                        <dd class="col-6 text-end">{% if payment.billing_basis != 'manual' and payment.billing_rate %}${{ payment.billing_rate|floatformat:2|intcomma }}{% else %}—{% endif %}</dd>
                         <dt class="col-6">Last Updated</dt>
                         <dd class="col-6 text-end">{{ payment.updated_at|date:"M d, Y H:i" }}</dd>
                     </dl>
@@ -59,6 +72,8 @@
                     <p class="mb-1">Route: {{ payment.loading.origin }} → {{ payment.loading.destination }}</p>
                     <p class="mb-1">Container #: {{ payment.loading.container_number }}</p>
                     <p class="mb-1">Weight: {{ payment.loading.weight }} KG</p>
+                    <p class="mb-1">CBM: {{ payment.loading.cbm|default:'—' }}</p>
+                    <p class="mb-1">Packages: {{ payment.loading.packages|default:'—' }}</p>
                     <p class="mb-1">Loading Date: {{ payment.loading.loading_date|date:"M d, Y" }}</p>
                     <p class="mb-0">Created By: {{ payment.created_by.username }}</p>
                 </div>
@@ -154,33 +169,18 @@
             <div class="card shadow-sm">
                 <div class="card-body">
                     <h5 class="card-title">Record Payment</h5>
-                    <form method="post" class="row g-3">
-                        {% csrf_token %}
-                        <input type="hidden" name="action" value="create_transaction">
-                        <div class="col-12">
-                            <label class="form-label">Amount</label>
-                            {{ transaction_form.amount }}
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label">Payment Date</label>
-                            {{ transaction_form.payment_date }}
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label">Method</label>
-                            {{ transaction_form.payment_method }}
-                        </div>
-                        <div class="col-12">
-                            <label class="form-label">Reference</label>
-                            {{ transaction_form.reference }}
-                        </div>
-                        <div class="col-12">
-                            <label class="form-label">Notes</label>
-                            {{ transaction_form.notes }}
-                        </div>
-                        <div class="col-12 text-end">
-                            <button type="submit" class="btn btn-primary">Save Payment</button>
-                        </div>
-                    </form>
+                    <div class="alert alert-info mb-3">
+                        Direct payment entry here is disabled. Record freight payments from the linked final invoice so receipts are generated in the same flow.
+                    </div>
+                    {% if payment.final_invoice %}
+                    <a href="{% if payment.final_invoice.loading %}{% url 'logistics_final_invoice_detail' payment.final_invoice.pk %}{% else %}{% url 'sourcing_final_invoice_detail' payment.final_invoice.pk %}{% endif %}" class="btn btn-primary w-100">
+                        <i class="bi bi-receipt-cutoff"></i> Open Linked Invoice
+                    </a>
+                    {% else %}
+                    <a href="{% url 'logistics_final_invoice_list' %}" class="btn btn-primary w-100">
+                        <i class="bi bi-list-ul"></i> Open Cargo Invoices
+                    </a>
+                    {% endif %}
                 </div>
             </div>
         </div>

@@ -1,0 +1,661 @@
+{% extends "logistics/base.html" %}
+
+{% block title %}Sourcing - {{ title }} | GMI TERRALINK{% endblock %}
+
+{% block content %}
+<style>
+@page {
+    size: A4 portrait;
+    margin: 10mm;
+}
+
+@media print {
+    html,
+    body {
+        margin: 0 !important;
+        padding: 0 !important;
+        background: #fff !important;
+        overflow: visible !important;
+    }
+
+    body * {
+        visibility: hidden !important;
+    }
+
+    .sourcing-sheet-print,
+    .sourcing-sheet-print * {
+        visibility: visible !important;
+    }
+
+    .sourcing-sheet-print {
+        display: block !important;
+        position: absolute !important;
+        left: 0 !important;
+        top: 0 !important;
+        width: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    .no-print,
+    .navbar,
+    .footer,
+    .topbar,
+    .sidebar,
+    .breadcrumb,
+    .messages,
+    .pi-print-root,
+    .row > [class*='col-'] {
+        display: none !important;
+    }
+
+    .app-shell,
+    .app-layout,
+    #main-content,
+    .main-content-wrap,
+    .content-surface,
+    .container-fluid,
+    .row {
+        margin: 0 !important;
+        padding: 0 !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        background: #fff !important;
+        box-shadow: none !important;
+        border: 0 !important;
+    }
+
+    .pi-document {
+        box-shadow: none !important;
+        border: 1px solid #d6d6d6 !important;
+        border-radius: 0 !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        page-break-inside: auto !important;
+        break-inside: auto !important;
+    }
+
+    .pi-document pre {
+        max-height: none !important;
+        overflow: visible !important;
+        white-space: pre-wrap !important;
+    }
+
+    .pi-doc-header,
+    .pi-doc-body,
+    .pi-items-table,
+    .pi-items-table tr,
+    .pi-section-block {
+        break-inside: avoid-page;
+        page-break-inside: avoid;
+    }
+
+    .pi-items-table thead {
+        display: table-header-group;
+    }
+}
+.pi-document {
+    background: #fff;
+    border: 1px solid #dee2e6;
+    border-radius: 10px;
+}
+.pi-doc-header {
+    background: #67616b;
+    color: #fff;
+    padding: 18px 24px 12px;
+    border-radius: 9px 9px 0 0;
+}
+.pi-doc-header .ref-badge {
+    background: #d4af37;
+    color: #4f4a52;
+    font-weight: 700;
+    font-size: 0.82rem;
+    padding: 3px 10px;
+    border-radius: 999px;
+}
+.pi-doc-body { padding: 20px 24px; }
+.pi-section-title {
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: #6c757d;
+    border-bottom: 1px solid #e9ecef;
+    padding-bottom: 4px;
+    margin-bottom: 8px;
+}
+.pi-items-table td,
+.pi-items-table th {
+    font-size: 0.83rem;
+    padding: 5px 8px;
+}
+.sourcing-print-table td,
+.sourcing-print-table th {
+    font-size: 0.78rem;
+    padding: 6px 8px;
+    vertical-align: top;
+}
+.sourcing-table th {
+    font-size: 0.74rem;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    white-space: nowrap;
+}
+.sourcing-line-card {
+    border: 1px solid #e8e3cf;
+    border-radius: 14px;
+    background: linear-gradient(180deg, #fffdf6 0%, #ffffff 100%);
+    padding: 16px;
+}
+.sourcing-line-card + .sourcing-line-card {
+    margin-top: 12px;
+}
+.sourcing-line-meta {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+    margin-top: 10px;
+}
+.sourcing-line-meta .meta-chip {
+    background: #f8f9fa;
+    border: 1px solid #eceff3;
+    border-radius: 10px;
+    padding: 8px 10px;
+}
+.sourcing-line-meta .meta-chip span {
+    display: block;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    color: #6c757d;
+    margin-bottom: 2px;
+}
+.sourcing-items-helper {
+    font-size: 0.82rem;
+    color: #6c757d;
+}
+.sourcing-sheet-print {
+    display: none;
+    background: #fff;
+}
+.worksheet-shell {
+    border: 1px solid #dee2e6;
+    border-radius: 12px;
+    background: #fff;
+}
+.worksheet-header {
+    border-bottom: 1px solid #ece6cf;
+    padding-bottom: 12px;
+    margin-bottom: 18px;
+}
+.worksheet-table th {
+    font-size: 0.74rem;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    white-space: nowrap;
+    background: #eef1f4;
+    border: 1px solid #c9d1d9;
+}
+.worksheet-table td,
+.worksheet-table th {
+    font-size: 0.83rem;
+    vertical-align: middle;
+    border: 1px solid #c9d1d9;
+}
+.worksheet-table .readonly-cell {
+    background: #f8fafc;
+}
+.worksheet-table .capture-input {
+    min-width: 140px;
+}
+.worksheet-table .capture-input input {
+    border-radius: 2px;
+    border-color: #aeb8c2;
+    font-size: 0.8rem;
+}
+.worksheet-table .capture-input select {
+    border-radius: 2px;
+    border-color: #aeb8c2;
+    font-size: 0.8rem;
+}
+.worksheet-table .quote-cheapest {
+    background: #eaf8ec;
+}
+.worksheet-table .quote-preferred {
+    background: #fff3cd;
+}
+.print-value-line {
+    min-height: 20px;
+    border-bottom: 1px dashed #8f8f8f;
+}
+@media (max-width: 991.98px) {
+    .sourcing-line-meta {
+        grid-template-columns: 1fr;
+    }
+}
+</style>
+
+<div class="container-fluid mt-3 no-print">
+    <nav aria-label="breadcrumb" class="mb-2">
+        <ol class="breadcrumb mb-0" style="font-size:0.82rem;">
+            <li class="breadcrumb-item"><a href="{% url 'dashboard' %}">Dashboard</a></li>
+            <li class="breadcrumb-item"><a href="{% url 'sourcing_list' %}">Sourcing</a></li>
+            <li class="breadcrumb-item active">{{ title }}</li>
+        </ol>
+    </nav>
+</div>
+
+<div class="container-fluid px-3">
+    <div class="sourcing-sheet-print">
+        <div class="pi-document">
+            <div class="pi-doc-header">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <div style="font-size:1.15rem;font-weight:700;letter-spacing:.04em;">GMI TERRALINK</div>
+                        <div style="font-size:0.75rem;opacity:.75;">Supplier quotation collection worksheet</div>
+                    </div>
+                    <div class="text-end">
+                        <div style="font-size:0.72rem;opacity:.7;">SOURCING WORKSHEET</div>
+                        {% if transaction %}
+                        <span class="ref-badge">{{ transaction.transaction_id }}</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            <div class="pi-doc-body">
+                <div class="row g-3 mb-3">
+                    <div class="col-6">
+                        <div class="pi-section-title">Transaction</div>
+                        <div>{{ transaction.transaction_id|default:"-" }}</div>
+                    </div>
+                    <div class="col-6">
+                        <div class="pi-section-title">Client</div>
+                        <div>{{ transaction.customer.name|default:"-" }}</div>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <div class="pi-section-title">Supplier Price Collection Sheet</div>
+                    <table class="table table-bordered worksheet-table mb-0">
+                        <thead>
+                            <tr>
+                                <th style="width:4%;">#</th>
+                                <th style="width:16%;">Item</th>
+                                <th style="width:6%;">Qty</th>
+                                <th style="width:6%;">Unit</th>
+                                <th style="width:9%;">Quote A Supplier</th>
+                                <th style="width:9%;">A Contact</th>
+                                <th style="width:7%;">A Cost</th>
+                                <th style="width:9%;">Quote B Supplier</th>
+                                <th style="width:9%;">B Contact</th>
+                                <th style="width:7%;">B Cost</th>
+                                <th style="width:9%;">Quote C Supplier</th>
+                                <th style="width:9%;">C Contact</th>
+                                <th style="width:7%;">C Cost</th>
+                                <th style="width:7%;">Preferred</th>
+                                <th style="width:10%;">Notes</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in form.item_rows %}
+                            <tr>
+                                <td>{{ forloop.counter }}</td>
+                                <td>{{ item.name }}</td>
+                                <td>{{ item.quantity|default:"1" }}</td>
+                                <td>{{ item.unit|default:"-" }}</td>
+                                <td><div class="print-value-line">{{ item.quote_1_supplier_name }}</div></td>
+                                <td><div class="print-value-line">{{ item.quote_1_supplier_contact }}</div></td>
+                                <td><div class="print-value-line">{{ item.quote_1_unit_price }}</div></td>
+                                <td><div class="print-value-line">{{ item.quote_2_supplier_name }}</div></td>
+                                <td><div class="print-value-line">{{ item.quote_2_supplier_contact }}</div></td>
+                                <td><div class="print-value-line">{{ item.quote_2_unit_price }}</div></td>
+                                <td><div class="print-value-line">{{ item.quote_3_supplier_name }}</div></td>
+                                <td><div class="print-value-line">{{ item.quote_3_supplier_contact }}</div></td>
+                                <td><div class="print-value-line">{{ item.quote_3_unit_price }}</div></td>
+                                <td>
+                                    {% if item.preferred_quote == '1' %}A{% elif item.preferred_quote == '2' %}B{% elif item.preferred_quote == '3' %}C{% endif %}
+                                </td>
+                                <td>{{ item.notes|default:"" }}</td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td>1</td>
+                                <td><div class="print-value-line"></div></td>
+                                <td><div class="print-value-line"></div></td>
+                                <td><div class="print-value-line"></div></td>
+                                <td><div class="print-value-line"></div></td>
+                                <td><div class="print-value-line"></div></td>
+                                <td><div class="print-value-line"></div></td>
+                                <td><div class="print-value-line"></div></td>
+                                <td><div class="print-value-line"></div></td>
+                                <td><div class="print-value-line"></div></td>
+                                <td><div class="print-value-line"></div></td>
+                                <td><div class="print-value-line"></div></td>
+                                <td><div class="print-value-line"></div></td>
+                                <td><div class="print-value-line"></div></td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <div class="row g-3 mt-2">
+                    <div class="col-6">
+                        <div class="pi-section-title">Notes / Terms / Conditions</div>
+                        <div style="min-height:64px;border:1px solid #dee2e6;border-radius:8px;padding:10px;white-space:pre-wrap;">{{ form.notes.value|default:"" }}</div>
+                    </div>
+                    <div class="col-6">
+                        <div class="pi-section-title">Collected By / Date</div>
+                        <div style="min-height:64px;border:1px solid #dee2e6;border-radius:8px;padding:10px;"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3">
+        <div class="col-lg-5 pi-print-root">
+            <div class="no-print d-flex justify-content-between align-items-center mb-2">
+                <span class="text-muted small">
+                    <i class="bi bi-file-earmark-text"></i>
+                    Client Purchase Inquiry
+                    {% if transaction %} — <strong>{{ transaction.transaction_id }}</strong>{% endif %}
+                </span>
+            </div>
+
+            <div class="pi-document">
+                <div class="pi-doc-header">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <div style="font-size:1.15rem;font-weight:700;letter-spacing:.04em;">GMI TERRALINK</div>
+                            <div style="font-size:0.75rem;opacity:.75;">Sourcing reference workspace</div>
+                        </div>
+                        <div class="text-end">
+                            <div style="font-size:0.72rem;opacity:.7;">PURCHASE INQUIRY REFERENCE</div>
+                            {% if transaction %}
+                            <span class="ref-badge">{{ transaction.transaction_id }}</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="pi-doc-body">
+                    {% if pi_document and pi_document.structured_data and pi_document.structured_data.items %}
+                    {% with sd=pi_document.structured_data %}
+                    {% if sd.subject %}
+                    <div class="mb-3 pi-section-block">
+                        <div class="pi-section-title">Subject</div>
+                        <div style="font-size:0.95rem;font-weight:600;">{{ sd.subject }}</div>
+                    </div>
+                    {% endif %}
+
+                    <div class="mb-3 pi-section-block">
+                        <div class="pi-section-title">Client Details</div>
+                        <table style="font-size:0.82rem;width:100%;">
+                            {% if sd.client_name %}<tr><td style="width:38%;color:#6c757d;padding:2px 0;">Client</td><td><strong>{{ sd.client_name }}</strong></td></tr>{% endif %}
+                            {% if sd.contact_person %}<tr><td style="color:#6c757d;padding:2px 0;">Contact</td><td>{{ sd.contact_person }}</td></tr>{% endif %}
+                            {% if sd.phone %}<tr><td style="color:#6c757d;padding:2px 0;">Phone</td><td>{{ sd.phone }}</td></tr>{% endif %}
+                            {% if sd.email %}<tr><td style="color:#6c757d;padding:2px 0;">Email</td><td>{{ sd.email }}</td></tr>{% endif %}
+                            {% if sd.address %}<tr><td style="color:#6c757d;padding:2px 0;">Address</td><td>{{ sd.address }}</td></tr>{% endif %}
+                            {% if sd.deadline %}<tr><td style="color:#6c757d;padding:2px 0;">Deadline</td><td><strong style="color:#dc3545;">{{ sd.deadline }}</strong></td></tr>{% endif %}
+                        </table>
+                    </div>
+
+                    <div class="mb-3 pi-section-block">
+                        <div class="pi-section-title">Requested Items ({{ sd.items|length }})</div>
+                        <table class="pi-items-table" style="width:100%;border-collapse:collapse;">
+                            <thead>
+                                <tr style="background:#f8f9fa;border-bottom:2px solid #dee2e6;">
+                                    <th style="width:36px;">#</th>
+                                    <th>Item Description</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in sd.items %}
+                                <tr style="border-top:1px solid #f0f0f0;">
+                                    <td style="color:#6c757d;">{{ forloop.counter }}</td>
+                                    <td>{{ item.name }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    {% if form.item_rows %}
+                    <div class="mb-3 pi-section-block">
+                        <div class="pi-section-title">Latest Sourcing Update</div>
+                        <table class="sourcing-print-table" style="width:100%;border-collapse:collapse;">
+                            <thead>
+                                <tr style="background:#f8f9fa;border-bottom:2px solid #dee2e6;">
+                                    <th style="width:30px;">#</th>
+                                    <th>Item</th>
+                                    <th style="width:12%;">Quote A</th>
+                                    <th style="width:12%;">Quote B</th>
+                                    <th style="width:12%;">Quote C</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in form.item_rows %}
+                                <tr style="border-top:1px solid #f0f0f0;">
+                                    <td style="color:#6c757d;">{{ forloop.counter }}</td>
+                                    <td>
+                                        <div style="font-weight:600;">{{ item.name }}</div>
+                                        <div class="text-muted" style="font-size:0.72rem;">
+                                            Qty: {{ item.quantity|default:"1" }}{% if item.unit %} {{ item.unit }}{% endif %}
+                                            {% if item.notes %} | {{ item.notes }}{% endif %}
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <div>{{ item.quote_1_supplier_name|default:"" }}</div>
+                                        <div class="text-muted">{{ item.quote_1_supplier_contact|default:"" }}</div>
+                                        <div>{% if item.quote_1_unit_price %}{{ item.quote_1_unit_price }}{% endif %}</div>
+                                    </td>
+                                    <td>
+                                        <div>{{ item.quote_2_supplier_name|default:"" }}</div>
+                                        <div class="text-muted">{{ item.quote_2_supplier_contact|default:"" }}</div>
+                                        <div>{% if item.quote_2_unit_price %}{{ item.quote_2_unit_price }}{% endif %}</div>
+                                    </td>
+                                    <td>
+                                        <div>{{ item.quote_3_supplier_name|default:"" }}</div>
+                                        <div class="text-muted">{{ item.quote_3_supplier_contact|default:"" }}</div>
+                                        <div>{% if item.quote_3_unit_price %}{{ item.quote_3_unit_price }}{% endif %}</div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% endif %}
+                    {% endwith %}
+                    {% elif pi_document and pi_document.extracted_text %}
+                    <div class="pi-section-title">Extracted Content</div>
+                    <pre style="font-size:0.76rem;white-space:pre-wrap;max-height:450px;overflow-y:auto;">{{ pi_document.extracted_text|truncatechars:2500 }}</pre>
+                    {% else %}
+                    <div class="text-muted text-center py-4">
+                        <i class="bi bi-file-earmark-x fs-2 d-block mb-2"></i>
+                        No PI document attached to this sourcing flow.
+                    </div>
+                    {% endif %}
+
+                    <div style="border-top:1px solid #e9ecef;margin-top:16px;padding-top:10px;font-size:0.72rem;color:#adb5bd;text-align:center;">
+                        GMI TERRALINK Logistics Portal{% if transaction %} | Ref: {{ transaction.transaction_id }}{% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-7 no-print">
+            <div class="card">
+                <div class="card-header bg-warning d-flex justify-content-between align-items-center">
+                    <strong><i class="bi bi-search"></i> Sourcing Findings Workspace</strong>
+                    <div class="d-flex gap-2 align-items-center flex-wrap">
+                        {% if record %}
+                        <a href="{% url 'sourcing_pdf' record.pk %}" class="btn btn-sm btn-dark">
+                            <i class="bi bi-file-earmark-pdf"></i> Export PDF
+                        </a>
+                        {% else %}
+                        <span class="btn btn-sm btn-outline-secondary disabled">Save first to export PDF</span>
+                        {% endif %}
+                        <button type="button" class="btn btn-sm btn-outline-dark" onclick="window.print()">
+                            <i class="bi bi-printer"></i> Print Sourcing Sheet
+                        </button>
+                        <span class="badge bg-dark" style="font-size:0.72rem;">Save here first, then open proforma when ready</span>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <form method="post">
+                        {% csrf_token %}
+
+                        {% if transaction %}
+                        <input type="hidden" name="transaction" value="{{ transaction.pk }}">
+                        <div class="alert alert-light border d-flex justify-content-between align-items-center mb-3">
+                            <div>
+                                <strong>Transaction:</strong> {{ transaction.transaction_id }}
+                                <div class="small text-muted">{{ transaction.customer.name }}</div>
+                            </div>
+                            {% if record %}
+                            <span class="badge bg-secondary">Editing existing sourcing record</span>
+                            {% else %}
+                            <span class="badge bg-primary">New sourcing record</span>
+                            {% endif %}
+                        </div>
+                        {% else %}
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Transaction</label>
+                            {{ form.transaction }}
+                            {% if form.transaction.errors %}<div class="text-danger small mt-1">{{ form.transaction.errors.0 }}</div>{% endif %}
+                        </div>
+                        {% endif %}
+
+                        <div class="mb-3 d-none">
+                            {{ form.supplier_name }}
+                            {{ form.supplier_contact }}
+                            {{ form.item_details }}
+                            {{ form.unit_prices }}
+                        </div>
+
+                        <div class="line-items-section mb-3">
+                            <div class="d-flex justify-content-between align-items-start mb-3 gap-2 flex-wrap">
+                                <div>
+                                    <div class="section-title">Sourcing Worksheet</div>
+                                    <div class="section-sub">Use the same structured row format as the proforma builder. Supplier, contact, and unit cost are optional so the sheet can be saved blank or printed for physical quotation collection.</div>
+                                </div>
+                            </div>
+
+                            {% if form.item_rows %}
+                            <div class="table-responsive">
+                                <table class="table table-bordered align-middle mb-0 worksheet-table">
+                                    <thead>
+                                        <tr>
+                                            <th style="width:4%;">#</th>
+                                            <th style="width:14%;">Item</th>
+                                            <th style="width:6%;">Qty</th>
+                                            <th style="width:6%;">Unit</th>
+                                            <th style="width:9%;">A Supplier</th>
+                                            <th style="width:9%;">A Contact</th>
+                                            <th style="width:7%;">A Unit Cost</th>
+                                            <th style="width:9%;">B Supplier</th>
+                                            <th style="width:9%;">B Contact</th>
+                                            <th style="width:7%;">B Unit Cost</th>
+                                            <th style="width:9%;">C Supplier</th>
+                                            <th style="width:9%;">C Contact</th>
+                                            <th style="width:7%;">C Unit Cost</th>
+                                            <th style="width:7%;">Preferred</th>
+                                            <th style="width:8%;">Notes</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for item in form.item_rows %}
+                                        <tr>
+                                            <input type="hidden" name="item_name[]" value="{{ item.name }}">
+                                            <input type="hidden" name="item_quantity[]" value="{{ item.quantity }}">
+                                            <input type="hidden" name="item_unit[]" value="{{ item.unit }}">
+                                            <input type="hidden" name="item_notes[]" value="{{ item.notes }}">
+                                            <td>{{ forloop.counter }}</td>
+                                            <td class="readonly-cell">
+                                                <div class="fw-semibold">{{ item.name }}</div>
+                                            </td>
+                                            <td class="readonly-cell">{{ item.quantity|default:"1" }}</td>
+                                            <td class="readonly-cell">{{ item.unit|default:"-" }}</td>
+                                            <td class="capture-input"><input type="text" name="item_quote_1_supplier_name[]" value="{{ item.quote_1_supplier_name }}" class="form-control" placeholder="Supplier A"></td>
+                                            <td class="capture-input"><input type="text" name="item_quote_1_supplier_contact[]" value="{{ item.quote_1_supplier_contact }}" class="form-control" placeholder="Contact A"></td>
+                                            <td class="capture-input {% if item.cheapest_quote == '1' %}quote-cheapest{% endif %} {% if item.preferred_quote == '1' %}quote-preferred{% endif %}"><input type="number" step="0.01" min="0" name="item_quote_1_unit_price[]" value="{{ item.quote_1_unit_price }}" class="form-control" placeholder="0.00"></td>
+                                            <td class="capture-input"><input type="text" name="item_quote_2_supplier_name[]" value="{{ item.quote_2_supplier_name }}" class="form-control" placeholder="Supplier B"></td>
+                                            <td class="capture-input"><input type="text" name="item_quote_2_supplier_contact[]" value="{{ item.quote_2_supplier_contact }}" class="form-control" placeholder="Contact B"></td>
+                                            <td class="capture-input {% if item.cheapest_quote == '2' %}quote-cheapest{% endif %} {% if item.preferred_quote == '2' %}quote-preferred{% endif %}"><input type="number" step="0.01" min="0" name="item_quote_2_unit_price[]" value="{{ item.quote_2_unit_price }}" class="form-control" placeholder="0.00"></td>
+                                            <td class="capture-input"><input type="text" name="item_quote_3_supplier_name[]" value="{{ item.quote_3_supplier_name }}" class="form-control" placeholder="Supplier C"></td>
+                                            <td class="capture-input"><input type="text" name="item_quote_3_supplier_contact[]" value="{{ item.quote_3_supplier_contact }}" class="form-control" placeholder="Contact C"></td>
+                                            <td class="capture-input {% if item.cheapest_quote == '3' %}quote-cheapest{% endif %} {% if item.preferred_quote == '3' %}quote-preferred{% endif %}"><input type="number" step="0.01" min="0" name="item_quote_3_unit_price[]" value="{{ item.quote_3_unit_price }}" class="form-control" placeholder="0.00"></td>
+                                            <td class="capture-input">
+                                                <select name="item_preferred_quote[]" class="form-select form-select-sm">
+                                                    <option value="">Auto</option>
+                                                    <option value="1" {% if item.preferred_quote == '1' %}selected{% endif %}>A</option>
+                                                    <option value="2" {% if item.preferred_quote == '2' %}selected{% endif %}>B</option>
+                                                    <option value="3" {% if item.preferred_quote == '3' %}selected{% endif %}>C</option>
+                                                </select>
+                                            </td>
+                                            <td class="readonly-cell">{{ item.notes|default:"-" }}</td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                            {% else %}
+                                <div class="alert alert-light border text-muted mb-0">
+                                    No PI items were captured for this sourcing record.
+                                </div>
+                            {% endif %}
+
+                            <div class="sourcing-items-helper mt-2">
+                                <i class="bi bi-info-circle"></i>
+                                Green cost cells indicate the cheapest quote captured so far. Yellow indicates the preferred quote that will feed the proforma conversion for that item.
+                            </div>
+                            {% if form.supplier_name.errors %}<div class="text-danger small mt-2">{{ form.supplier_name.errors.0 }}</div>{% endif %}
+                            {% if form.item_details.errors %}<div class="text-danger small mt-2">{{ form.item_details.errors.0 }}</div>{% endif %}
+                            {% if form.unit_prices.errors %}<div class="text-danger small mt-1">{{ form.unit_prices.errors.0 }}</div>{% endif %}
+                        </div>
+
+                        <div class="row g-3 mb-3">
+                            <div class="col-md-5">
+                                <label class="form-label fw-semibold">Proforma Validity Date</label>
+                                {{ form.validity_date }}
+                                {% if form.validity_date.errors %}<div class="text-danger small mt-1">{{ form.validity_date.errors.0 }}</div>{% endif %}
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Notes / Terms / Conditions</label>
+                            {{ form.notes }}
+                            {% if form.notes.errors %}<div class="text-danger small mt-1">{{ form.notes.errors.0 }}</div>{% endif %}
+                        </div>
+
+                        {% if form.non_field_errors %}
+                        <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+                        {% endif %}
+
+                        <div class="d-flex justify-content-between align-items-center pt-2 border-top gap-2 flex-wrap">
+                            <a href="{% url 'sourcing_list' %}" class="btn btn-outline-secondary">
+                                <i class="bi bi-x"></i> Cancel
+                            </a>
+                            <div class="d-flex gap-2 flex-wrap">
+                                <button type="submit" name="submit_action" value="save" class="btn btn-outline-dark">
+                                    <i class="bi bi-floppy"></i> Save Sourcing Record
+                                </button>
+                                <button type="submit" name="submit_action" value="open_proforma" class="btn btn-success">
+                                    <i class="bi bi-arrow-right-circle"></i> Save &amp; Open Proforma
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <div class="alert alert-info mt-3 small">
+                <i class="bi bi-info-circle"></i>
+                Edit sourcing findings as many times as needed. You can print this sheet before entering prices, save it blank for later, or use <strong>Save &amp; Open Proforma</strong> when pricing is ready.
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{% endblock %}

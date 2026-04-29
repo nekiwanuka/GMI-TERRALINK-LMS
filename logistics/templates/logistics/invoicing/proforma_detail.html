@@ -1,0 +1,667 @@
+{% extends "logistics/base.html" %}
+{% load humanize static %}
+
+{% block title %}{% if proforma.loading %}Cargo Proforma{% else %}Sourcing Proforma{% endif %} PI-{{ proforma.pk }} | GMI TERRALINK{% endblock %}
+
+{% block content %}
+{% include "logistics/components/document_print_styles.html" %}
+<style>
+@page {
+    size: A4 portrait;
+    margin: 10mm;
+}
+@media print {
+    html, body {
+        margin: 0 !important;
+        padding: 0 !important;
+        background: white !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+    body * {
+        visibility: hidden !important;
+    }
+    .print-root,
+    .print-root *,
+    #proforma-print-target,
+    #proforma-print-target * {
+        visibility: visible !important;
+    }
+    .print-root,
+    #proforma-print-target {
+        position: absolute !important;
+        left: 0 !important;
+        top: 0 !important;
+        width: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+    .no-print { display: none !important; }
+    .container {
+        width: 100% !important;
+        max-width: 100% !important;
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+    .pf-page {
+        box-shadow: none !important;
+        border: 1px solid #d4d4d4 !important;
+        max-width: 100% !important;
+        width: 100% !important;
+        page-break-inside: avoid;
+    }
+    .pf-ribbon-bar,
+    .pf-table thead th,
+    .pf-total-pill,
+    .pf-bottom-strip {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+    .pf-table,
+    .pf-table tr,
+    .pf-signature,
+    .pf-summary {
+        break-inside: avoid;
+        page-break-inside: avoid;
+    }
+    .navbar, footer { display: none !important; }
+}
+
+.pf-page {
+    max-width: 780px;
+    margin: 0 auto;
+    background: #ffffff;
+    border: 1px solid #d4d4d4;
+    padding: 0;
+    font-family: 'Trebuchet MS', 'Segoe UI', Arial, sans-serif;
+    font-size: 12px;
+    color: #222;
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    min-height: 1050px;
+}
+
+.pf-top {
+    position: relative;
+    padding: 16px 24px 8px;
+    min-height: 98px;
+}
+
+.pf-brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: #fff;
+    border: 1px solid #ececec;
+    border-radius: 6px;
+    padding: 4px 8px;
+    width: fit-content;
+}
+
+.pf-logo {
+    height: 52px;
+}
+
+.pf-ribbon {
+    position: absolute;
+    right: 24px;
+    top: 0;
+    width: 300px;
+    height: 82px;
+    pointer-events: none;
+}
+
+.pf-ribbon-bar {
+    position: absolute;
+    right: 6px;
+    top: 0;
+    width: 240px;
+    height: 12px;
+    background: #d4af37;
+    border-radius: 0 0 4px 4px;
+}
+
+.pf-ribbon-title {
+    position: absolute;
+    right: 0;
+    top: 20px;
+    color: #d4af37;
+    font-size: 36px;
+    font-weight: 700;
+    letter-spacing: .02em;
+    line-height: 1;
+    text-transform: uppercase;
+}
+
+.pf-ribbon-subtitle {
+    position: absolute;
+    right: 2px;
+    top: 58px;
+    font-size: 10px;
+    font-weight: 700;
+    color: #4e5563;
+    letter-spacing: .05em;
+}
+
+.pf-info {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 10px 24px 6px;
+}
+
+.pf-bill {
+    flex: 1;
+}
+
+.pf-bill-title,
+.pf-meta-title {
+    font-size: 10px;
+    text-transform: uppercase;
+    color: #6a727a;
+    font-weight: 700;
+    margin-bottom: 4px;
+}
+
+.pf-bill-name {
+    font-size: 16px;
+    font-weight: 700;
+    color: #4f4a52;
+    margin: 0 0 3px;
+}
+
+.pf-bill p,
+.pf-meta p {
+    margin: 0;
+    color: #4d5563;
+    line-height: 1.45;
+}
+
+.pf-meta {
+    width: 260px;
+    text-align: right;
+}
+
+.pf-table-wrap {
+    padding: 0 24px 0;
+}
+
+.pf-table {
+    width: 100%;
+    border-collapse: collapse;
+    border-top: 1px solid #bcbcbc;
+    border-bottom: 1px solid #bcbcbc;
+}
+
+.pf-table thead th {
+    background: #67616b;
+    color: #fff;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    padding: 5px 8px;
+    border-right: 1px solid #e2e2e2;
+}
+
+.pf-table thead th.pf-col-sl,
+.pf-table thead th.pf-col-desc {
+    background: #d4af37;
+}
+
+.pf-table thead th:last-child {
+    border-right: none;
+}
+
+.pf-table td {
+    padding: 6px 8px;
+    border-bottom: 1px solid #cfd3d6;
+    border-right: 1px solid #dfe2e4;
+    color: #2f3440;
+    line-height: 1.35;
+}
+
+.pf-table td:last-child {
+    border-right: none;
+}
+
+.pf-table tbody tr:last-child td {
+    border-bottom: 1px solid #bcbcbc;
+}
+
+.pf-col-sl,
+.pf-col-qty {
+    text-align: center;
+    width: 58px;
+}
+
+.pf-col-price,
+.pf-col-amt {
+    text-align: right;
+    width: 120px;
+}
+
+.pf-col-desc {
+    width: auto;
+}
+
+.pf-lower {
+    display: flex;
+    justify-content: flex-end;
+    gap: 18px;
+    padding: 10px 24px 10px;
+}
+
+.pf-footer-notes {
+    margin-top: auto;
+    padding: 12px 24px 8px;
+    border-top: 1px solid #e6e8ea;
+}
+
+.pf-footer-notes h6 {
+    margin: 0 0 4px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #4f4a52;
+}
+
+.pf-footer-notes p {
+    margin: 0;
+    font-size: 10px;
+    line-height: 1.5;
+    color: #4e5563;
+}
+
+.pf-notes {
+    flex: 1;
+}
+
+.pf-notes h6,
+.pf-summary h6 {
+    margin: 0 0 5px;
+    font-size: 12px;
+    font-weight: 700;
+    color: #222;
+}
+
+.pf-notes p {
+    margin: 0;
+    font-size: 11px;
+    line-height: 1.45;
+    color: #555;
+}
+
+.pf-summary {
+    width: 280px;
+}
+
+.pf-sum-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    margin-bottom: 0;
+    padding: 4px 0;
+    border-bottom: 1px solid #d8dcde;
+}
+
+.pf-sum-row strong {
+    font-weight: 700;
+    color: #4f4a52;
+}
+
+.pf-total-pill {
+    margin-top: 3px;
+    display: flex;
+    border-radius: 0;
+    overflow: hidden;
+    color: #fff;
+    font-weight: 700;
+    font-size: 12px;
+}
+
+.pf-total-pill span {
+    display: inline-block;
+    padding: 5px 10px;
+}
+
+.pf-total-pill span:first-child {
+    background: #d4af37;
+    text-transform: uppercase;
+}
+
+.pf-total-pill span:last-child {
+    flex: 1;
+    text-align: right;
+    background: #67616b;
+}
+
+.pf-signature {
+    text-align: right;
+    padding: 6px 24px 8px;
+}
+
+.pf-sign-line {
+    display: inline-block;
+    min-width: 120px;
+    border-bottom: 1px solid #7e858f;
+    margin-bottom: 3px;
+    color: #7e858f;
+    font-style: italic;
+}
+
+.pf-signature small {
+    display: block;
+    color: #7e858f;
+}
+
+.pf-bottom-strip {
+    margin-top: 8px;
+    background: #ffffff;
+    border-top: 1px solid #d7dcdf;
+    height: 50px;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    color: #4e5563;
+    font-size: 10px;
+    padding: 0 16px;
+    gap: 8px;
+}
+
+.pf-bottom-strip::before {
+    content: "";
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: -6px;
+    width: 230px;
+    height: 10px;
+    background: #d4af37;
+    border-radius: 7px;
+}
+
+.pf-bottom-strip::after {
+    content: none;
+}
+
+.pf-contact {
+    position: relative;
+    z-index: 2;
+}
+
+.pf-muted {
+    color: #5f6775;
+}
+
+.pf-bill-name,
+.pf-table td strong,
+.pf-total-pill span:last-child,
+.pf-ribbon-title,
+.pf-ribbon-subtitle {
+    font-weight: 700;
+}
+
+.no-print .btn {
+    border-radius: 4px;
+    font-weight: 600;
+    transition: all .18s ease;
+}
+
+.no-print .btn-outline-secondary {
+    color: #4e5563;
+    border-color: #b9bfc6;
+    background: #ffffff;
+}
+
+.no-print .btn-outline-secondary:hover,
+.no-print .btn-outline-secondary:focus {
+    color: #4f4a52;
+    border-color: #67616b;
+    background: #f4f5f6;
+}
+
+.no-print .btn-outline-primary {
+    color: #4f4a52;
+    border-color: #67616b;
+    background: #ffffff;
+}
+
+.no-print .btn-outline-primary:hover,
+.no-print .btn-outline-primary:focus {
+    color: #ffffff;
+    border-color: #67616b;
+    background: #67616b;
+}
+
+.no-print .btn-outline-danger {
+    color: #d4af37;
+    border-color: #d4af37;
+    background: #ffffff;
+}
+
+.no-print .btn-outline-danger:hover,
+.no-print .btn-outline-danger:focus {
+    color: #4f4a52;
+    border-color: #d4af37;
+    background: #d4af37;
+}
+
+.no-print .btn-success {
+    color: #4f4a52;
+    background: #d4af37;
+    border-color: #d4af37;
+}
+
+.no-print .btn-success:hover,
+.no-print .btn-success:focus {
+    color: #ffffff;
+    background: #67616b;
+    border-color: #67616b;
+}
+
+.no-print .btn-dark {
+    color: #ffffff;
+    background: #67616b;
+    border-color: #67616b;
+}
+
+.no-print .btn-dark:hover,
+.no-print .btn-dark:focus {
+    color: #4f4a52;
+    background: #d4af37;
+    border-color: #d4af37;
+}
+</style>
+
+<!-- Action bar (no print) -->
+<div class="container no-print mt-3 mb-3">
+    <div class="d-flex justify-content-between align-items-center">
+        <div>
+            <a href="{% if proforma.loading %}{% url 'logistics_proforma_list' %}{% else %}{% url 'sourcing_proforma_list' %}{% endif %}" class="btn btn-sm btn-outline-secondary me-1">
+                <i class="bi bi-arrow-left"></i> All Proformas
+            </a>
+            {% if proforma.loading %}
+            <a href="{% url 'loading_detail' proforma.loading.pk %}" class="btn btn-sm btn-outline-dark me-1">
+                <i class="bi bi-box-seam"></i> Open Cargo
+            </a>
+            {% endif %}
+            {% if proforma.status != 'SENT' %}
+            <a href="{% if proforma.loading %}{% url 'logistics_proforma_update' proforma.pk %}{% else %}{% url 'sourcing_proforma_update' proforma.pk %}{% endif %}" class="btn btn-sm btn-outline-primary me-1">
+                <i class="bi bi-pencil"></i> Edit
+            </a>
+            {% endif %}
+            <a href="{% if proforma.loading %}{% url 'logistics_proforma_pdf' proforma.pk %}{% else %}{% url 'sourcing_proforma_pdf' proforma.pk %}{% endif %}" class="btn btn-sm btn-outline-danger me-1" target="_blank">
+                <i class="bi bi-file-pdf"></i> Download PDF
+            </a>
+            {% if proforma.status != 'SENT' %}
+            <a href="{% if proforma.loading %}{% url 'logistics_proforma_confirm' proforma.pk %}{% else %}{% url 'sourcing_proforma_confirm' proforma.pk %}{% endif %}" class="btn btn-sm btn-success me-1">
+                <i class="bi bi-check2-circle"></i> Confirm to Invoice
+            </a>
+            {% elif final_invoice %}
+            <a href="{% if final_invoice.loading %}{% url 'logistics_final_invoice_detail' final_invoice.pk %}{% else %}{% url 'sourcing_final_invoice_detail' final_invoice.pk %}{% endif %}" class="btn btn-sm btn-dark me-1">
+                <i class="bi bi-receipt-cutoff"></i> Open Invoice
+            </a>
+            {% endif %}
+        </div>
+        <div class="d-flex gap-2">
+            <button class="btn btn-sm btn-outline-secondary" type="button" onclick="openPrintPreview('proforma-print-target', '{% if proforma.loading %}Cargo Proforma{% else %}Sourcing Proforma{% endif %} PI-{{ proforma.pk }}')">
+                <i class="bi bi-eye"></i> Print Preview
+            </button>
+            <button class="btn btn-sm btn-dark" type="button" onclick="printDocument()">
+                <i class="bi bi-printer"></i> Print Document
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Proforma Invoice Document -->
+<div class="container pb-4 print-root">
+<div class="pf-page" id="proforma-print-target">
+
+    {% include 'logistics/components/document_header.html' with doc_label=proforma.loading|yesno:"Cargo Proforma,Sourcing Proforma" doc_number="PI-"|add:proforma.pk|stringformat:"s" doc_meta=proforma.transaction.transaction_id %}
+
+    <div class="pf-info">
+        <div class="pf-bill">
+            <div class="pf-bill-title">Bill To</div>
+            <p class="pf-muted" style="text-transform:uppercase;font-size:10px;font-weight:700;letter-spacing:.04em;">{% if proforma.loading %}Cargo Document{% else %}Sourcing Document{% endif %}</p>
+            <p class="pf-bill-name">{{ proforma.transaction.customer.name }}</p>
+            <p>Ref: {{ proforma.transaction.transaction_id }}</p>
+            {% if proforma.loading %}<p>Cargo: {{ proforma.loading.loading_id }}</p>{% endif %}
+            {% if proforma.supplier_name %}<p>Supplier: {{ proforma.supplier_name }}</p>{% endif %}
+            {% if proforma.supplier_address %}<p class="pf-muted">{{ proforma.supplier_address }}</p>{% endif %}
+        </div>
+        <div class="pf-meta">
+            <div class="pf-meta-title">Amount Due</div>
+            <p><strong>Total Due:</strong> USD $ {{ proforma.total_amount|floatformat:2|intcomma }}</p>
+            <p><strong>Date:</strong> {{ proforma.created_at|date:"d/m/Y" }}</p>
+            <p><strong>Due:</strong> {{ proforma.validity_date|date:"d/m/Y" }}</p>
+        </div>
+    </div>
+
+    <div class="pf-table-wrap">
+        <table class="pf-table">
+            <thead>
+                <tr>
+                    <th class="pf-col-sl">No</th>
+                    <th class="pf-col-desc">Item Description</th>
+                    <th class="pf-col-price">Price</th>
+                    <th class="pf-col-qty">Qty</th>
+                    <th class="pf-col-amt">Total</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in proforma.items %}
+                <tr>
+                    <td class="pf-col-sl">{{ forloop.counter }}</td>
+                    <td class="pf-col-desc">{{ item.description }}</td>
+                    <td class="pf-col-price">
+                        {% if item.unit_price %}${{ item.unit_price|floatformat:2|intcomma }}
+                        {% elif item.sales_price %}${{ item.sales_price|floatformat:2|intcomma }}
+                        {% elif item.amount %}${{ item.amount|floatformat:2|intcomma }}
+                        {% else %}—{% endif %}
+                    </td>
+                    <td class="pf-col-qty">{{ item.quantity|default:"1" }}</td>
+                    <td class="pf-col-amt">
+                        {% if item.total %}${{ item.total|floatformat:2|intcomma }}
+                        {% elif item.amount %}${{ item.amount|floatformat:2|intcomma }}
+                        {% elif item.unit_price %}${{ item.unit_price|floatformat:2|intcomma }}
+                        {% else %}—{% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="5" class="text-center" style="color:#8f8f8f;padding:14px;">No line items.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="pf-lower">
+        <div class="pf-summary">
+            <div class="pf-sum-row"><span>Sub Total</span><strong>$ {{ proforma.subtotal|floatformat:2|intcomma }}</strong></div>
+            <div class="pf-sum-row"><span>Sourcing Fee</span><strong>$ {{ proforma.sourcing_fee|floatformat:2|intcomma }}</strong></div>
+            <div class="pf-sum-row"><span>Handling Fee</span><strong>$ {{ proforma.handling_fee|floatformat:2|intcomma }}</strong></div>
+            <div class="pf-sum-row"><span>Shipping Fee</span><strong>$ {{ proforma.shipping_fee|floatformat:2|intcomma }}</strong></div>
+            <div class="pf-sum-row"><span>Vat tax 0%</span><strong>$ 0.00</strong></div>
+            <div class="pf-total-pill"><span>Grand Total</span><span>$ {{ proforma.total_amount|floatformat:2|intcomma }}</span></div>
+        </div>
+    </div>
+
+    <div class="pf-signature">
+        <span class="pf-sign-line">Signature</span>
+        <small>Your Name Here</small>
+    </div>
+
+</div>
+</div>
+
+<script>
+function printDocument() {
+    const previewWindow = openPrintPreview(
+        'proforma-print-target',
+        '{% if proforma.loading %}Cargo Proforma{% else %}Sourcing Proforma{% endif %} PI-{{ proforma.pk }}',
+        true
+    );
+    if (!previewWindow) {
+        window.print();
+    }
+}
+
+function openPrintPreview(targetId, previewTitle, autoPrint) {
+    const source = document.getElementById(targetId);
+    if (!source) return;
+
+    const previewWindow = window.open('', '_blank', 'width=980,height=900,scrollbars=yes,resizable=yes');
+    if (!previewWindow) return;
+
+    const styleContent = Array.from(document.querySelectorAll('style'))
+        .map(s => s.innerHTML)
+        .join('\n');
+    const linkTags = Array.from(document.querySelectorAll('link[rel="stylesheet"]'))
+        .map(l => l.outerHTML)
+        .join('\n');
+
+    previewWindow.document.open();
+    previewWindow.document.write(`<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>${previewTitle}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    ${linkTags}
+    <style>${styleContent}</style>
+    <style>
+        body { background: #f4f4f1; padding: 14px; }
+        .preview-toolbar {
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+        @media print {
+            .preview-toolbar { display: none !important; }
+            body { padding: 0 !important; background: #fff !important; }
+        }
+    </style>
+</head>
+<body>
+    <div class="preview-toolbar no-print">
+        <button class="btn btn-sm btn-dark" onclick="window.print()"><i class="bi bi-printer"></i> Print</button>
+        <button class="btn btn-sm btn-outline-secondary" onclick="window.close()">Close</button>
+    </div>
+    ${source.outerHTML}
+</body>
+</html>`);
+    previewWindow.document.close();
+    if (autoPrint) {
+        previewWindow.onload = () => {
+            previewWindow.focus();
+            previewWindow.print();
+        };
+    }
+    return previewWindow;
+}
+</script>
+{% endblock %}

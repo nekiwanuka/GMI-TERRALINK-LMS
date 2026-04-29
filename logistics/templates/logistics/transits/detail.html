@@ -1,0 +1,92 @@
+{% extends 'logistics/base.html' %}
+{% block title %}Transit Timeline - {{ loading.loading_id }}{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h2 class="mb-1"><i class="bi bi-clock-history"></i> Transit Timeline</h2>
+    <div class="text-muted">
+      Loading <a href="{% url 'loading_detail' loading.id %}">{{ loading.loading_id }}</a>
+      &middot; Vessel <strong>{{ transit.vessel_name }}</strong>
+      &middot; Client {{ loading.client.name }}
+    </div>
+  </div>
+  <div>
+    {% if transit.status == 'arrived' %}
+      <span class="badge bg-success fs-6"><i class="bi bi-check-circle"></i> Arrived</span>
+    {% elif transit.status == 'in_transit' %}
+      <span class="badge bg-primary fs-6"><i class="bi bi-compass"></i> In transit</span>
+    {% else %}
+      <span class="badge bg-secondary fs-6"><i class="bi bi-hourglass-split"></i> Awaiting</span>
+    {% endif %}
+    <span class="badge bg-info ms-1"><i class="bi bi-truck"></i> Logistics</span>
+  </div>
+</div>
+
+<div class="row">
+  <div class="col-lg-8">
+    <div class="card shadow-sm">
+      <div class="card-header bg-light"><strong>Milestones</strong></div>
+      <div class="card-body">
+        <ul class="list-unstyled position-relative ps-4 mb-0" style="border-left:2px solid #dee2e6;">
+          {% for m in milestones %}
+            <li class="mb-4 position-relative">
+              <span class="position-absolute top-0 start-0 translate-middle rounded-circle d-inline-flex align-items-center justify-content-center
+                {% if m.state == 'done' %}bg-success text-white
+                {% elif m.state == 'active' %}bg-primary text-white
+                {% elif m.state == 'late' %}bg-danger text-white
+                {% else %}bg-secondary text-white opacity-50{% endif %}"
+                style="width:28px;height:28px;left:-14px;">
+                <i class="bi {{ m.icon }}"></i>
+              </span>
+              <div class="ps-3">
+                <div class="d-flex justify-content-between align-items-start">
+                  <div>
+                    <strong>{{ m.label }}</strong>
+                    {% if m.state == 'late' %}<span class="badge bg-danger ms-1">Overdue</span>{% endif %}
+                  </div>
+                  <small class="text-muted">
+                    {% if m.timestamp %}{{ m.timestamp|date:"d M Y H:i" }}{% else %}&mdash;{% endif %}
+                  </small>
+                </div>
+                {% if m.detail %}<div class="text-muted small mt-1">{{ m.detail }}</div>{% endif %}
+                {% if m.link %}<a href="{{ m.link }}" class="btn btn-sm btn-outline-primary mt-2"><i class="bi bi-eye"></i> View</a>{% endif %}
+              </div>
+            </li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-4">
+    <div class="card shadow-sm mb-3">
+      <div class="card-header bg-light"><strong>Transit Details</strong></div>
+      <div class="card-body small">
+        <div><span class="text-muted">Vessel:</span> <strong>{{ transit.vessel_name|default:"&mdash;" }}</strong></div>
+        <div><span class="text-muted">Boarding:</span> {{ transit.boarding_date|date:"d M Y H:i"|default:"&mdash;" }}</div>
+        <div><span class="text-muted">ETA Kampala:</span> {{ transit.eta_kampala|date:"d M Y H:i"|default:"&mdash;" }}</div>
+        <div><span class="text-muted">Status:</span> {{ transit.get_status_display }}</div>
+        {% if transit.remarks %}<hr><div class="text-muted">Remarks</div><div>{{ transit.remarks|linebreaksbr }}</div>{% endif %}
+      </div>
+    </div>
+    <div class="d-grid gap-2">
+      <a href="{% url 'loading_detail' loading.id %}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Back to Loading</a>
+      <a href="{% url 'transit_update' transit.id %}" class="btn btn-outline-primary btn-sm"><i class="bi bi-pencil"></i> Edit transit</a>
+      <button type="button" class="btn btn-outline-dark btn-sm" onclick="copyTrackLink()"><i class="bi bi-share"></i> Copy public tracking link</button>
+      <input type="text" id="trackLinkBox" class="form-control form-control-sm" readonly value="{{ request.scheme }}://{{ request.get_host }}{% url 'public_track' tracking_token %}">
+      {% if pod %}
+        <a href="{% url 'pod_detail' pod.pk %}" class="btn btn-outline-success btn-sm"><i class="bi bi-file-earmark-check"></i> View POD</a>
+      {% else %}
+        <a href="{% url 'record_logistics_pod' loading.id %}" class="btn btn-outline-success btn-sm"><i class="bi bi-file-earmark-plus"></i> Record POD</a>
+      {% endif %}
+    </div>
+  </div>
+</div>
+<script>
+function copyTrackLink(){
+  var el=document.getElementById('trackLinkBox');
+  el.select();el.setSelectionRange(0,99999);
+  navigator.clipboard.writeText(el.value);
+}
+</script>
+{% endblock %}

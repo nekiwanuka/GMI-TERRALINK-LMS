@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>{% if title %}{{ title }} - {% endif %}Shipment Tracking | GMI Terralink</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+  <style>body{background:#f4f6f9}.brand{font-weight:700;color:#0d6efd}</style>
+</head>
+<body>
+<nav class="navbar bg-white border-bottom mb-4">
+  <div class="container">
+    <span class="brand fs-4"><i class="bi bi-ship"></i> GMI Terralink</span>
+    <span class="text-muted small">Public shipment tracking</span>
+  </div>
+</nav>
+
+<div class="container pb-5">
+  {% if error %}
+    <div class="alert alert-danger">
+      <h4 class="alert-heading"><i class="bi bi-x-octagon"></i>
+        {% if error == 'expired' %}Link expired{% else %}Invalid tracking link{% endif %}
+      </h4>
+      <p class="mb-0">
+        {% if error == 'expired' %}
+          This tracking link has expired. Please contact your account manager for a new link.
+        {% else %}
+          This tracking link is invalid or has been tampered with.
+        {% endif %}
+      </p>
+    </div>
+  {% else %}
+    <div class="card shadow-sm mb-4">
+      <div class="card-body d-flex justify-content-between flex-wrap gap-2">
+        <div>
+          <h3 class="mb-0">{{ title }}</h3>
+          <div class="text-muted">{{ subtitle }}</div>
+          <div class="small mt-1"><i class="bi bi-person-circle"></i> Consignee: <strong>{{ client }}</strong></div>
+        </div>
+        <div class="text-end">
+          <span class="badge bg-primary fs-6">{{ status_label }}</span>
+          {% if eta %}
+            <div class="small text-muted mt-1"><i class="bi bi-flag-fill"></i> ETA {{ eta|date:"d M Y" }}</div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card shadow-sm">
+      <div class="card-header bg-light"><strong><i class="bi bi-clock-history"></i> Milestones</strong></div>
+      <div class="card-body">
+        <ul class="list-unstyled position-relative ps-4 mb-0" style="border-left:2px solid #dee2e6;">
+          {% for m in milestones %}
+            <li class="mb-4 position-relative">
+              <span class="position-absolute top-0 start-0 translate-middle rounded-circle d-inline-flex align-items-center justify-content-center
+                {% if m.state == 'done' %}bg-success text-white
+                {% elif m.state == 'active' %}bg-primary text-white
+                {% elif m.state == 'late' %}bg-danger text-white
+                {% else %}bg-secondary text-white opacity-50{% endif %}"
+                style="width:28px;height:28px;left:-14px;">
+                <i class="bi {{ m.icon }}"></i>
+              </span>
+              <div class="ps-3">
+                <div class="d-flex justify-content-between align-items-start">
+                  <div>
+                    <strong>{{ m.label }}</strong>
+                    {% if m.state == 'late' %}<span class="badge bg-danger ms-1">Overdue</span>{% endif %}
+                  </div>
+                  <small class="text-muted">{% if m.timestamp %}{{ m.timestamp|date:"d M Y H:i" }}{% else %}&mdash;{% endif %}</small>
+                </div>
+                {% if m.detail %}<div class="text-muted small mt-1">{{ m.detail }}</div>{% endif %}
+              </div>
+            </li>
+          {% endfor %}
+        </ul>
+      </div>
+      <div class="card-footer text-muted small">
+        Tracking is read-only. For questions please contact your GMI Terralink account manager.
+      </div>
+    </div>
+  {% endif %}
+</div>
+</body>
+</html>

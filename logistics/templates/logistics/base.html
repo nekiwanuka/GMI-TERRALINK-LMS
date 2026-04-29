@@ -4,434 +4,637 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}Roshe Group Logistics Portal System{% endblock %}</title>
+    <title>{% block title %}GMI TERRALINK Logistics Portal System{% endblock %}</title>
+    <link rel="icon" type="image/png" href="{% static 'images/gmi_logo.png' %}">
+    <link rel="shortcut icon" type="image/png" href="{% static 'images/gmi_logo.png' %}">
+    <link rel="apple-touch-icon" href="{% static 'images/gmi_logo.png' %}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="{% static 'css/branding.css' %}?v=20260422-landing2">
     <style>
-        :root {
-            --primary-color: #003366;
-            --secondary-color: #eab106ec;
-            --light-color: #F5F5F5;
-        }
-        
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: var(--light-color);
-        }
-        
-        .navbar {
-            background-color: var(--primary-color) !important;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        
-        .navbar-brand {
-            font-weight: bold;
-            font-size: 1.3rem;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-        
-        .brand-logo {
-            height: 42px;
-            width: auto;
-            object-fit: contain;
-        }
-        
-        .sidebar {
-            background-color: white;
-            min-height: calc(100vh - 56px);
-            padding: 20px 0;
-            box-shadow: 2px 0 4px rgba(0,0,0,0.1);
-        }
-        
-        .sidebar .nav-link {
-            color: var(--primary-color);
-            padding: 10px 20px;
-            margin: 5px 10px;
-            border-radius: 5px;
-            transition: all 0.3s ease;
-        }
-        
-        .sidebar .nav-link:hover {
-            background-color: var(--secondary-color);
-            color: var(--primary-color);
-        }
-        
-        .sidebar .nav-link.active {
-            background-color: var(--secondary-color);
-            color: var(--primary-color);
-            font-weight: bold;
-        }
-        
-        .main-content {
-            padding: 30px;
-        }
+    .dept-switcher {
+        display: inline-flex;
+        align-items: center;
+        background: rgba(26,26,26,.06);
+        border: 1px solid rgba(26,26,26,.12);
+        border-radius: 8px;
+        padding: 3px;
+        gap: 2px;
+    }
+    .dept-btn {
+        background: transparent;
+        border: none;
+        color: #4f4a52;
+        border-radius: 6px;
+        font-size: .8rem;
+        font-weight: 600;
+        padding: .28rem .7rem;
+        cursor: pointer;
+        transition: background .15s, color .15s;
+        white-space: nowrap;
+    }
+    .dept-btn:hover { background: rgba(26,26,26,.08); color: #1a1a1a; }
+    .dept-btn-active { background: #1a1a1a !important; color: #f5e6a8 !important; }
 
-        .guest-layout {
-            margin-top: 60px;
-        }
-        
-        .card {
-            border: none;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-            margin-bottom: 20px;
-            border-top: 3px solid var(--secondary-color);
-        }
-        
-        .card-header {
-            background-color: var(--primary-color);
-            color: white;
-            border-bottom: none;
-        }
-        
-        .btn-primary {
-            background-color: var(--primary-color);
-            border-color: var(--primary-color);
-        }
-        
-        .btn-primary:hover {
-            background-color: #002244;
-            border-color: #002244;
-        }
-        
-        .btn-warning {
-            background-color: var(--secondary-color);
-            color: var(--primary-color);
-            border-color: var(--secondary-color);
-        }
-        
-        .btn-warning:hover {
-            background-color: #d6a205ec;
-            color: var(--primary-color);
-            border-color: #e6ba0de8;
-        }
-        
-        .badge-primary {
-            background-color: var(--primary-color);
-        }
-        
-        .table-hover tbody tr:hover {
-            background-color: rgba(255, 215, 0, 0.1);
-        }
-        
-        .form-control:focus {
-            border-color: var(--secondary-color);
-            box-shadow: 0 0 0 0.2rem rgba(255, 215, 0, 0.25);
-            outline: none;
-        }
+    /* === Global radius reduction (sharper corners) ===================== */
+    :root {
+        --bs-border-radius: 4px;
+        --bs-border-radius-sm: 3px;
+        --bs-border-radius-lg: 5px;
+        --bs-border-radius-xl: 6px;
+        --bs-border-radius-2xl: 8px;
+        --bs-border-radius-pill: 50rem;
+    }
+    .btn,
+    .card,
+    .form-control,
+    .form-select,
+    .input-group-text,
+    .alert,
+    .badge,
+    .modal-content,
+    .dropdown-menu,
+    .list-group,
+    .list-group-item,
+    .toast,
+    .nav-pills .nav-link,
+    .progress,
+    .accordion-item,
+    .offcanvas,
+    .pagination .page-link,
+    .table-responsive,
+    .inv-card,
+    .inv-services,
+    .inv-section,
+    .pf-card,
+    .pf-section,
+    .pf-table,
+    .receipt-card,
+    .receipt-section,
+    .gmi-doc-card,
+    .gmi-doc-section,
+    .po-shell,
+    .po-status,
+    .po-card,
+    .summary-card,
+    .stat-card,
+    .panel,
+    .panel-card,
+    .form-card,
+    .data-card,
+    .filter-card,
+    .doc-card {
+        border-radius: 4px !important;
+    }
+    .btn-sm, .badge.rounded-pill { /* leave pills alone */ }
+    /* Preserve intentionally round elements */
+    .rounded-circle,
+    .btn.rounded-circle,
+    .btn-icon,
+    .icon-btn,
+    .avatar,
+    .avatar-circle,
+    .rounded-pill,
+    .badge.rounded-pill,
+    .nav-pills .nav-link.rounded-pill,
+    .dept-switcher,
+    .dept-btn {
+        border-radius: 50rem !important;
+    }
+    .rounded-circle,
+    .btn.rounded-circle,
+    .btn-icon,
+    .icon-btn,
+    .avatar,
+    .avatar-circle {
+        border-radius: 50% !important;
+    }
+    /* Restore the dept switcher's softer pill look */
+    .dept-switcher { border-radius: 8px !important; }
+    .dept-btn { border-radius: 6px !important; }
 
-        .alert-success {
-            background-color: #d4edda;
-            border-color: #c3e6cb;
-            color: #155724;
-        }
-        
-        .alert-danger {
-            background-color: #f8d7da;
-            border-color: #f5c6cb;
-            color: #721c24;
-        }
-        
-        .dashboard-stat {
-            text-align: center;
-            padding: 20px;
-        }
-        
-        .dashboard-stat h4 {
-            color: var(--primary-color);
-            margin: 10px 0;
-        }
-        
-        .dashboard-stat p {
-            font-size: 2rem;
-            font-weight: bold;
-            color: var(--secondary-color);
-            margin: 0;
-        }
-        
-        .footer {
-            position: relative;
-            overflow: hidden;
-            margin-top: 60px;
-            background: linear-gradient(120deg, #001a33 0%, #003f7d 65%, #f5c400 120%);
-            color: white;
-            box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.2);
-        }
+    /* === Global compact density (smaller buttons, tighter spacing) ====== */
+    .btn {
+        padding: .32rem .7rem;
+        font-size: .82rem;
+        line-height: 1.25;
+        white-space: nowrap;
+    }
+    .btn-sm { padding: .22rem .55rem; font-size: .75rem; }
+    .btn-lg { padding: .5rem 1rem; font-size: .92rem; }
+    .btn i.bi { font-size: .95em; }
 
-        .footer::before,
-        .footer::after {
-            content: '';
-            position: absolute;
-            width: 240px;
-            height: 240px;
-            border-radius: 50%;
-            background: rgba(255, 255, 255, 0.08);
-        }
+    /* Keep button groups / toolbars on one line where possible */
+    .btn-toolbar,
+    .btn-group,
+    .d-flex.gap-2,
+    .d-flex.gap-3,
+    .table-actions,
+    .page-actions,
+    .toolbar-actions {
+        flex-wrap: nowrap;
+    }
+    .btn-toolbar { gap: .35rem; row-gap: .35rem; }
+    .table-actions, .page-actions, .toolbar-actions {
+        display: inline-flex;
+        gap: .35rem;
+        align-items: center;
+    }
+    /* Allow horizontal scroll for action rows on tiny screens instead of stacking */
+    .btn-toolbar.scroll-x,
+    .table-actions.scroll-x,
+    .page-actions.scroll-x {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: thin;
+    }
 
-        .footer::before {
-            top: -80px;
-            left: -60px;
-        }
+    /* Tighter card / container spacing */
+    .card-body { padding: 1rem; }
+    .container, .container-fluid { padding-left: 1rem; padding-right: 1rem; }
+    .py-4 { padding-top: 1rem !important; padding-bottom: 1rem !important; }
+    .py-5 { padding-top: 1.5rem !important; padding-bottom: 1.5rem !important; }
+    .py-lg-5 { padding-top: 1.5rem !important; padding-bottom: 1.5rem !important; }
 
-        .footer::after {
-            bottom: -120px;
-            right: -40px;
-        }
+    /* Form controls a touch smaller */
+    .form-control, .form-select {
+        padding: .4rem .65rem;
+        font-size: .88rem;
+    }
+    .form-label { font-size: .82rem; margin-bottom: .25rem; }
 
-        .footer-wave {
-            position: absolute;
-            inset: 0;
-            background: radial-gradient(circle at 20% 20%, rgba(255, 255, 255, 0.25), transparent 55%),
-                        radial-gradient(circle at 80% 0%, rgba(0, 0, 0, 0.15), transparent 45%);
-            opacity: 0.6;
-        }
+    /* Tables denser */
+    .table > :not(caption) > * > * { padding: .5rem .55rem; }
+    .table { font-size: .86rem; }
 
-        .footer-content {
-            position: relative;
-            padding: 50px 0 30px;
+    @media (max-width: 768px) {
+        .btn-toolbar, .btn-group, .table-actions, .page-actions {
+            flex-wrap: nowrap;
+            overflow-x: auto;
         }
-
-        .footer-brand {
-            max-width: 320px;
-        }
-
-        .footer-logo {
-            width: 160px;
-            height: auto;
-            filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.35));
-            margin-bottom: 10px;
-        }
-
-        .footer-brand p {
-            margin: 0;
-            color: rgba(255, 255, 255, 0.85);
-            line-height: 1.6;
-        }
-
-        .footer-heading {
-            text-transform: uppercase;
-            letter-spacing: 0.08em;
-            font-size: 0.85rem;
-            color: var(--secondary-color);
-            margin-bottom: 0.75rem;
-        }
-
-        .footer-links li,
-        .footer-contact li {
-            margin-bottom: 0.35rem;
-            display: flex;
-            align-items: flex-start;
-            gap: 0.45rem;
-            color: rgba(255, 255, 255, 0.8);
-        }
-
-        .footer-links a {
-            color: rgba(255, 255, 255, 0.85);
-            text-decoration: none;
-            transition: color 0.2s ease, transform 0.2s ease;
-        }
-
-        .footer-links a:hover {
-            color: var(--secondary-color);
-            transform: translateX(4px);
-        }
-
-        .footer-links i,
-        .footer-contact i {
-            color: var(--secondary-color);
-            font-size: 1rem;
-            margin-top: 2px;
-        }
-
-        .footer-meta {
-            margin-top: 30px;
-            padding-top: 20px;
-            border-top: 1px solid rgba(255, 255, 255, 0.2);
-            display: flex;
-            flex-wrap: wrap;
-            gap: 0.75rem;
-            font-size: 0.9rem;
-            color: rgba(255, 255, 255, 0.75);
-        }
-
-        @media (max-width: 767px) {
-            .footer-content {
-                padding: 40px 0 24px;
-            }
-            .footer-meta {
-                flex-direction: column;
-            }
-        }
-        
-        .breadcrumb {
-            background-color: white;
-            margin-bottom: 20px;
-        }
+    }
     </style>
     {% block extra_css %}{% endblock %}
 </head>
-<body>
-    <!-- Navigation -->
-    <nav class="navbar navbar-expand-lg navbar-dark">
-        <div class="container-fluid">
-            <a class="navbar-brand" href="{% url 'dashboard' %}">
-                <img src="{% static 'images/roshe_logo.svg' %}" alt="Roshe Group" class="brand-logo">
-                <span>Roshe Group Logistics Portal</span>
-            </a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
-                <span class="navbar-toggler-icon"></span>
-            </button>
-            <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav ms-auto">
-                    {% if user.is_authenticated %}
-                    <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" id="userDropdown" role="button" data-bs-toggle="dropdown">
-                            <i class="bi bi-person"></i> {{ user.username }} ({{ user.get_role_display }})
-                        </a>
-                        <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="userDropdown">
-                            <li><a class="dropdown-item" href="{% url 'logout' %}">Logout</a></li>
-                        </ul>
-                    </li>
-                    {% else %}
-                    <li class="nav-item">
-                        <a class="nav-link" href="{% url 'login' %}">Login</a>
-                    </li>
-                    {% endif %}
-                </ul>
-            </div>
-        </div>
-    </nav>
+<body class="app-body {% if user.is_authenticated %}auth-user{% else %}guest-user{% endif %}">
+    <div class="app-shell">
+        <nav class="navbar navbar-expand-lg topbar">
+            <div class="container-fluid px-3 px-lg-4">
+                <a class="navbar-brand" href="{% url 'dashboard' %}">
+                    <img src="{% static 'images/gmi_logo.png' %}" alt="GMI Terralink" class="brand-logo">
+                    <span class="brand-copy">
+                        <span class="navbar-brand-text">GMI Terralink</span>
+                        <span class="navbar-brand-subtext">Logistics, sourcing and finance operations</span>
+                    </span>
+                </a>
+                <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+                <div class="collapse navbar-collapse" id="navbarNav">
+                    <ul class="navbar-nav ms-auto align-items-lg-center gap-lg-2">
+                        {% if user.is_authenticated %}
+                        <li class="nav-item d-none d-lg-block">
+                            <a class="nav-link" href="{% url 'workflow_guide' %}"><i class="bi bi-map me-1"></i>Workflow</a>
+                        </li>
 
-    <div class="container-fluid">
-        <div class="row {% if not user.is_authenticated %}justify-content-center{% endif %}">
-            {% if user.is_authenticated %}
-            <!-- Sidebar for authenticated users -->
-            <nav class="col-md-2 sidebar">
+                        {% comment %}Department lane switcher{% endcomment %}
+                        <li class="nav-item d-none d-lg-flex align-items-center">
+                            <div class="dept-switcher" role="group" aria-label="Department mode">
+                                <form method="post" action="{% url 'set_lane' %}" class="d-inline">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="lane" value="logistics">
+                                    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                    <button type="submit"
+                                        class="dept-btn {% if shell_active_lane == 'logistics' %}dept-btn-active{% endif %}">
+                                        <i class="bi bi-box-seam me-1"></i>Logistics
+                                    </button>
+                                </form>
+                                <form method="post" action="{% url 'set_lane' %}" class="d-inline">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="lane" value="sourcing">
+                                    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                    <button type="submit"
+                                        class="dept-btn {% if shell_active_lane == 'sourcing' %}dept-btn-active{% endif %}">
+                                        <i class="bi bi-globe2 me-1"></i>Sourcing
+                                    </button>
+                                </form>
+                                {% if shell_can_switch_lane %}
+                                <form method="post" action="{% url 'set_lane' %}" class="d-inline">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="lane" value="all">
+                                    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                    <button type="submit"
+                                        class="dept-btn {% if shell_active_lane == 'all' %}dept-btn-active{% endif %}">
+                                        <i class="bi bi-grid me-1"></i>All
+                                    </button>
+                                </form>
+                                {% endif %}
+                            </div>
+                        </li>
+                        <li class="nav-item dropdown">
+                            <a class="nav-link notification-link dropdown-toggle" href="#" id="notificationsDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                <span class="notification-icon-wrap">
+                                    <i class="bi bi-bell"></i>
+                                    {% if shell_notifications_unread_count %}
+                                    <span class="notification-badge">{{ shell_notifications_unread_count }}</span>
+                                    {% endif %}
+                                </span>
+                                Notifications
+                            </a>
+                            <div class="dropdown-menu dropdown-menu-end notification-menu" aria-labelledby="notificationsDropdown">
+                                <div class="notification-menu-header">
+                                    <strong>Notifications</strong>
+                                    {% if shell_notifications_unread_count %}
+                                    <a href="{% url 'notifications_mark_all_read' %}" class="notification-mark-read">Mark all read</a>
+                                    {% endif %}
+                                </div>
+                                <div class="notification-menu-list">
+                                    {% for notification in shell_notifications %}
+                                    <a class="notification-item {% if not notification.is_read %}unread{% endif %}" href="{% if notification.link %}{{ notification.link }}{% else %}#{% endif %}">
+                                        <span class="notification-item-title">{{ notification.title }}</span>
+                                        <span class="notification-item-copy">{{ notification.message }}</span>
+                                        <span class="notification-item-time">{{ notification.created_at|timesince }} ago</span>
+                                    </a>
+                                    {% empty %}
+                                    <div class="notification-empty">No notifications yet.</div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        </li>
+                        <li class="nav-item dropdown">
+                            <a class="nav-link dropdown-toggle" href="#" id="userDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                <i class="bi bi-person-circle me-1"></i>{{ user.username }}
+                            </a>
+                            <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="userDropdown">
+                                <li><span class="dropdown-item-text text-muted small text-uppercase">{{ user.get_role_display }}</span></li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li><a class="dropdown-item" href="{% url 'logout' %}"><i class="bi bi-box-arrow-right me-2"></i>Logout</a></li>
+                            </ul>
+                        </li>
+                        {% else %}
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'dashboard' %}">Home</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'login' %}">Login</a>
+                        </li>
+                        {% endif %}
+                    </ul>
+                </div>
+            </div>
+        </nav>
+
+        <main id="main-content">
+        {% if user.is_authenticated %}
+        <div class="app-layout">
+            <nav class="sidebar">
+                <div class="sidebar-profile">
+                    <div class="sidebar-avatar">{{ user.username|first|upper }}</div>
+                    <div class="sidebar-profile-info">
+                        <div class="sidebar-username">{{ user.username }}</div>
+                        <div class="sidebar-role">{{ user.get_role_display }}</div>
+                    </div>
+                </div>
+
                 <ul class="nav flex-column">
                     <li class="nav-item">
-                        <a class="nav-link {% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}" href="{% url 'dashboard' %}">
-                            <i class="bi bi-house-door"></i> Dashboard
+                        <a class="nav-link {% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}" href="{% url 'dashboard' %}" data-bs-toggle="tooltip" data-bs-placement="right" title="Operations overview and key activity">
+                            <i class="bi bi-grid-1x2-fill"></i> Dashboard
                         </a>
                     </li>
-                    
-                    <li class="nav-item">
-                        <a class="nav-link {% if 'client' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'client_list' %}">
-                            <i class="bi bi-people"></i> Clients
-                        </a>
-                    </li>
-                    
-                    <li class="nav-item">
-                        <a class="nav-link {% if 'loading' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'loading_list' %}">
-                            <i class="bi bi-box"></i> Cargo
-                        </a>
-                    </li>
-                    
-                    <li class="nav-item">
-                        <a class="nav-link {% if 'transit' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'transit_list' %}">
-                            <i class="bi bi-ship"></i> Transit
-                        </a>
-                    </li>
-                    
-                    <li class="nav-item">
-                        <a class="nav-link {% if 'payment' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'payment_list' %}">
-                            <i class="bi bi-cash-coin"></i> Payments
-                        </a>
-                    </li>
-                    
-                    <li class="nav-item">
-                        <a class="nav-link {% if 'container' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'container_return_list' %}">
-                            <i class="bi bi-archive"></i> Containers
-                        </a>
-                    </li>
-                    
-                    <li class="nav-item">
-                        <a class="nav-link {% if 'report' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'reports_dashboard' %}">
-                            <i class="bi bi-file-earmark-pdf"></i> Reports
-                        </a>
-                    </li>
-                    
-                    {% if user.role == 'superuser' %}
-                    <li class="nav-item">
-                        <a class="nav-link {% if 'user' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'user_list' %}">
-                            <i class="bi bi-shield-lock"></i> Users
-                        </a>
-                    </li>
-                    
-                    <li class="nav-item">
-                        <a class="nav-link {% if 'audit' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'audit_logs' %}">
-                            <i class="bi bi-file-text"></i> Audit Logs
-                        </a>
-                    </li>
-                    {% endif %}
-                </ul>
-            </nav>
-            {% endif %}
 
-            <!-- Main Content -->
-            <div class="{% if user.is_authenticated %}col-md-10{% else %}col-12 col-md-6{% endif %} main-content {% if not user.is_authenticated %}guest-layout{% endif %}">
-                {% if messages %}
-                <div class="messages{% if not user.is_authenticated %} mb-3{% endif %}">
-                    {% for message in messages %}
-                    {% if message.tags == 'success' %}
-                    <div class="alert alert-success alert-dismissible fade show" role="alert">
-                        <i class="bi bi-check-circle"></i>
-                        {{ message }}
-                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                    </div>
-                    {% else %}
-                    <div class="alert alert-warning alert-dismissible fade show" role="alert">
-                        <i class="bi bi-exclamation-triangle"></i>
-                        {{ message }}
-                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                    </div>
+                    <li class="sidebar-section-label">Shared</li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if 'client' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'client_list' %}" data-bs-toggle="tooltip" data-bs-placement="right" title="Client directory and account history">
+                            <i class="bi bi-people-fill"></i> Clients
+                        </a>
+                    </li>
+
+                    {% if shell_active_lane != 'sourcing' %}
+                    <li class="sidebar-section-label"><i class="bi bi-ship"></i> Logistics</li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if 'loading' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'loading_list' %}" data-bs-toggle="tooltip" data-bs-placement="right" title="Cargo registry and shipment intake">
+                            <i class="bi bi-box-seam-fill"></i> Cargo
+                            {% if shell_module_notification_counts.cargo %}<span class="sidebar-count-badge ms-auto">{{ shell_module_notification_counts.cargo }}</span>{% endif %}
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if 'transit' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'transit_list' %}" data-bs-toggle="tooltip" data-bs-placement="right" title="Transit tracking and vessel monitoring">
+                            <i class="bi bi-compass-fill"></i> Transit
+                            {% if shell_module_notification_counts.transit %}<span class="sidebar-count-badge ms-auto">{{ shell_module_notification_counts.transit }}</span>{% endif %}
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if 'container' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'container_return_list' %}" data-bs-toggle="tooltip" data-bs-placement="right" title="Container return status and reconciliation">
+                            <i class="bi bi-archive-fill"></i> Containers
+                            {% if shell_module_notification_counts.containers %}<span class="sidebar-count-badge ms-auto">{{ shell_module_notification_counts.containers }}</span>{% endif %}
+                        </a>
+                    </li>
+                    {% if user.is_superuser or user.role in 'ADMIN,DIRECTOR,FINANCE,OFFICE_ADMIN' %}
+                    <li class="nav-item">
+                        <a class="nav-link {% if 'final_invoice' in request.resolver_match.url_name or 'payment' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'logistics_final_invoice_list' %}" data-bs-toggle="tooltip" data-bs-placement="right" title="Open cargo invoices and record freight payments from invoice">
+                            <i class="bi bi-cash-coin"></i> Freight Payments
+                            {% if shell_module_notification_counts.freight_payments %}<span class="sidebar-count-badge ms-auto">{{ shell_module_notification_counts.freight_payments }}</span>{% endif %}
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if 'receipt' in request.resolver_match.url_name and request.GET.source == 'logistics' %}active{% endif %}" href="{% url 'receipt_list' %}?source=logistics" data-bs-toggle="tooltip" data-bs-placement="right" title="Logistics-only receipts (freight payments)">
+                            <i class="bi bi-receipt"></i> Freight Receipts
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if 'pod' in request.resolver_match.url_name and request.GET.lane == 'logistics' %}active{% endif %}" href="{% url 'pod_list' %}?lane=logistics" data-bs-toggle="tooltip" data-bs-placement="right" title="Proof of Delivery records for logistics shipments">
+                            <i class="bi bi-file-earmark-check"></i> Proof of Delivery
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.resolver_match.url_name == 'loading_list' and request.GET.closed == '1' %}active{% endif %}" href="{% url 'loading_list' %}?closed=1" data-bs-toggle="tooltip" data-bs-placement="right" title="Closed loadings archive">
+                            <i class="bi bi-lock-fill"></i> Closed Loadings
+                        </a>
+                    </li>
                     {% endif %}
+                    {% if user.is_superuser or user.role in 'ADMIN,DIRECTOR,FINANCE' %}
+                    <li class="nav-item">
+                        <button class="nav-link nav-link-toggle {% if 'proforma' in request.resolver_match.url_name or 'final_invoice' in request.resolver_match.url_name %}active{% endif %}" type="button" data-bs-toggle="collapse" data-bs-target="#sidebarInvoicingMenuLogistics" aria-expanded="{% if 'proforma' in request.resolver_match.url_name or 'final_invoice' in request.resolver_match.url_name %}true{% else %}false{% endif %}" aria-controls="sidebarInvoicingMenuLogistics" title="Cargo proformas and cargo invoices">
+                            <span class="nav-link-label"><i class="bi bi-receipt-cutoff"></i> Cargo</span>
+                            <i class="bi bi-chevron-down sidebar-caret"></i>
+                        </button>
+                        <div class="collapse sidebar-submenu-wrap {% if 'proforma' in request.resolver_match.url_name or 'final_invoice' in request.resolver_match.url_name %}show{% endif %}" id="sidebarInvoicingMenuLogistics">
+                            <div class="sidebar-submenu">
+                                <a class="sidebar-submenu-link {% if 'proforma' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'logistics_proforma_list' %}">
+                                    <span class="sidebar-submenu-text"><i class="bi bi-file-earmark-text"></i> Proforma</span>
+                                    <span class="sidebar-count-badge">{{ shell_proforma_count_logistics }}</span>
+                                </a>
+                                <a class="sidebar-submenu-link {% if 'final_invoice' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'logistics_final_invoice_list' %}">
+                                    <span class="sidebar-submenu-text"><i class="bi bi-file-earmark-check"></i> Invoice</span>
+                                    <span class="sidebar-count-badge">{{ shell_final_invoice_count_logistics }}</span>
+                                </a>
+                            </div>
+                        </div>
+                    </li>
+                    {% endif %}
+                    {% endif %}
+
+                    {% if shell_active_lane != 'logistics' %}
+                    <li class="sidebar-section-label"><i class="bi bi-globe2"></i> Sourcing / Trade</li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if 'transaction' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'transaction_list' %}" data-bs-toggle="tooltip" data-bs-placement="right" title="Inquiry, confirmation, sourcing and delivery workflow">
+                            <i class="bi bi-diagram-3-fill"></i> Open Entry
+                            {% if shell_module_notification_counts.transactions %}<span class="sidebar-count-badge ms-auto">{{ shell_module_notification_counts.transactions }}</span>{% endif %}
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if 'document_archive' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'document_archive_list' %}" data-bs-toggle="tooltip" data-bs-placement="right" title="Archived extracted uploads and document history">
+                            <i class="bi bi-folder-symlink"></i> Document Archive
+                            {% if shell_module_notification_counts.documents %}<span class="sidebar-count-badge ms-auto">{{ shell_module_notification_counts.documents }}</span>{% endif %}
+                        </a>
+                    </li>
+                    {% if user.is_superuser or user.role == 'ADMIN' or user.role == 'PROCUREMENT' %}
+                    <li class="nav-item">
+                        <a class="nav-link {% if 'sourcing' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'sourcing_list' %}" data-bs-toggle="tooltip" data-bs-placement="right" title="Processed sourcing records created from extracted trade documents">
+                            <i class="bi bi-search-heart"></i> Sourcing
+                            {% if shell_module_notification_counts.sourcing %}<span class="sidebar-count-badge ms-auto">{{ shell_module_notification_counts.sourcing }}</span>{% endif %}
+                        </a>
+                    </li>
+                    {% endif %}
+                    {% if user.is_superuser or user.role in 'ADMIN,DIRECTOR,PROCUREMENT' %}
+                    <li class="nav-item">
+                        <a class="nav-link {% if 'supplier' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'supplier_list' %}" data-bs-toggle="tooltip" data-bs-placement="right" title="Supplier records and product sourcing">
+                            <i class="bi bi-building-fill"></i> Suppliers
+                            {% if shell_module_notification_counts.suppliers %}<span class="sidebar-count-badge ms-auto">{{ shell_module_notification_counts.suppliers }}</span>{% endif %}
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if 'inventory' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'inventory_list' %}" data-bs-toggle="tooltip" data-bs-placement="right" title="Warehouse stock and storage tracking">
+                            <i class="bi bi-boxes"></i> Warehouse
+                            {% if shell_module_notification_counts.inventory %}<span class="sidebar-count-badge ms-auto">{{ shell_module_notification_counts.inventory }}</span>{% endif %}
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if 'fulfillment' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'fulfillment_list' %}" data-bs-toggle="tooltip" data-bs-placement="right" title="Warehouse allocation, port movement and inland delivery tracking">
+                            <i class="bi bi-signpost-split-fill"></i> Fulfillment
+                            {% if shell_module_notification_counts.fulfillment %}<span class="sidebar-count-badge ms-auto">{{ shell_module_notification_counts.fulfillment }}</span>{% endif %}
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if 'pod' in request.resolver_match.url_name and request.GET.lane == 'trading' %}active{% endif %}" href="{% url 'pod_list' %}?lane=trading" data-bs-toggle="tooltip" data-bs-placement="right" title="Proof of Delivery records for trading orders">
+                            <i class="bi bi-file-earmark-check"></i> Proof of Delivery
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.resolver_match.url_name == 'transaction_list' and request.GET.status == 'CLOSED' %}active{% endif %}" href="{% url 'transaction_list' %}?status=CLOSED" data-bs-toggle="tooltip" data-bs-placement="right" title="Closed trade transactions archive">
+                            <i class="bi bi-lock-fill"></i> Closed Trades
+                        </a>
+                    </li>
+                    {% endif %}
+                    {% if user.is_superuser or user.role in 'ADMIN,DIRECTOR,FINANCE' %}
+                    <li class="nav-item">
+                        <button class="nav-link nav-link-toggle {% if 'proforma' in request.resolver_match.url_name or 'final_invoice' in request.resolver_match.url_name %}active{% endif %}" type="button" data-bs-toggle="collapse" data-bs-target="#sidebarInvoicingMenuSourcing" aria-expanded="{% if 'proforma' in request.resolver_match.url_name or 'final_invoice' in request.resolver_match.url_name %}true{% else %}false{% endif %}" aria-controls="sidebarInvoicingMenuSourcing" title="Sourcing proformas and sourcing invoices">
+                            <span class="nav-link-label"><i class="bi bi-receipt-cutoff"></i> Sourcing</span>
+                            {% if shell_module_notification_counts.invoicing %}<span class="sidebar-count-badge ms-2">{{ shell_module_notification_counts.invoicing }}</span>{% endif %}
+                            <i class="bi bi-chevron-down sidebar-caret"></i>
+                        </button>
+                        <div class="collapse sidebar-submenu-wrap {% if 'proforma' in request.resolver_match.url_name or 'final_invoice' in request.resolver_match.url_name %}show{% endif %}" id="sidebarInvoicingMenuSourcing">
+                            <div class="sidebar-submenu">
+                                <a class="sidebar-submenu-link {% if 'proforma' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'sourcing_proforma_list' %}">
+                                    <span class="sidebar-submenu-text"><i class="bi bi-file-earmark-text"></i> Proforma</span>
+                                    <span class="sidebar-count-badge">{{ shell_proforma_count_sourcing }}</span>
+                                </a>
+                                <a class="sidebar-submenu-link {% if 'final_invoice' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'sourcing_final_invoice_list' %}">
+                                    <span class="sidebar-submenu-text"><i class="bi bi-file-earmark-check"></i> Invoice</span>
+                                    <span class="sidebar-count-badge">{{ shell_final_invoice_count_sourcing }}</span>
+                                </a>
+                            </div>
+                        </div>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if 'purchase_order' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'purchase_order_list' %}" data-bs-toggle="tooltip" data-bs-placement="right" title="Purchase orders and supplier allocations">
+                            <i class="bi bi-journal-bookmark-fill"></i> Purchase Orders
+                            {% if shell_module_notification_counts.purchase_orders %}<span class="sidebar-count-badge ms-auto">{{ shell_module_notification_counts.purchase_orders }}</span>{% endif %}
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if 'supplier_payment' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'supplier_payment_list' %}" data-bs-toggle="tooltip" data-bs-placement="right" title="Payments made to suppliers against POs">
+                            <i class="bi bi-cash-stack"></i> Supplier Payments
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if 'sourcing_payment' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'sourcing_payment_create' %}" data-bs-toggle="tooltip" data-bs-placement="right" title="Record client payments against confirmed final invoices">
+                            <i class="bi bi-credit-card-fill"></i> Client Payments
+                            {% if shell_module_notification_counts.trade_payments %}<span class="sidebar-count-badge ms-auto">{{ shell_module_notification_counts.trade_payments }}</span>{% endif %}
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if 'receipt' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'receipt_list' %}" data-bs-toggle="tooltip" data-bs-placement="right" title="Immutable receipts and reversal records">
+                            <i class="bi bi-receipt"></i> Receipts
+                            {% if shell_module_notification_counts.receipts %}<span class="sidebar-count-badge ms-auto">{{ shell_module_notification_counts.receipts }}</span>{% endif %}
+                        </a>
+                    </li>
+                    {% endif %}
+                    {% endif %}
+
+                    {% if user.is_superuser or user.role in 'ADMIN,DIRECTOR' %}
+                    <li class="sidebar-section-label"><i class="bi bi-bar-chart-line-fill"></i> Executive</li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if 'report' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'reports_dashboard' %}" data-bs-toggle="tooltip" data-bs-placement="right" title="Revenue, activity and performance analytics">
+                            <i class="bi bi-graph-up-arrow"></i> Reports
+                            {% if shell_module_notification_counts.reports %}<span class="sidebar-count-badge ms-auto">{{ shell_module_notification_counts.reports }}</span>{% endif %}
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if 'commission' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'commission_list' %}" data-bs-toggle="tooltip" data-bs-placement="right" title="Commissions earned ledger (Director / Admin only)">
+                            <i class="bi bi-cash-coin"></i> Commissions
+                        </a>
+                    </li>
+                    {% endif %}
+
+                    {% if user.is_superuser or user.role == 'ADMIN' %}
+                    <li class="sidebar-section-label"><i class="bi bi-shield-lock-fill"></i> Admin</li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if 'user' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'user_list' %}" data-bs-toggle="tooltip" data-bs-placement="right" title="User access and staff roles">
+                            <i class="bi bi-person-badge-fill"></i> Users
+                            {% if shell_module_notification_counts.users %}<span class="sidebar-count-badge ms-auto">{{ shell_module_notification_counts.users }}</span>{% endif %}
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if 'audit' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'audit_logs' %}" data-bs-toggle="tooltip" data-bs-placement="right" title="Audit trails and system activity logs">
+                            <i class="bi bi-clipboard2-data-fill"></i> Audit Logs
+                            {% if shell_module_notification_counts.audit %}<span class="sidebar-count-badge ms-auto">{{ shell_module_notification_counts.audit }}</span>{% endif %}
+                        </a>
+                    </li>
+                    {% endif %}
+
+                    <li class="sidebar-section-label">Help</li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if 'workflow' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'workflow_guide' %}" data-bs-toggle="tooltip" data-bs-placement="right" title="Operational process reference">
+                            <i class="bi bi-map-fill"></i> Workflow Guide
+                        </a>
+                    </li>
+                </ul>
+                <div class="sidebar-bottom-spacer"></div>
+            </nav>
+
+            <section class="main-content-wrap">
+                {% if messages %}
+                <div class="messages mb-3">
+                    {% for message in messages %}
+                    <div class="alert {% if message.tags == 'success' %}alert-success{% else %}alert-warning{% endif %} alert-dismissible fade show" role="alert">
+                        <i class="bi {% if message.tags == 'success' %}bi-check-circle{% else %}bi-exclamation-triangle{% endif %} me-2"></i>{{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
                     {% endfor %}
                 </div>
                 {% endif %}
-
-                {% block content %}{% endblock %}
+                <div class="content-surface main-content">
+        {% else %}
+            {% if messages %}
+            <div class="container pt-4">
+                <div class="messages mb-3">
+                    {% for message in messages %}
+                    <div class="alert {% if message.tags == 'success' %}alert-success{% else %}alert-warning{% endif %} alert-dismissible fade show" role="alert">
+                        <i class="bi {% if message.tags == 'success' %}bi-check-circle{% else %}bi-exclamation-triangle{% endif %} me-2"></i>{{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                    {% endfor %}
+                </div>
             </div>
+            {% endif %}
+        {% endif %}
+            {% block content %}{% endblock %}
+        {% if user.is_authenticated %}
+                </div>
+            </section>
         </div>
-    </div>
+        {% endif %}
+        </main>
 
-    <!-- Footer -->
-    <footer class="footer">
-        <div class="footer-wave"></div>
-        <div class="container footer-content">
-            <div class="row gy-4 align-items-start">
-                <div class="col-md-4">
-                    <div class="footer-brand">
-                        <img src="{% static 'images/roshe_logo.svg' %}" alt="Roshe Group" class="footer-logo">
-                        <p>Premium freight, customs brokerage, and last-mile support for ambitious businesses moving cargo between East Africa and Asia.</p>
+        <footer class="footer">
+            <div class="footer-wave"></div>
+            <div class="container footer-content">
+                <div class="row gy-4 align-items-start">
+                    <div class="col-md-4">
+                        <img src="{% static 'images/gmi_logo.png' %}" alt="GMI Terralink" class="footer-logo">
+                        <p class="mb-0 text-white-50">Integrated logistics, sourcing, invoicing and payment operations for high-trust international trade teams.</p>
+                    </div>
+                    <div class="col-md-4">
+                        <h6 class="footer-heading">Platform</h6>
+                        <ul class="footer-links list-unstyled mb-0">
+                            <li><i class="bi bi-house-door"></i><a href="{% url 'dashboard' %}">Home</a></li>
+                            <li><i class="bi bi-box-seam"></i><a href="{% url 'loading_list' %}">Cargo Management</a></li>
+                            <li><i class="bi bi-diagram-3"></i><a href="{% url 'transaction_list' %}">Trade Transactions</a></li>
+                            <li><i class="bi bi-receipt-cutoff"></i><a href="{% if shell_active_lane == 'sourcing' %}{% url 'sourcing_proforma_list' %}{% else %}{% url 'logistics_proforma_list' %}{% endif %}">Invoicing</a></li>
+                        </ul>
+                    </div>
+                    <div class="col-md-4">
+                        <h6 class="footer-heading">Contact</h6>
+                        <ul class="footer-contact list-unstyled mb-0">
+                            <li><i class="bi bi-geo-alt"></i><span>Hamdeen Lwanga Close, Mitala Road &middot;<br>Lower Residence, Plot 10/12, Muyenga, Kampala</span></li>
+                            <li><i class="bi bi-telephone"></i>Tel: +256 768 049 940 &middot; CN: +86 177 0195 4464</li>
+                            <li><i class="bi bi-envelope"></i>Email: gmiterralinkinfo@gmail.com</li>
+                            <li><i class="bi bi-globe"></i><a href="https://www.gmi-terralink.com" target="_blank" rel="noopener">www.gmi-terralink.com</a></li>
+                        </ul>
                     </div>
                 </div>
-                <div class="col-md-4">
-                    <h6 class="footer-heading">Operations</h6>
-                    <ul class="footer-links list-unstyled mb-0">
-                        <li><i class="bi bi-house-door"></i><a href="{% url 'dashboard' %}">Dashboard</a></li>
-                        <li><i class="bi bi-file-earmark-text"></i><a href="{% url 'reports_dashboard' %}">Reports & Analytics</a></li>
-                        <li><i class="bi bi-box-seam"></i><a href="{% url 'loading_list' %}">Cargo Registry</a></li>
-                        <li><i class="bi bi-cash-coin"></i><a href="{% url 'payment_list' %}">Payments & Billing</a></li>
-                    </ul>
-                </div>
-                <div class="col-md-4">
-                    <h6 class="footer-heading">Talk to us</h6>
-                    <ul class="footer-contact list-unstyled mb-0">
-                        <li><i class="bi bi-geo-alt"></i>Plot 13 Mukwano Courts, Buganda Road<br>Floor 2 · Rooms 201–202 I</li>
-                        <li><i class="bi bi-phone"></i>+256 788 239000 · +86 134 1613 7544</li>
-                        <li><i class="bi bi-envelope"></i>info@roshegroup.com</li>
-                    </ul>
+                <div class="footer-meta">
+                    <span>&copy; {% now 'Y' %} GMI Terralink Ltd. All rights reserved.</span>
+                    <span>Built for reliable freight, sourcing and financial control.</span>
                 </div>
             </div>
-            <div class="footer-meta">
-                <span>&copy; {% now "Y" %} Roshe Group Logistics. All rights reserved.</span>
-                <span>Trusted partner for seamless cross-border cargo flows.</span>
-            </div>
-        </div>
-    </footer>
+        </footer>
+    </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        (function () {
+            // Derive a sensible tooltip label from a button-like element.
+            function deriveTitle(el) {
+                var explicit = el.getAttribute('title') || el.getAttribute('data-bs-title') || el.getAttribute('aria-label');
+                if (explicit && explicit.trim()) return explicit.trim();
+                // Use visible text content, ignoring nested tooltip-only icons.
+                var text = (el.textContent || '').replace(/\s+/g, ' ').trim();
+                if (text) return text;
+                // Fallback: derive from icon class (e.g. "bi-pencil" -> "Pencil").
+                var icon = el.querySelector('i[class*="bi-"]');
+                if (icon) {
+                    var match = (icon.className || '').match(/bi-([a-z0-9-]+)/i);
+                    if (match) {
+                        return match[1].replace(/-/g, ' ').replace(/\b\w/g, function (c) { return c.toUpperCase(); });
+                    }
+                }
+                return '';
+            }
+
+            // Auto-attach tooltips to every button / .btn that doesn't already opt in.
+            var candidates = document.querySelectorAll(
+                'button, .btn, [role="button"], a.nav-link, .icon-btn, .btn-icon'
+            );
+            candidates.forEach(function (el) {
+                // Skip elements that should never get a tooltip.
+                if (el.closest('.no-tooltip') || el.classList.contains('no-tooltip')) return;
+                if (el.classList.contains('navbar-toggler')) return;
+                if (el.hasAttribute('data-bs-dismiss')) return; // close buttons handle their own labelling
+                var existing = el.getAttribute('data-bs-toggle');
+                // Don't clobber dropdown / modal / collapse triggers.
+                if (existing && existing !== 'tooltip') return;
+
+                var label = deriveTitle(el);
+                if (!label) return;
+
+                el.setAttribute('data-bs-toggle', 'tooltip');
+                el.setAttribute('data-bs-placement', el.getAttribute('data-bs-placement') || 'top');
+                if (!el.getAttribute('title')) el.setAttribute('title', label);
+            });
+
+            // Initialize tooltips for everything tagged.
+            document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function (element) {
+                try { new bootstrap.Tooltip(element, { trigger: 'hover focus', container: 'body' }); }
+                catch (e) { /* ignore */ }
+            });
+        })();
+    </script>
     {% block extra_js %}{% endblock %}
 </body>
 </html>

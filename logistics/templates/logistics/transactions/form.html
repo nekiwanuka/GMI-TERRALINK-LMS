@@ -1,0 +1,99 @@
+{% extends "logistics/base.html" %}
+
+{% block title %}{{ title }} - GMI TERRALINK Logistics Portal{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-header"><h4 class="mb-0">{{ title }}</h4></div>
+                <div class="card-body">
+                    <form method="post">
+                        {% csrf_token %}
+                        <div class="mb-3">
+                            <label class="form-label" for="customer-search">Customer</label>
+                            <input type="text"
+                                   id="customer-search"
+                                   class="form-control mb-2"
+                                   placeholder="Search by name, company, contact, phone or client ID..."
+                                   autocomplete="off">
+                            {{ form.customer }}
+                            <div class="form-text" id="customer-search-count"></div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Status</label>
+                            {{ form.status }}
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Estimated Delivery</label>
+                            {{ form.estimated_delivery }}
+                        </div>
+                        <div class="d-flex justify-content-end gap-2">
+                            <a href="{% url 'transaction_list' %}" class="btn btn-secondary">Cancel</a>
+                            <button class="btn btn-primary" type="submit">Save</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    const search = document.getElementById('customer-search');
+    if (!search) return;
+    // The customer select is the only <select name="customer"> on this page.
+    const select = document.querySelector('select[name="customer"]');
+    if (!select) return;
+
+    const counter = document.getElementById('customer-search-count');
+    // Cache original option text so we can show/hide rather than rebuild.
+    const originalOptions = Array.from(select.options).map(opt => ({
+        el: opt,
+        text: (opt.textContent || '').toLowerCase(),
+        value: opt.value,
+    }));
+
+    function applyFilter() {
+        const q = search.value.trim().toLowerCase();
+        let visible = 0;
+        let firstMatch = null;
+        originalOptions.forEach(item => {
+            // Always keep the empty/placeholder option visible.
+            const keep = !q || !item.value || item.text.includes(q);
+            item.el.hidden = !keep;
+            item.el.disabled = !keep;
+            if (keep && item.value) {
+                visible += 1;
+                if (!firstMatch) firstMatch = item.el;
+            }
+        });
+        if (counter) {
+            counter.textContent = q
+                ? `${visible} match${visible === 1 ? '' : 'es'}`
+                : '';
+        }
+        // Auto-select the single match for fast keyboard entry.
+        if (q && visible === 1 && firstMatch) {
+            select.value = firstMatch.value;
+        } else if (q && select.selectedOptions[0] && select.selectedOptions[0].hidden) {
+            select.value = '';
+        }
+    }
+
+    search.addEventListener('input', applyFilter);
+    search.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            // Prevent submitting the form while the user is just searching.
+            e.preventDefault();
+            applyFilter();
+            select.focus();
+        }
+    });
+})();
+</script>
+{% endblock %}

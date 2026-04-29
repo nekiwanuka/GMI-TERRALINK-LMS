@@ -1,6 +1,6 @@
 {% extends "logistics/base.html" %}
 
-{% block title %}Transit Management - Roshe Group Logistics Portal{% endblock %}
+{% block title %}Transit Management - GMI TERRALINK Logistics Portal{% endblock %}
 
 {% block content %}
 <div class="container-fluid">
@@ -58,7 +58,10 @@
                             {% endif %}
                         </td>
                         <td>
-                            {% if user.role == 'superuser' %}
+                            <a href="{% url 'transit_detail' transit.id %}" class="btn btn-sm btn-outline-info">
+                                <i class="bi bi-clock-history"></i> Timeline
+                            </a>
+                            {% if user.is_superuser or user.role == 'ADMIN' %}
                             <a href="{% url 'transit_update' transit.id %}" class="btn btn-sm btn-warning">
                                 <i class="bi bi-pencil"></i> Edit
                             </a>

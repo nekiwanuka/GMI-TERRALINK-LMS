@@ -1,162 +1,308 @@
 {% extends "logistics/base.html" %}
+{% load static %}
 
-{% block title %}Dashboard - Roshe Group Logistics Portal{% endblock %}
+{% block title %}Dashboard | GMI Terralink{% endblock %}
+
+{% block extra_css %}
+<style>
+  :root {
+    --gmi-black: #0a0a0a;
+    --gmi-cream: #f5e6a8;
+    --gmi-cream-soft: #fbf7e4;
+    --gmi-border: #ece7cd;
+    --gmi-muted: #6b6b6b;
+  }
+
+  .dash {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    padding: .25rem 0;
+  }
+
+  /* ── Slim header bar ─────────────────────────────── */
+  .dash-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: .85rem 1rem;
+    background: linear-gradient(135deg, var(--gmi-black) 0%, #1a1a1a 100%);
+    color: var(--gmi-cream);
+    border-radius: 10px;
+    flex-wrap: wrap;
+  }
+  .dash-bar h1 {
+    font-family: 'Space Grotesk', 'Plus Jakarta Sans', sans-serif;
+    font-size: 1.05rem;
+    font-weight: 700;
+    margin: 0;
+    color: #fff;
+    letter-spacing: -.005em;
+  }
+  .dash-bar p {
+    margin: .1rem 0 0;
+    font-size: .76rem;
+    color: rgba(255,255,255,.6);
+  }
+  .dash-lane {
+    display: inline-flex;
+    background: rgba(245,230,168,.08);
+    border: 1px solid rgba(245,230,168,.2);
+    border-radius: 8px;
+    padding: 3px;
+    gap: 2px;
+  }
+  .dash-lane a {
+    padding: .25rem .65rem;
+    font-size: .72rem;
+    font-weight: 600;
+    color: rgba(255,255,255,.7);
+    text-decoration: none;
+    border-radius: 6px;
+    white-space: nowrap;
+  }
+  .dash-lane a:hover { color: #fff; }
+  .dash-lane a.is-active { background: var(--gmi-cream); color: var(--gmi-black); }
+
+  /* ── Compact KPI grid ────────────────────────────── */
+  .kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: .6rem;
+  }
+  .kpi {
+    background: #fff;
+    border: 1px solid var(--gmi-border);
+    border-radius: 9px;
+    padding: .65rem .75rem;
+    display: flex;
+    align-items: center;
+    gap: .65rem;
+    transition: border-color .15s ease, transform .15s ease;
+  }
+  .kpi:hover { border-color: var(--gmi-black); transform: translateY(-1px); }
+  .kpi i.bi {
+    width: 32px; height: 32px;
+    border-radius: 7px;
+    background: var(--gmi-cream-soft);
+    color: var(--gmi-black);
+    display: flex; align-items: center; justify-content: center;
+    font-size: .95rem;
+    flex-shrink: 0;
+  }
+  .kpi .v {
+    font-family: 'Space Grotesk', 'Plus Jakarta Sans', sans-serif;
+    font-size: 1.05rem;
+    font-weight: 700;
+    line-height: 1.1;
+    color: var(--gmi-black);
+  }
+  .kpi .l {
+    font-size: .7rem;
+    color: var(--gmi-muted);
+    line-height: 1.2;
+    margin-top: 1px;
+  }
+  .kpi.is-warn i.bi { background: #fef3c7; color: #92400e; }
+  .kpi.is-warn .v { color: #92400e; }
+  .kpi.is-danger i.bi { background: #fee2e2; color: #991b1b; }
+  .kpi.is-danger .v { color: #991b1b; }
+  .kpi.is-success i.bi { background: #dcfce7; color: #166534; }
+  .kpi.is-success .v { color: #166534; }
+
+  /* ── Two-column panels ───────────────────────────── */
+  .dash-cols {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: .9rem;
+  }
+  @media (max-width: 900px) { .dash-cols { grid-template-columns: 1fr; } }
+
+  .dash-panel {
+    background: #fff;
+    border: 1px solid var(--gmi-border);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .dash-panel-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: .65rem .9rem;
+    border-bottom: 1px solid var(--gmi-border);
+    background: var(--gmi-cream-soft);
+  }
+  .dash-panel-head h3 {
+    margin: 0;
+    font-family: 'Space Grotesk', 'Plus Jakarta Sans', sans-serif;
+    font-size: .82rem;
+    font-weight: 700;
+    color: var(--gmi-black);
+    display: inline-flex;
+    align-items: center;
+    gap: .4rem;
+  }
+  .dash-panel-head a {
+    font-size: .72rem;
+    font-weight: 600;
+    color: var(--gmi-black);
+    text-decoration: none;
+    padding: .2rem .55rem;
+    border-radius: 6px;
+    border: 1px solid var(--gmi-border);
+    background: #fff;
+    white-space: nowrap;
+  }
+  .dash-panel-head a:hover { background: var(--gmi-cream); }
+
+  .dash-panel table { margin: 0; font-size: .8rem; }
+  .dash-panel table th {
+    font-size: .68rem;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: var(--gmi-muted);
+    font-weight: 600;
+    background: #fafaf6;
+    border-bottom: 1px solid var(--gmi-border);
+  }
+  .dash-panel table td, .dash-panel table th { padding: .45rem .75rem; }
+  .dash-panel table tr:last-child td { border-bottom: 0; }
+  .dash-panel .empty {
+    padding: 1.5rem .9rem;
+    text-align: center;
+    color: var(--gmi-muted);
+    font-size: .8rem;
+  }
+  .dash-pill {
+    display: inline-block;
+    padding: .1rem .5rem;
+    border-radius: 999px;
+    font-size: .68rem;
+    font-weight: 600;
+    background: var(--gmi-cream-soft);
+    color: var(--gmi-black);
+    border: 1px solid var(--gmi-border);
+  }
+  .dash-pill.ok { background: #dcfce7; color: #166534; border-color: #bbf7d0; }
+</style>
+{% endblock %}
 
 {% block content %}
-<div class="container-fluid">
-    <h1 class="mb-4">
-        <i class="bi bi-speedometer2"></i> Dashboard
-    </h1>
+<div class="dash">
 
-    <!-- Statistics Cards -->
-    <div class="row row-cols-1 row-cols-sm-2 row-cols-lg-4 row-cols-xxl-5 g-3 mb-4">
-        <div class="col">
-            <div class="card h-100">
-                <div class="card-body dashboard-stat">
-                    <h4><i class="bi bi-people"></i> Clients</h4>
-                    <p>{{ total_clients }}</p>
-                </div>
-            </div>
-        </div>
-        <div class="col">
-            <div class="card h-100">
-                <div class="card-body dashboard-stat">
-                    <h4><i class="bi bi-box"></i> Cargo</h4>
-                    <p>{{ total_loadings }}</p>
-                </div>
-            </div>
-        </div>
-        <div class="col">
-            <div class="card h-100">
-                <div class="card-body dashboard-stat">
-                    <h4><i class="bi bi-ship"></i> In Transit</h4>
-                    <p>{{ total_transits }}</p>
-                </div>
-            </div>
-        </div>
-        <div class="col">
-            <div class="card h-100">
-                <div class="card-body dashboard-stat">
-                    <h4><i class="bi bi-exclamation-circle"></i> Outstanding</h4>
-                    <p>${{ outstanding_payments|floatformat:2 }}</p>
-                </div>
-            </div>
-        </div>
-        <div class="col">
-            <div class="card h-100">
-                <div class="card-body dashboard-stat">
-                    <h4><i class="bi bi-shield-check"></i> Pending Verifications</h4>
-                    <p>{{ pending_verifications }}</p>
-                </div>
-            </div>
-        </div>
+  <!-- Slim header -->
+  <div class="dash-bar">
+    <div>
+      <h1>Welcome back, {{ user.username }}</h1>
+      <p>{{ active_lane_label }} &middot; operations overview</p>
+    </div>
+    {% if can_switch_lane %}
+    <div class="dash-lane">
+      <a href="?lane=all" class="{% if active_lane == 'all' %}is-active{% endif %}">All</a>
+      <a href="?lane=logistics" class="{% if active_lane == 'logistics' %}is-active{% endif %}">Logistics</a>
+      <a href="?lane=sourcing" class="{% if active_lane == 'sourcing' %}is-active{% endif %}">Sourcing</a>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Unified KPI grid -->
+  <div class="kpi-grid">
+    <div class="kpi"><i class="bi bi-people"></i><div><div class="v">{{ total_clients }}</div><div class="l">Clients</div></div></div>
+    <div class="kpi"><i class="bi bi-box-seam"></i><div><div class="v">{{ total_loadings }}</div><div class="l">Cargo records</div></div></div>
+    <div class="kpi"><i class="bi bi-compass"></i><div><div class="v">{{ total_transits }}</div><div class="l">Shipments</div></div></div>
+    <div class="kpi"><i class="bi bi-diagram-3"></i><div><div class="v">{{ total_transactions }}</div><div class="l">Transactions</div></div></div>
+    <div class="kpi"><i class="bi bi-hourglass-split"></i><div><div class="v">{{ active_transactions }}</div><div class="l">Active</div></div></div>
+    <div class="kpi {% if pending_containers %}is-warn{% endif %}"><i class="bi bi-archive"></i><div><div class="v">{{ pending_containers }}</div><div class="l">Returns pending</div></div></div>
+    <div class="kpi {% if pending_verifications %}is-warn{% endif %}"><i class="bi bi-shield-check"></i><div><div class="v">{{ pending_verifications }}</div><div class="l">Verifications</div></div></div>
+    {% if can_view_financials %}
+    <div class="kpi is-success"><i class="bi bi-currency-dollar"></i><div><div class="v">${{ total_revenue|floatformat:0 }}</div><div class="l">Revenue</div></div></div>
+    <div class="kpi is-danger"><i class="bi bi-exclamation-octagon"></i><div><div class="v">${{ outstanding_balance|floatformat:0 }}</div><div class="l">Outstanding</div></div></div>
+    <div class="kpi"><i class="bi bi-truck"></i><div><div class="v">{{ active_shipments }}</div><div class="l">In transit</div></div></div>
+    <div class="kpi"><i class="bi bi-arrow-repeat"></i><div><div class="v">{{ conversion.rate }}%</div><div class="l">Conversion</div></div></div>
+    <div class="kpi is-success"><i class="bi bi-piggy-bank"></i><div><div class="v">${{ profit_estimate|floatformat:0 }}</div><div class="l">Profit est.</div></div></div>
+    {% endif %}
+  </div>
+
+  <!-- Two-column tables -->
+  <div class="dash-cols">
+
+    <div class="dash-panel">
+      <div class="dash-panel-head">
+        <h3><i class="bi bi-clock-history"></i> Recent transactions</h3>
+        <a href="{% url 'transaction_list' %}">Open</a>
+      </div>
+      {% if recent_transactions %}
+      <div class="table-responsive">
+        <table class="table mb-0">
+          <thead><tr><th>ID</th><th>Client</th><th>Status</th><th>Date</th></tr></thead>
+          <tbody>
+            {% for txn in recent_transactions %}
+            <tr>
+              <td><a href="{% url 'transaction_detail' txn.pk %}" class="text-decoration-none fw-semibold">{{ txn.transaction_id }}</a></td>
+              <td>{{ txn.customer.name }}</td>
+              <td><span class="dash-pill">{{ txn.get_status_display }}</span></td>
+              <td class="text-muted">{{ txn.created_at|date:"d M Y" }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="empty">No transactions yet</div>
+      {% endif %}
     </div>
 
-    <div class="row">
-        <!-- Recent Clients -->
-        <div class="col-md-6">
-            <div class="card">
-                <div class="card-header">
-                    <h5><i class="bi bi-people"></i> Recent Clients</h5>
-                </div>
-                <div class="card-body">
-                    <div class="table-responsive">
-                        <table class="table table-sm table-hover">
-                            <thead class="table-light">
-                                <tr>
-                                    <th>Client ID</th>
-                                    <th>Name</th>
-                                    <th>Phone</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for client in recent_clients %}
-                                <tr>
-                                    <td>
-                                        <a href="{% url 'client_detail' client.id %}">
-                                            {{ client.client_id }}
-                                        </a>
-                                    </td>
-                                    <td>{{ client.name }}</td>
-                                    <td>{{ client.phone }}</td>
-                                </tr>
-                                {% empty %}
-                                <tr>
-                                    <td colspan="3" class="text-center text-muted">No clients yet</td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-                <div class="card-footer">
-                    <a href="{% url 'client_list' %}" class="btn btn-sm btn-primary">
-                        View All Clients
-                    </a>
-                </div>
-            </div>
-        </div>
-
-        <!-- Recent Loadings -->
-        <div class="col-md-6">
-            <div class="card">
-                <div class="card-header">
-                    <h5><i class="bi bi-box"></i> Recent Cargo</h5>
-                </div>
-                <div class="card-body">
-                    <div class="table-responsive">
-                        <table class="table table-sm table-hover">
-                            <thead class="table-light">
-                                <tr>
-                                    <th>Loading ID</th>
-                                    <th>Client</th>
-                                    <th>Destination</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for loading in recent_loadings %}
-                                <tr>
-                                    <td>
-                                        <a href="{% url 'loading_detail' loading.id %}">
-                                            {{ loading.loading_id }}
-                                        </a>
-                                    </td>
-                                    <td>{{ loading.client.name }}</td>
-                                    <td>{{ loading.destination }}</td>
-                                </tr>
-                                {% empty %}
-                                <tr>
-                                    <td colspan="3" class="text-center text-muted">No cargo yet</td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-                <div class="card-footer">
-                    <a href="{% url 'loading_list' %}" class="btn btn-sm btn-primary">
-                        View All Cargo
-                    </a>
-                </div>
-            </div>
-        </div>
+    <div class="dash-panel">
+      {% if can_view_financials %}
+      <div class="dash-panel-head">
+        <h3><i class="bi bi-trophy"></i> Top clients</h3>
+        <a href="{% url 'reports_dashboard' %}">Reports</a>
+      </div>
+      {% if top_clients %}
+      <div class="table-responsive">
+        <table class="table mb-0">
+          <thead><tr><th>Client</th><th>Orders</th><th>Confirmed</th></tr></thead>
+          <tbody>
+            {% for client in top_clients %}
+            <tr>
+              <td class="fw-semibold">{{ client.customer__name }}</td>
+              <td>{{ client.total_transactions }}</td>
+              <td><span class="dash-pill ok">{{ client.confirmed_orders }}</span></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="empty">No data yet</div>
+      {% endif %}
+      {% else %}
+      <div class="dash-panel-head">
+        <h3><i class="bi bi-person-lines-fill"></i> Recent clients</h3>
+        <a href="{% url 'client_list' %}">Open</a>
+      </div>
+      {% if recent_clients %}
+      <div class="table-responsive">
+        <table class="table mb-0">
+          <thead><tr><th>ID</th><th>Name</th><th>Phone</th></tr></thead>
+          <tbody>
+            {% for client in recent_clients %}
+            <tr>
+              <td><a href="{% url 'client_detail' client.id %}" class="text-decoration-none fw-semibold">{{ client.client_id }}</a></td>
+              <td>{{ client.name }}</td>
+              <td class="text-muted">{{ client.phone }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="empty">No clients yet</div>
+      {% endif %}
+      {% endif %}
     </div>
 
-    <!-- Pending Containers -->
-    <div class="row mt-4">
-        <div class="col-md-12">
-            <div class="card">
-                <div class="card-header">
-                    <h5><i class="bi bi-archive"></i> Pending Container Returns: <span class="badge bg-warning">{{ pending_containers }}</span></h5>
-                </div>
-                <div class="card-body">
-                    <p class="text-muted">Keep track of containers awaiting return</p>
-                    <a href="{% url 'container_return_list' %}" class="btn btn-warning">
-                        View Pending Returns
-                    </a>
-                </div>
-            </div>
-        </div>
-    </div>
+  </div>
 </div>
 {% endblock %}

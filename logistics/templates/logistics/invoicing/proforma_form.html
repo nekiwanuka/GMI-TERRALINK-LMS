@@ -1,0 +1,483 @@
+{% extends "logistics/base.html" %}
+
+{% block title %}{{ title }} - GMI TERRALINK Logistics Portal{% endblock %}
+
+{% block extra_css %}
+<style>
+.section-card {
+    border: 1px solid #e9ecef;
+    border-radius: 10px;
+}
+.line-items-section {
+    border: 1px solid #dee2e6;
+    border-radius: 10px;
+    padding: 1.25rem;
+}
+.line-items-section .section-title {
+    font-size: 1rem;
+    font-weight: 600;
+    margin-bottom: 0;
+}
+.line-items-section .section-sub {
+    font-size: 0.82rem;
+    color: #6c757d;
+}
+#line-items-table th {
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    background: #f8f9fa;
+}
+#line-items-table td input {
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    font-size: 0.88rem;
+    padding: .3rem .5rem;
+    width: 100%;
+}
+#line-items-table td input:focus {
+    border-color: #86b7fe;
+    outline: none;
+    box-shadow: 0 0 0 .15rem rgba(13,110,253,.15);
+}
+#line-items-table .row-total,
+#items-subtotal,
+#grand-total {
+    background: #f8f9fa !important;
+    font-weight: 600;
+}
+.remove-row-btn {
+    border: 1px solid #f5c6cb;
+    color: #dc3545;
+    background: #fff;
+    border-radius: 6px;
+    width: 28px;
+    height: 28px;
+    line-height: 1;
+    font-size: 1rem;
+    cursor: pointer;
+}
+.remove-row-btn:hover {
+    background: #dc3545;
+    color: #fff;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row justify-content-center">
+        <div class="col-xl-10">
+
+            {# ── Page header ────────────────────────────────────────────── #}
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <div>
+                    <h1 class="mb-0">
+                        <i class="bi bi-file-earmark-text"></i> {{ title }}
+                    </h1>
+                    {% if is_freight %}
+                        <span class="badge bg-primary me-1">LOGISTICS DEPT</span>
+                        {% if loading.entry_type == "GROUPAGE" %}
+                            <span class="badge bg-warning text-dark">GROUPAGE (LCL) — Charged per CBM</span>
+                        {% else %}
+                            <span class="badge bg-info text-dark">FULL CONTAINER (FCL) — Container Rate</span>
+                        {% endif %}
+                    {% else %}
+                        <span class="badge bg-success me-1">SOURCING DEPT</span>
+                        <small class="text-muted">Trade quotation — enter goods, quantities and client pricing.</small>
+                    {% endif %}
+                </div>
+                <a href="{% if is_freight %}{% url 'logistics_proforma_list' %}{% else %}{% url 'sourcing_proforma_list' %}{% endif %}" class="btn btn-outline-secondary">Back to Proformas</a>
+            </div>
+
+            <form method="post" class="card shadow-sm">
+                {% csrf_token %}
+                <div class="card-body p-4">
+
+                    {# ── Cargo reference panel (freight only) ─────────────── #}
+                    {% if is_freight and loading %}
+                    <div class="alert alert-primary border border-primary rounded-3 mb-4 py-3">
+                        <div class="row g-2 align-items-center">
+                            <div class="col-auto">
+                                <i class="bi bi-box-seam fs-3 text-primary"></i>
+                            </div>
+                            <div class="col">
+                                <div class="fw-bold text-primary fs-6 mb-1">
+                                    Cargo Reference: {{ loading.loading_id }}
+                                    &nbsp;|&nbsp; {{ loading.client.name }}
+                                </div>
+                                <div class="d-flex flex-wrap gap-3 small text-dark">
+                                    <span><i class="bi bi-geo-alt"></i> {{ loading.origin }} &rarr; {{ loading.destination }}</span>
+                                    <span><i class="bi bi-calendar3"></i> {{ loading.loading_date }}</span>
+                                    {% if loading.cbm %}<span><strong>CBM:</strong> {{ loading.cbm }}</span>{% endif %}
+                                    {% if loading.weight %}<span><strong>Weight:</strong> {{ loading.weight }} KG</span>{% endif %}
+                                    {% if loading.packages %}<span><strong>Packages:</strong> {{ loading.packages }}</span>{% endif %}
+                                    {% if loading.container_number %}<span><strong>Container:</strong> {{ loading.container_number }}</span>{% endif %}
+                                    {% if loading.container_size %}<span><strong>Size:</strong> {{ loading.get_container_size_display }}</span>{% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    {# ── Header fields ──────────────────────────────────────── #}
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Transaction</label>
+                            {% if is_freight %}
+                                {# Freight: transaction is locked, just show it #}
+                                <input type="hidden" name="transaction" value="{{ proforma.transaction.pk }}">
+                                <input type="text" class="form-control bg-light" readonly
+                                    value="{{ proforma.transaction.transaction_id }} – {{ proforma.transaction.customer.name }}">
+                            {% else %}
+                                <select name="transaction" class="form-select" required>
+                                    <option value="">Select transaction</option>
+                                    {% for tx in transactions %}
+                                    <option value="{{ tx.pk }}"
+                                        {% if proforma and proforma.transaction.pk == tx.pk or initial_transaction and initial_transaction.pk == tx.pk %}selected{% endif %}>
+                                        {{ tx.transaction_id }} - {{ tx.customer.name }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            {% endif %}
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold">Validity Date</label>
+                            <input type="date" name="validity_date" class="form-control"
+                                value="{% if proforma %}{{ proforma.validity_date|date:'Y-m-d' }}{% else %}{{ initial_validity_date }}{% endif %}">
+                        </div>
+                        {% if not proforma %}
+                        <div class="col-md-5">
+                            <label class="form-label fw-semibold">Internal Notes</label>
+                            <textarea name="notes" class="form-control" rows="2"
+                                placeholder="Optional internal notes...">{{ initial_notes }}</textarea>
+                        </div>
+                        {% endif %}
+                        {% if not is_freight %}
+                        <div class="col-12">
+                            <div class="alert alert-light border small mb-0 py-2">
+                                Suppliers are managed in the Supplier Directory.
+                                <a href="{% url 'supplier_list' %}">Open Suppliers Directory</a>
+                            </div>
+                        </div>
+                        {% endif %}
+                    </div>
+
+                    {% if is_freight %}
+                    <div class="line-items-section">
+                        <div class="d-flex justify-content-between align-items-start mb-3">
+                            <div>
+                                <div class="section-title">Freight Charges</div>
+                                {% if loading.entry_type == "GROUPAGE" %}
+                                <div class="section-sub text-warning fw-semibold">
+                                    <i class="bi bi-info-circle"></i>
+                                    Groupage billing — enter total CBM as quantity and your rate per CBM.
+                                </div>
+                                {% else %}
+                                <div class="section-sub text-info fw-semibold">
+                                    <i class="bi bi-info-circle"></i>
+                                    FCL billing — enter 1 as quantity and the flat container rate.
+                                </div>
+                                {% endif %}
+                            </div>
+                            <button type="button" class="btn btn-sm btn-dark" id="add-row-btn">
+                                <i class="bi bi-plus-lg"></i> Add Charge Row
+                            </button>
+                        </div>
+
+                        <div class="table-responsive">
+                            <table class="table table-bordered align-middle mb-0" id="line-items-table">
+                                <thead>
+                                    <tr>
+                                        <th style="width:38%;">Charge Description</th>
+                                        <th style="width:12%;">{% if loading.entry_type == "GROUPAGE" %}CBM{% else %}Qty{% endif %}</th>
+                                        <th style="width:10%;">Unit</th>
+                                        <th style="width:18%;">Rate per Unit (USD)</th>
+                                        <th style="width:14%;">Amount</th>
+                                        <th style="width:8%;"></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for item in proforma.items %}
+                                    <tr>
+                                        <td><input type="text" name="item_desc[]" class="form-control" value="{{ item.description }}" required></td>
+                                        <td><input type="number" step="0.001" min="0" name="item_qty[]" class="form-control row-qty" value="{{ item.quantity|default:'1' }}"></td>
+                                        <td><input type="text" name="item_unit[]" class="form-control" value="{{ item.unit|default:'CBM' }}" placeholder="CBM"></td>
+                                        <td><input type="number" step="0.01" min="0" name="item_unit_price[]" class="form-control row-unit-price" value="{{ item.unit_price|default:'0' }}"></td>
+                                        <input type="hidden" name="item_sales_price[]" class="row-sales-price" value="{{ item.unit_price|default:'0' }}">
+                                        <td><input type="text" class="form-control row-total" readonly></td>
+                                        <td class="text-center"><button type="button" class="remove-row-btn">&times;</button></td>
+                                    </tr>
+                                    {% empty %}
+                                    <tr>
+                                        <td><input type="text" name="item_desc[]" class="form-control" placeholder="e.g. Sea Freight – Groupage (LCL)" required></td>
+                                        <td><input type="number" step="0.001" min="0" name="item_qty[]" class="form-control row-qty" value="{% if loading.cbm %}{{ loading.cbm }}{% else %}1{% endif %}"></td>
+                                        <td><input type="text" name="item_unit[]" class="form-control" value="{% if loading.entry_type == 'GROUPAGE' %}CBM{% else %}Container{% endif %}"></td>
+                                        <td><input type="number" step="0.01" min="0" name="item_unit_price[]" class="form-control row-unit-price" value="0"></td>
+                                        <input type="hidden" name="item_sales_price[]" class="row-sales-price" value="0">
+                                        <td><input type="text" class="form-control row-total" readonly></td>
+                                        <td class="text-center"><button type="button" class="remove-row-btn">&times;</button></td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                                <tfoot>
+                                    <tr class="table-light">
+                                        <td colspan="4" class="text-end fw-bold">Freight Subtotal</td>
+                                        <td><input type="text" id="items-subtotal" class="form-control" readonly></td>
+                                        <td></td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                    </div>
+
+                    {# Freight additional charges #}
+                    <div class="row g-3 mt-1">
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Port Handling / Clearance Fee</label>
+                            <input type="number" step="0.01" min="0" name="sourcing_fee" class="form-control fee-input"
+                                value="{{ form_values.sourcing_fee|default:'0' }}">
+                            <div class="form-text">Port handling, customs clearance charges.</div>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Documentation Fee</label>
+                            <input type="number" step="0.01" min="0" name="handling_fee" class="form-control fee-input"
+                                value="{{ form_values.handling_fee|default:'0' }}">
+                            <div class="form-text">Bill of lading, certificates, other docs.</div>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Storage / Demurrage</label>
+                            <input type="number" step="0.01" min="0" name="shipping_fee" class="form-control fee-input"
+                                value="{{ form_values.shipping_fee|default:'0' }}">
+                            <div class="form-text">Warehouse storage or port demurrage charges.</div>
+                        </div>
+                    </div>
+
+                    {% else %}
+                    <div class="line-items-section">
+                        <div class="d-flex justify-content-between align-items-start mb-3">
+                            <div>
+                                <div class="section-title">Line Items</div>
+                                <div class="section-sub">Enter item, quantity, unit price, and client sales price.</div>
+                            </div>
+                            <button type="button" class="btn btn-sm btn-dark" id="add-row-btn">
+                                <i class="bi bi-plus-lg"></i> Add Row
+                            </button>
+                        </div>
+
+                        <div class="table-responsive">
+                            <table class="table table-bordered align-middle mb-0" id="line-items-table">
+                                <thead>
+                                    <tr>
+                                        <th style="width:35%;">Item</th>
+                                        <th style="width:9%;">QTY</th>
+                                        <th style="width:16%;">Unit Price</th>
+                                        <th style="width:16%;">Sales Price</th>
+                                        <th style="width:16%;">Line Total</th>
+                                        <th style="width:8%;"></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% if proforma %}
+                                        {% for item in proforma.items %}
+                                        <tr>
+                                            <td><input type="text" name="item_desc[]" class="form-control" value="{{ item.description }}" required></td>
+                                            <td><input type="number" step="0.01" min="0" name="item_qty[]" class="form-control row-qty" value="{{ item.quantity|default:'1' }}"></td>
+                                            <td><input type="number" step="0.01" min="0" name="item_unit_price[]" class="form-control row-unit-price" value="{{ item.unit_price|default:'0' }}"></td>
+                                            <td><input type="number" step="0.01" min="0" name="item_sales_price[]" class="form-control row-sales-price" value="{{ item.sales_price|default:item.unit_price|default:'0' }}"></td>
+                                            <td><input type="text" class="form-control row-total" readonly></td>
+                                            <td class="text-center"><button type="button" class="remove-row-btn">&times;</button></td>
+                                        </tr>
+                                        {% endfor %}
+                                    {% elif prefill_items %}
+                                        {% for item in prefill_items %}
+                                        <tr>
+                                            <td><input type="text" name="item_desc[]" class="form-control" value="{{ item.description }}" required></td>
+                                            <td><input type="number" step="0.01" min="0" name="item_qty[]" class="form-control row-qty" value="{{ item.quantity|default:'1' }}"></td>
+                                            <td><input type="number" step="0.01" min="0" name="item_unit_price[]" class="form-control row-unit-price" value="{{ item.unit_price }}"></td>
+                                            <td><input type="number" step="0.01" min="0" name="item_sales_price[]" class="form-control row-sales-price" value="{{ item.sales_price }}"></td>
+                                            <td><input type="text" class="form-control row-total" readonly></td>
+                                            <td class="text-center"><button type="button" class="remove-row-btn">&times;</button></td>
+                                        </tr>
+                                        {% endfor %}
+                                    {% else %}
+                                        <tr>
+                                            <td><input type="text" name="item_desc[]" class="form-control" placeholder="e.g. Office chair" required></td>
+                                            <td><input type="number" step="0.01" min="0" name="item_qty[]" class="form-control row-qty" value="1"></td>
+                                            <td><input type="number" step="0.01" min="0" name="item_unit_price[]" class="form-control row-unit-price" value="0"></td>
+                                            <td><input type="number" step="0.01" min="0" name="item_sales_price[]" class="form-control row-sales-price" value="0"></td>
+                                            <td><input type="text" class="form-control row-total" readonly></td>
+                                            <td class="text-center"><button type="button" class="remove-row-btn">&times;</button></td>
+                                        </tr>
+                                    {% endif %}
+                                </tbody>
+                                <tfoot>
+                                    <tr class="table-light">
+                                        <td colspan="4" class="text-end fw-bold">Items Subtotal</td>
+                                        <td><input type="text" id="items-subtotal" class="form-control" readonly></td>
+                                        <td></td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                    </div>
+
+                    {# Trade additional fees #}
+                    <div class="row g-3 mt-1">
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Sourcing Fee</label>
+                            <input type="number" step="0.01" min="0" name="sourcing_fee" class="form-control fee-input"
+                                value="{{ form_values.sourcing_fee|default:'0' }}">
+                            <div class="form-text">Optional sourcing charge added to the quote.</div>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Handling Fee</label>
+                            <input type="number" step="0.01" min="0" name="handling_fee" class="form-control fee-input"
+                                value="{{ form_values.handling_fee|default:'0' }}">
+                            <div class="form-text">Optional handling or coordination charge.</div>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Shipping Fee</label>
+                            <input type="number" step="0.01" min="0" name="shipping_fee" class="form-control fee-input"
+                                value="{{ form_values.shipping_fee|default:'0' }}">
+                            <div class="form-text">Optional shipping charge to include on the quote.</div>
+                        </div>
+                    </div>
+                    {% endif %}{# end is_freight #}
+
+                    {# ── Grand total (shared) ─────────────────────────────── #}
+                    <div class="row g-3 mt-1 mb-1">
+                        <div class="col-md-4 offset-md-8">
+                            <label class="form-label fw-semibold">
+                                {% if is_freight %}Freight Invoice Total{% else %}Proforma Grand Total{% endif %}
+                            </label>
+                            <input type="text" id="grand-total" class="form-control" readonly>
+                        </div>
+                    </div>
+
+                </div>{# /card-body #}
+
+                <div class="card-footer bg-white d-flex justify-content-between align-items-center px-4 py-3">
+                    {% if is_freight %}
+                        <small class="text-muted">
+                            <i class="bi bi-truck"></i> Logistics Department — Freight Invoice.
+                            Rate × CBM (Groupage) or flat container rate (FCL).
+                        </small>
+                    {% else %}
+                        <small class="text-muted">
+                            <i class="bi bi-bag"></i> Sourcing Department — Trade Proforma.
+                            Suppliers managed in the <a href="{% url 'supplier_list' %}">Supplier Directory</a>.
+                        </small>
+                    {% endif %}
+                    <div class="d-flex gap-2">
+                        <a href="{% if proforma %}{% if proforma.loading %}{% url 'logistics_proforma_detail' proforma.pk %}{% else %}{% url 'sourcing_proforma_detail' proforma.pk %}{% endif %}{% else %}{% if is_freight %}{% url 'logistics_proforma_list' %}{% else %}{% url 'sourcing_proforma_list' %}{% endif %}{% endif %}"
+                            class="btn btn-outline-secondary">Cancel</a>
+                        <button type="submit" class="btn btn-primary">
+                            {% if is_freight %}Save Freight Invoice{% else %}Save Proforma{% endif %}
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    const tableBody = document.querySelector('#line-items-table tbody');
+    const addRowBtn = document.getElementById('add-row-btn');
+    const itemsSubtotal = document.getElementById('items-subtotal');
+    const grandTotal = document.getElementById('grand-total');
+    const feeInputs = document.querySelectorAll('.fee-input');
+    const isFreight = {{ is_freight|yesno:"true,false" }};
+
+    function numberValue(input) {
+        const value = parseFloat(input.value);
+        return Number.isFinite(value) ? value : 0;
+    }
+
+    function updateRow(row) {
+        const qtyInput = row.querySelector('.row-qty');
+        const unitInput = row.querySelector('.row-unit-price');
+        const totalInput = row.querySelector('.row-total');
+        const lineTotal = numberValue(qtyInput) * numberValue(unitInput);
+        // Keep hidden sales_price in sync for freight rows
+        const salesInput = row.querySelector('.row-sales-price');
+        if (salesInput) salesInput.value = lineTotal.toFixed(2);
+        totalInput.value = lineTotal.toFixed(2);
+    }
+
+    function updateTotals() {
+        let total = 0;
+        tableBody.querySelectorAll('tr').forEach((row) => {
+            updateRow(row);
+            total += parseFloat(row.querySelector('.row-total').value) || 0;
+        });
+        itemsSubtotal.value = total.toFixed(2);
+
+        let grand = total;
+        feeInputs.forEach((input) => {
+            grand += numberValue(input);
+        });
+        grandTotal.value = grand.toFixed(2);
+    }
+
+    function bindRow(row) {
+        row.querySelectorAll('.row-qty, .row-unit-price').forEach((input) => {
+            input.addEventListener('input', updateTotals);
+        });
+        const salesInput = row.querySelector('.row-sales-price');
+        if (salesInput && salesInput.type !== 'hidden') {
+            salesInput.addEventListener('input', () => {
+                const totalInput = row.querySelector('.row-total');
+                totalInput.value = parseFloat(salesInput.value || 0).toFixed(2);
+                let total = 0;
+                tableBody.querySelectorAll('.row-total').forEach(t => total += parseFloat(t.value) || 0);
+                grandTotal.value = total.toFixed(2);
+            });
+        }
+        const removeBtn = row.querySelector('.remove-row-btn');
+        removeBtn.addEventListener('click', () => {
+            if (tableBody.querySelectorAll('tr').length > 1) {
+                row.remove();
+                updateTotals();
+            }
+        });
+    }
+
+    addRowBtn.addEventListener('click', () => {
+        const row = document.createElement('tr');
+        if (isFreight) {
+            row.innerHTML = `
+                <td><input type="text" name="item_desc[]" class="form-control" placeholder="e.g. Port Handling" required></td>
+                <td><input type="number" step="0.001" min="0" name="item_qty[]" class="form-control row-qty" value="1"></td>
+                <td><input type="text" name="item_unit[]" class="form-control" value="CBM" placeholder="CBM"></td>
+                <td><input type="number" step="0.01" min="0" name="item_unit_price[]" class="form-control row-unit-price" value="0"></td>
+                <input type="hidden" name="item_sales_price[]" class="row-sales-price" value="0">
+                <td><input type="text" class="form-control row-total" readonly></td>
+                <td class="text-center"><button type="button" class="remove-row-btn">&times;</button></td>
+            `;
+        } else {
+            row.innerHTML = `
+                <td><input type="text" name="item_desc[]" class="form-control" required></td>
+                <td><input type="number" step="0.01" min="0" name="item_qty[]" class="form-control row-qty" value="1"></td>
+                <td><input type="number" step="0.01" min="0" name="item_unit_price[]" class="form-control row-unit-price" value="0"></td>
+                <td><input type="number" step="0.01" min="0" name="item_sales_price[]" class="form-control row-sales-price" value="0"></td>
+                <td><input type="text" class="form-control row-total" readonly></td>
+                <td class="text-center"><button type="button" class="remove-row-btn">&times;</button></td>
+            `;
+        }
+        tableBody.appendChild(row);
+        bindRow(row);
+        updateTotals();
+    });
+
+    tableBody.querySelectorAll('tr').forEach(bindRow);
+    feeInputs.forEach((input) => input.addEventListener('input', updateTotals));
+    updateTotals();
+})();
+</script>
+{% endblock %}

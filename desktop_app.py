@@ -1,7 +1,8 @@
 """
-Desktop application wrapper for Roshe Group Logistics Portal System
+Desktop application wrapper for GMI TERRALINK Logistics Portal System
 Uses PyWebView to wrap Django application
 """
+
 import os
 import sys
 import threading
@@ -13,11 +14,12 @@ from django.core.management import execute_from_command_line
 # Get the project directory
 BASE_DIR = Path(__file__).resolve().parent
 
+
 def run_django():
     """Run Django development server in a separate thread"""
-    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'roshe_logistics.settings')
-    sys.argv = ['manage.py', 'runserver', '127.0.0.1:8000']
-    
+    os.environ.setdefault("DJANGO_SETTINGS_MODULE", "gmi_terralink.settings")
+    sys.argv = ["manage.py", "runserver", "127.0.0.1:8000"]
+
     try:
         execute_from_command_line(sys.argv)
     except KeyboardInterrupt:
@@ -29,20 +31,20 @@ def create_window():
     # Start Django server in background thread
     django_thread = threading.Thread(target=run_django, daemon=True)
     django_thread.start()
-    
+
     # Wait for Django server to start
     time.sleep(3)
-    
+
     # Create and show window
     webview.create_window(
-        title='Roshe Group Logistics Portal Management System',
-        url='http://127.0.0.1:8000/login/',
+        title="GMI TERRALINK Logistics Portal Management System",
+        url="http://127.0.0.1:8000/login/",
         width=1400,
         height=900,
         min_size=(1200, 700),
-        background_color='#F5F5F5'
+        background_color="#F4F4F1",
     )
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     create_window()

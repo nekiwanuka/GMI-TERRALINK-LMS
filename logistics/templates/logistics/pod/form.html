@@ -1,0 +1,90 @@
+{% extends "logistics/base.html" %}
+
+{% block title %}Record Proof of Delivery - GMI TERRALINK{% endblock %}
+
+{% block content %}
+<div class="container py-4" style="max-width:760px;">
+    <header class="mb-3" style="border-bottom:1px solid #ece7cd;padding-bottom:0.6rem;">
+        <span style="font-size:0.62rem;text-transform:uppercase;letter-spacing:0.1em;color:#8a8a8a;font-weight:700;">
+            <i class="bi bi-file-earmark-check me-1"></i>
+            {% if is_logistics %}Logistics lane{% else %}Sourcing &amp; Trading lane{% endif %}
+        </span>
+        <h1 style="font-size:1.15rem;font-weight:700;color:#1a1a1a;margin:0.15rem 0 0;">Record Proof of Delivery</h1>
+        <p style="font-size:0.8rem;color:#6b6b6b;margin:0;">
+            {% if is_logistics %}
+                Closing loading <strong>{{ target.loading_id }}</strong>
+                {% if target.client %} for {{ target.client.name }}{% endif %}.
+            {% else %}
+                Closing fulfillment <strong>{{ target.fulfillment_id }}</strong>
+                for transaction {{ target.transaction.transaction_id }}
+                ({{ target.transaction.customer.name }}).
+            {% endif %}
+        </p>
+    </header>
+
+    <div class="card" style="padding:1rem 1.1rem;">
+        <form method="post" enctype="multipart/form-data" novalidate>
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="alert alert-danger py-2 small">{{ form.non_field_errors }}</div>
+            {% endif %}
+
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label for="{{ form.delivered_at.id_for_label }}" class="form-label small fw-bold">Delivered at</label>
+                    {{ form.delivered_at }}
+                    {% if form.delivered_at.errors %}<div class="text-danger small mt-1">{{ form.delivered_at.errors|join:" " }}</div>{% endif %}
+                </div>
+                <div class="col-md-6">
+                    <label for="{{ form.received_by_name.id_for_label }}" class="form-label small fw-bold">Received by (name)</label>
+                    {{ form.received_by_name }}
+                    {% if form.received_by_name.errors %}<div class="text-danger small mt-1">{{ form.received_by_name.errors|join:" " }}</div>{% endif %}
+                </div>
+                <div class="col-md-6">
+                    <label for="{{ form.received_by_phone.id_for_label }}" class="form-label small fw-bold">Phone</label>
+                    {{ form.received_by_phone }}
+                    {% if form.received_by_phone.errors %}<div class="text-danger small mt-1">{{ form.received_by_phone.errors|join:" " }}</div>{% endif %}
+                </div>
+                <div class="col-md-6">
+                    <label for="{{ form.delivery_address.id_for_label }}" class="form-label small fw-bold">Delivery address</label>
+                    {{ form.delivery_address }}
+                    {% if form.delivery_address.errors %}<div class="text-danger small mt-1">{{ form.delivery_address.errors|join:" " }}</div>{% endif %}
+                </div>
+                <div class="col-md-6">
+                    <label for="{{ form.gps_lat.id_for_label }}" class="form-label small fw-bold">GPS latitude</label>
+                    {{ form.gps_lat }}
+                    {% if form.gps_lat.errors %}<div class="text-danger small mt-1">{{ form.gps_lat.errors|join:" " }}</div>{% endif %}
+                </div>
+                <div class="col-md-6">
+                    <label for="{{ form.gps_lng.id_for_label }}" class="form-label small fw-bold">GPS longitude</label>
+                    {{ form.gps_lng }}
+                    {% if form.gps_lng.errors %}<div class="text-danger small mt-1">{{ form.gps_lng.errors|join:" " }}</div>{% endif %}
+                </div>
+                <div class="col-12">
+                    <label for="{{ form.signature_or_photo.id_for_label }}" class="form-label small fw-bold">Signature / photo</label>
+                    {{ form.signature_or_photo }}
+                    <div class="form-text small">Photo of signed POD, signature image, or recipient ID.</div>
+                    {% if form.signature_or_photo.errors %}<div class="text-danger small mt-1">{{ form.signature_or_photo.errors|join:" " }}</div>{% endif %}
+                </div>
+                <div class="col-12">
+                    <label for="{{ form.notes.id_for_label }}" class="form-label small fw-bold">Notes</label>
+                    {{ form.notes }}
+                    {% if form.notes.errors %}<div class="text-danger small mt-1">{{ form.notes.errors|join:" " }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="d-flex justify-content-between align-items-center mt-4">
+                {% if is_logistics %}
+                    <a href="{% url 'loading_detail' target.pk %}" class="btn btn-outline-secondary btn-sm">Cancel</a>
+                {% else %}
+                    <a href="{% url 'transaction_detail' target.transaction.pk %}" class="btn btn-outline-secondary btn-sm">Cancel</a>
+                {% endif %}
+                <button type="submit" class="btn btn-primary btn-sm">
+                    <i class="bi bi-check-circle me-1"></i>Save Proof of Delivery
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

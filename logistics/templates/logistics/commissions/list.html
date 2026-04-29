@@ -1,0 +1,156 @@
+{% extends "logistics/base.html" %}
+{% load humanize %}
+
+{% block title %}Commissions - GMI TERRALINK{% endblock %}
+
+{% block extra_css %}
+<style>
+    .com-page-head {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 1rem;
+        flex-wrap: wrap;
+        padding: 0.4rem 0.25rem 0.85rem;
+        border-bottom: 1px solid #ece7cd;
+        margin-bottom: 0.9rem;
+    }
+    .com-page-head h1 { font-size: 1.15rem; font-weight: 700; color: #1a1a1a; margin: 0.15rem 0; }
+    .com-page-head .eyebrow {
+        font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.1em;
+        color: #8a8a8a; font-weight: 700;
+    }
+    .com-page-head p { font-size: 0.8rem; color: #6b6b6b; margin: 0; }
+
+    .com-totals-row { display: flex; flex-wrap: wrap; gap: 0.55rem; margin-bottom: 0.9rem; }
+    .com-total-chip {
+        display: inline-flex; align-items: baseline; gap: 0.5rem;
+        padding: 0.5rem 0.85rem; background: #fbf7e4;
+        border: 1px solid #ece7cd; border-radius: 8px;
+    }
+    .com-total-chip .ccy { font-size: 0.66rem; letter-spacing: 0.08em; text-transform: uppercase; color: #8a6d1d; font-weight: 700; }
+    .com-total-chip .amt { font-size: 1.05rem; font-weight: 700; color: #1a1a1a; font-variant-numeric: tabular-nums; }
+    .com-total-chip .meta { font-size: 0.66rem; color: #6b6b6b; text-transform: uppercase; letter-spacing: 0.06em; }
+
+    .com-card { padding: 0.85rem 1rem 0.25rem; }
+    .com-toolbar { padding: 0 0 0.7rem; border-bottom: 1px solid #f0ecdb; }
+    .com-toolbar .form-select, .com-toolbar .form-control { border-color: #ece7cd; }
+
+    .com-table { font-size: 0.86rem; margin-bottom: 0; }
+    .com-table thead th {
+        font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.06em;
+        color: #6b6b6b; font-weight: 700; white-space: nowrap;
+        padding: 0.55rem 0.75rem; background: #faf8ef; border-bottom: 1px solid #ece7cd;
+    }
+    .com-table tbody td { padding: 0.6rem 0.75rem; vertical-align: middle; }
+    .com-amount { font-weight: 700; color: #1a1a1a; font-variant-numeric: tabular-nums; }
+    .com-currency-tag {
+        display: inline-block; padding: 0.1rem 0.5rem;
+        background: #fbf7e4; border: 1px solid #ece7cd; border-radius: 4px;
+        font-size: 0.72rem; color: #4f4a52; font-weight: 700;
+    }
+    .com-row-actions { display: inline-flex; gap: 0.25rem; justify-content: flex-end; }
+    .com-row-actions .btn { padding: 0.22rem 0.5rem; line-height: 1; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="workspace-stack">
+    <header class="com-page-head">
+        <div>
+            <span class="eyebrow"><i class="bi bi-cash-coin me-1"></i>Earnings ledger</span>
+            <h1>Commissions earned</h1>
+            <p>Restricted view &mdash; visible only to the Director and System Administrator.</p>
+        </div>
+        <div>
+            <a href="{% url 'commission_create' %}" class="btn btn-sm btn-dark"><i class="bi bi-plus-lg me-1"></i>Record commission</a>
+        </div>
+    </header>
+
+    {% if totals %}
+    <div class="com-totals-row">
+        {% for row in totals %}
+        <span class="com-total-chip">
+            <span class="ccy">{{ row.currency }}</span>
+            <span class="amt">{{ row.total|floatformat:2|intcomma }}</span>
+            <span class="meta">{{ row.entries }} entr{{ row.entries|pluralize:"y,ies" }}</span>
+        </span>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <section class="card com-card">
+        <form method="get" class="com-toolbar">
+            <div class="row g-2 align-items-center">
+                <div class="col-md-5">
+                    <select name="client" class="form-select form-select-sm">
+                        <option value="">All clients</option>
+                        {% for c in clients %}
+                        <option value="{{ c.id }}" {% if filter_client == c.id|stringformat:"s" %}selected{% endif %}>{{ c.name }} ({{ c.client_id }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <select name="currency" class="form-select form-select-sm">
+                        <option value="">All currencies</option>
+                        {% for code, label in commissions.0.CURRENCY_CHOICES|default_if_none:"" %}{% endfor %}
+                        {% for code in "USD,UGX,CNY,EUR,GBP,KES"|slice:":" %}{% endfor %}
+                        <option value="USD" {% if filter_currency == "USD" %}selected{% endif %}>USD</option>
+                        <option value="UGX" {% if filter_currency == "UGX" %}selected{% endif %}>UGX</option>
+                        <option value="CNY" {% if filter_currency == "CNY" %}selected{% endif %}>CNY</option>
+                        <option value="EUR" {% if filter_currency == "EUR" %}selected{% endif %}>EUR</option>
+                        <option value="GBP" {% if filter_currency == "GBP" %}selected{% endif %}>GBP</option>
+                        <option value="KES" {% if filter_currency == "KES" %}selected{% endif %}>KES</option>
+                    </select>
+                </div>
+                <div class="col-md-4 d-flex gap-2 justify-content-md-end">
+                    <button type="submit" class="btn btn-sm btn-outline-dark"><i class="bi bi-funnel me-1"></i>Filter</button>
+                    {% if filter_client or filter_currency %}
+                    <a href="{% url 'commission_list' %}" class="btn btn-sm btn-outline-secondary">Clear</a>
+                    {% endif %}
+                </div>
+            </div>
+        </form>
+
+        <div class="table-responsive">
+            <table class="table table-hover align-middle com-table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Client</th>
+                        <th class="text-end">Amount</th>
+                        <th>Currency</th>
+                        <th>Notes</th>
+                        <th>Recorded by</th>
+                        <th class="text-end">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for c in commissions %}
+                    <tr>
+                        <td>{{ c.date|date:"d M Y" }}</td>
+                        <td>
+                            <div style="font-weight:600;color:#1a1a1a;">{{ c.client.name }}</div>
+                            <small style="color:#8a8a8a;font-size:0.72rem;">{{ c.client.client_id }}</small>
+                        </td>
+                        <td class="text-end com-amount">{{ c.amount|floatformat:2|intcomma }}</td>
+                        <td><span class="com-currency-tag">{{ c.currency }}</span></td>
+                        <td style="max-width:280px;font-size:0.78rem;color:#4f4a52;">{{ c.notes|truncatechars:90|default:'&mdash;' }}</td>
+                        <td style="font-size:0.78rem;color:#6b6b6b;">{{ c.created_by.get_full_name|default:c.created_by.username }}</td>
+                        <td class="text-end">
+                            <div class="com-row-actions">
+                                <a href="{% url 'commission_update' c.id %}" class="btn btn-sm btn-warning" title="Edit"><i class="bi bi-pencil"></i></a>
+                                <a href="{% url 'commission_delete' c.id %}" class="btn btn-sm btn-outline-danger" title="Delete"><i class="bi bi-trash"></i></a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="7" class="text-center text-muted py-5">No commission entries yet.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% include "logistics/components/pagination.html" %}
+    </section>
+</div>
+{% endblock %}

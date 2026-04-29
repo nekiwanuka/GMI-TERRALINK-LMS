@@ -1,0 +1,112 @@
+{% comment %}
+Unified print/PDF styles for all GMI documents (receipt, proforma, purchase order, final invoice).
+Include this once near the top of each document detail template:
+    {% include "logistics/components/document_print_styles.html" %}
+This guarantees identical paper size, margins, chrome hiding, and color rendering across all documents.
+{% endcomment %}
+<style id="gmi-doc-print-styles">
+@page {
+    size: A4 portrait;
+    margin: 10mm;
+}
+
+@media print {
+    html, body {
+        margin: 0 !important;
+        padding: 0 !important;
+        background: #fff !important;
+        overflow: visible !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+        color-adjust: exact !important;
+    }
+
+    /* Keep all branded panels/colors crisp in print + PDF */
+    *, *::before, *::after {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+
+    /* Hide app chrome on every document */
+    .topbar,
+    .sidebar,
+    .footer,
+    .messages,
+    .alert,
+    .navbar-toggler,
+    .notification-menu,
+    .btn-close,
+    .receipt-toolbar,
+    .proforma-toolbar,
+    .po-toolbar,
+    .invoice-toolbar,
+    .doc-toolbar,
+    .no-print,
+    .d-print-none {
+        display: none !important;
+    }
+
+    /* Free up the canvas for the document */
+    .container,
+    .container-fluid,
+    .main-shell,
+    .workspace-stack,
+    .workspace-shell {
+        width: 100% !important;
+        max-width: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        display: block !important;
+    }
+
+    .main-content,
+    .content-area {
+        margin: 0 !important;
+        padding: 0 !important;
+        width: 100% !important;
+    }
+
+    /* Document panels: flatten shadow, keep light hairline border */
+    .receipt-document,
+    .pf-page,
+    .po-shell,
+    .gmi-doc-card,
+    .invoice-document,
+    .print-root,
+    #proforma-print-target {
+        box-shadow: none !important;
+        border-radius: 0 !important;
+        max-width: 100% !important;
+        width: 100% !important;
+        margin: 0 !important;
+        page-break-inside: auto;
+    }
+
+    /* Keep document tables together where possible */
+    table { page-break-inside: auto; }
+    tr, .pf-table tr, .po-lines-table tr, .receipt-section, .pf-signature, .pf-summary {
+        page-break-inside: avoid;
+    }
+    thead { display: table-header-group; }
+    tfoot { display: table-footer-group; }
+
+    /* Shared header/footer components: never split, render with brand colors */
+    .gmi-doc-header,
+    .gmi-doc-foot,
+    .gmi-services-ribbon,
+    .gmi-doc-validation {
+        page-break-inside: avoid;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+
+    /* Standard typography baseline for readability on paper */
+    body {
+        font-size: 11pt;
+        line-height: 1.35;
+        color: #1a1a1a;
+    }
+
+    a { color: inherit; text-decoration: none; }
+}
+</style>

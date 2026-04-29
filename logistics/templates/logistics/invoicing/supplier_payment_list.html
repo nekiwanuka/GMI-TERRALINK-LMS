@@ -1,0 +1,63 @@
+{% extends "logistics/base.html" %}
+{% block title %}Supplier Payments{% endblock %}
+{% block content %}
+<div class="container-fluid mt-3">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h2 class="mb-0"><i class="bi bi-cash-stack"></i> Supplier Payments</h2>
+    <div class="text-end">
+      <small class="text-muted d-block">Grand total</small>
+      <strong>{{ grand_total }}</strong>
+    </div>
+  </div>
+
+  <form method="get" class="mb-3">
+    <div class="input-group">
+      <input type="text" name="search" value="{{ search }}" class="form-control" placeholder="Search PO, supplier, reference, transaction…">
+      <button class="btn btn-outline-primary" type="submit"><i class="bi bi-search"></i></button>
+    </div>
+  </form>
+
+  <div class="card shadow-sm">
+    <div class="table-responsive">
+      <table class="table table-sm mb-0 align-middle">
+        <thead class="table-light">
+          <tr>
+            <th>Paid at</th>
+            <th>Purchase Order</th>
+            <th>Transaction</th>
+            <th>Supplier</th>
+            <th class="text-end">Amount</th>
+            <th>Method</th>
+            <th>Reference</th>
+            <th>By</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in payments %}
+          <tr>
+            <td>{{ p.paid_at|date:"Y-m-d H:i" }}</td>
+            <td><a href="{% url 'purchase_order_detail' p.purchase_order.pk %}">{{ p.purchase_order.po_number }}</a></td>
+            <td>{{ p.purchase_order.transaction.transaction_id }}<br><small class="text-muted">{{ p.purchase_order.transaction.customer.name }}</small></td>
+            <td>{{ p.supplier_name|default:p.purchase_order.supplier_name }}</td>
+            <td class="text-end">{{ p.amount }} {{ p.currency }}</td>
+            <td>{{ p.get_method_display }}</td>
+            <td>{{ p.reference|default:"—" }}</td>
+            <td>{{ p.created_by|default:"—" }}</td>
+            <td class="text-end">
+              {% if user.is_superuser or user.role in 'ADMIN,DIRECTOR' %}
+              <a href="{% url 'supplier_payment_delete' p.pk %}" class="btn btn-sm btn-outline-danger">Delete</a>
+              {% endif %}
+            </td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="9" class="text-center text-muted py-4">No supplier payments recorded yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {% include "logistics/components/pagination.html" %}
+</div>
+{% endblock %}

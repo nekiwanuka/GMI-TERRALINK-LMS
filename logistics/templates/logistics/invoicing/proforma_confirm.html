@@ -1,0 +1,29 @@
+{% extends "logistics/base.html" %}
+
+{% block title %}Client PO Received - GMI TERRALINK{% endblock %}
+
+{% block content %}
+<div class="container" style="max-width:720px;">
+    <div class="card mt-4 shadow-sm">
+        <div class="card-header bg-success text-white">
+            <h4 class="mb-0"><i class="bi bi-check2-circle"></i> Confirm Client PO & Convert to Final Invoice</h4>
+        </div>
+        <div class="card-body">
+            <p class="mb-3">You are about to mark that the client purchase order has been received for <strong>PI-{{ proforma.pk }}</strong> (transaction <strong>{{ proforma.transaction.transaction_id }}</strong>).</p>
+            <p class="text-muted">This converts the approved quotation/proforma into a final invoice for client payment.</p>
+
+            <div class="border rounded p-3 bg-light mb-3">
+                <div><strong>Customer:</strong> {{ proforma.transaction.customer.name }}</div>
+                <div><strong>Subtotal:</strong> {{ proforma.subtotal }} USD</div>
+                <div><strong>Validity:</strong> {{ proforma.validity_date|date:"d M Y" }}</div>
+            </div>
+
+            <form method="post" class="d-flex justify-content-between align-items-center">
+                {% csrf_token %}
+                <a href="{% if proforma.loading %}{% url 'logistics_proforma_detail' proforma.pk %}{% else %}{% url 'sourcing_proforma_detail' proforma.pk %}{% endif %}" class="btn btn-outline-secondary">Back</a>
+                <button type="submit" class="btn btn-success">Create Final Invoice</button>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

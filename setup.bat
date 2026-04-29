@@ -1,9 +1,9 @@
 @echo off
-REM Setup script for Roshe Group Logistics Portal System (Windows)
+REM Setup script for GMI TERRALINK Logistics Portal System (Windows)
 
 echo.
 echo ================================================
-echo Roshe Group Logistics Portal Management System Setup
+echo GMI TERRALINK Logistics Portal Management System Setup
 echo ================================================
 echo.
 

@@ -1,199 +1,257 @@
 {% extends "logistics/base.html" %}
 
-{% block title %}Reports - Roshe Group Logistics Portal{% endblock %}
+{% block title %}Director Reports - GMI TERRALINK Logistics Portal{% endblock %}
 
 {% block content %}
-<div class="container-fluid">
-    <h1 class="mb-4"><i class="bi bi-file-earmark-pdf"></i> Reports & Analytics</h1>
+<div class="workspace-stack">
+    <section class="workspace-hero">
+        <div class="workspace-hero-grid">
+            <div class="workspace-hero-copy">
+                <span class="eyebrow-label"><i class="bi bi-bar-chart-line-fill"></i> Executive reporting</span>
+                <h1>Director summary for revenue, trade flow and core exports.</h1>
+                <p>This page keeps only the essential management view: financial position, trade pipeline health, top clients and direct report downloads.</p>
+            </div>
+            <div class="workspace-badge-row">
+                <div class="workspace-badge">
+                    <strong>{{ conversion_rate }}%</strong>
+                    <span>Conversion rate</span>
+                </div>
+                <div class="workspace-badge">
+                    <strong>{{ active_shipments }}</strong>
+                    <span>Active shipments</span>
+                </div>
+            </div>
+        </div>
+    </section>
 
-    <!-- Summary Statistics -->
-    <div class="row mb-4">
-        <div class="col-md-3">
-            <div class="card">
-                <div class="card-body dashboard-stat">
-                    <h4>Clients</h4>
-                    <p>{{ total_clients }}</p>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card">
-                <div class="card-body dashboard-stat">
-                    <h4>Shipments</h4>
-                    <p>{{ total_loadings }}</p>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card">
-                <div class="card-body dashboard-stat">
-                    <h4>In Transit</h4>
-                    <p>{{ in_transit_count }}</p>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card">
-                <div class="card-body dashboard-stat">
-                    {% if can_view_financial_totals %}
-                    <h4>Revenue</h4>
-                    <p>${{ total_revenue|floatformat:0 }}</p>
-                    {% else %}
-                    <h4><i class="bi bi-shield-lock"></i> Restricted</h4>
-                    <p class="fs-6 text-muted mb-0">Only supervisors can view financial data</p>
-                    {% endif %}
-                </div>
-            </div>
-        </div>
-    </div>
+    <section class="stats-strip">
+        <article class="mini-stat">
+            <span class="value">${{ total_revenue|floatformat:2 }}</span>
+            <span class="label">Total revenue</span>
+        </article>
+        <article class="mini-stat">
+            <span class="value">${{ outstanding_balance|floatformat:2 }}</span>
+            <span class="label">Outstanding balance</span>
+        </article>
+        <article class="mini-stat">
+            <span class="value">${{ profit_estimate|floatformat:2 }}</span>
+            <span class="label">Profit estimate</span>
+        </article>
+    </section>
 
-    <!-- Financial Summary -->
-    <div class="row mb-4">
-        <div class="col-md-4">
-            <div class="card">
-                <div class="card-header">
-                    <h5>Financial Summary</h5>
-                </div>
-                <div class="card-body">
-                    {% if can_view_financial_totals %}
-                    <p><strong>Total Charged:</strong> ${{ total_revenue|floatformat:2 }}</p>
-                    <p><strong>Total Paid:</strong> ${{ total_paid|floatformat:2 }}</p>
-                    <p><strong style="color: #dc3545;">Outstanding Balance:</strong> ${{ outstanding_balance|floatformat:2 }}</p>
-                    {% else %}
-                    <div class="alert alert-info mb-0" role="alert">
-                        Financial metrics are hidden for your role. Please contact your supervisor if you require access.
-                    </div>
-                    {% endif %}
-                </div>
-            </div>
+    {% if commission_totals %}
+    <section class="surface-panel" style="padding:1rem 1.1rem;">
+        <div class="panel-header" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.6rem;">
+            <h3 class="panel-title" style="margin:0;font-size:0.95rem;"><i class="bi bi-cash-coin me-2"></i>Commission earned</h3>
+            <a href="{% url 'commission_list' %}" class="btn btn-sm btn-outline-dark"><i class="bi bi-arrow-right me-1"></i>Open ledger</a>
         </div>
-
-        <!-- Quick Actions -->
-        <div class="col-md-8">
-            <div class="card">
-                <div class="card-header">
-                    <h5>Export Reports</h5>
-                </div>
-                <div class="card-body">
-                    <p class="text-muted">Download structured data as CSV or PDF</p>
-                    <div class="d-flex flex-wrap gap-2">
-                        <div class="btn-group" role="group">
-                            <a href="{% url 'export_clients_csv' %}" class="btn btn-outline-primary">
-                                <i class="bi bi-download"></i> Clients CSV
-                            </a>
-                            <a href="{% url 'export_clients_pdf' %}" class="btn btn-outline-danger">
-                                <i class="bi bi-file-earmark-pdf"></i>
-                            </a>
-                        </div>
-                        <div class="btn-group" role="group">
-                            <a href="{% url 'export_shipments_csv' %}" class="btn btn-outline-primary">
-                                <i class="bi bi-download"></i> Shipments CSV
-                            </a>
-                            <a href="{% url 'export_shipments_pdf' %}" class="btn btn-outline-danger">
-                                <i class="bi bi-file-earmark-pdf"></i>
-                            </a>
-                        </div>
-                        <div class="btn-group" role="group">
-                            <a href="{% url 'export_payments_csv' %}" class="btn btn-outline-primary">
-                                <i class="bi bi-download"></i> Payments CSV
-                            </a>
-                            <a href="{% url 'export_payments_pdf' %}" class="btn btn-outline-danger">
-                                <i class="bi bi-file-earmark-pdf"></i>
-                            </a>
-                        </div>
-                        <div class="btn-group" role="group">
-                            <a href="{% url 'export_containers_csv' %}" class="btn btn-outline-primary">
-                                <i class="bi bi-download"></i> Containers CSV
-                            </a>
-                            <a href="{% url 'export_containers_pdf' %}" class="btn btn-outline-danger">
-                                <i class="bi bi-file-earmark-pdf"></i>
-                            </a>
-                        </div>
-                    </div>
-                </div>
-            </div>
+        <div style="display:flex;flex-wrap:wrap;gap:0.55rem;">
+            {% for row in commission_totals %}
+            <span style="display:inline-flex;align-items:baseline;gap:0.5rem;padding:0.5rem 0.85rem;background:#fbf7e4;border:1px solid #ece7cd;border-radius:8px;">
+                <span style="font-size:0.66rem;letter-spacing:0.08em;text-transform:uppercase;color:#8a6d1d;font-weight:700;">{{ row.currency }}</span>
+                <span style="font-size:1.05rem;font-weight:700;color:#1a1a1a;font-variant-numeric:tabular-nums;">{{ row.total|floatformat:2 }}</span>
+                <span style="font-size:0.66rem;color:#6b6b6b;text-transform:uppercase;letter-spacing:0.06em;">{{ row.entries }} entr{{ row.entries|pluralize:"y,ies" }}</span>
+            </span>
+            {% endfor %}
         </div>
-    </div>
+    </section>
+    {% endif %}
 
-    <!-- Available Reports -->
-    <div class="row">
-        <div class="col-md-6">
-            <div class="card">
-                <div class="card-header">
-                    <h5><i class="bi bi-people"></i> Client Report</h5>
-                </div>
-                <div class="card-body">
-                    <p class="text-muted">List of all registered clients with contact information</p>
-                    <div class="btn-group" role="group">
-                        <a href="{% url 'export_clients_csv' %}" class="btn btn-primary">
-                            <i class="bi bi-download"></i> CSV
-                        </a>
-                        <a href="{% url 'export_clients_pdf' %}" class="btn btn-danger">
-                            <i class="bi bi-file-earmark-pdf"></i> PDF
-                        </a>
-                    </div>
+    <section class="stats-strip">
+        <article class="mini-stat">
+            <span class="value">{{ trade_summary.sourcing_records }}</span>
+            <span class="label">Sourcing records</span>
+        </article>
+        <article class="mini-stat">
+            <span class="value">{{ trade_summary.active_sourcing_transactions }}</span>
+            <span class="label">Active sourcing</span>
+        </article>
+        <article class="mini-stat">
+            <span class="value">{{ trade_summary.proformas_sent }}</span>
+            <span class="label">Proformas sent</span>
+        </article>
+        <article class="mini-stat">
+            <span class="value">{{ trade_summary.purchase_orders }}</span>
+            <span class="label">Purchase orders</span>
+        </article>
+    </section>
+
+    <section class="dashboard-grid-2">
+        <div class="surface-panel">
+            <div class="panel-header">
+                <h3 class="panel-title"><i class="bi bi-arrow-left-right me-2"></i>Inquiry to confirmed conversion</h3>
+            </div>
+            <div class="metric-pill-row mb-3">
+                <span class="metric-pill"><i class="bi bi-inboxes"></i>{{ conversion_inquiries }} inquiries</span>
+                <span class="metric-pill"><i class="bi bi-check2-circle"></i>{{ conversion_confirmed }} confirmed</span>
+            </div>
+            <div class="progress" style="height: 28px; border-radius: 999px; background: rgba(17, 17, 17, 0.08);">
+                <div class="progress-bar" role="progressbar" style="width: {{ conversion_rate }}%; background: linear-gradient(90deg, #177245, #2aa767); font-weight: 700;">
+                    {{ conversion_rate }}%
                 </div>
             </div>
         </div>
 
-        <div class="col-md-6">
-            <div class="card">
-                <div class="card-header">
-                    <h5><i class="bi bi-box"></i> Shipment Report</h5>
-                </div>
-                <div class="card-body">
-                    <p class="text-muted">Complete shipment details including routes and containers</p>
-                    <div class="btn-group" role="group">
-                        <a href="{% url 'export_shipments_csv' %}" class="btn btn-primary">
-                            <i class="bi bi-download"></i> CSV
-                        </a>
-                        <a href="{% url 'export_shipments_pdf' %}" class="btn btn-danger">
-                            <i class="bi bi-file-earmark-pdf"></i> PDF
-                        </a>
-                    </div>
-                </div>
+        <div class="surface-panel">
+            <div class="panel-header">
+                <h3 class="panel-title"><i class="bi bi-trophy me-2"></i>Top clients</h3>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>Client</th>
+                            <th>Total Transactions</th>
+                            <th>Confirmed Orders</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for c in top_clients %}
+                        <tr>
+                            <td class="fw-semibold">{{ c.customer__name }}</td>
+                            <td>{{ c.total_transactions }}</td>
+                            <td><span class="badge bg-success">{{ c.confirmed_orders }}</span></td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="3" class="text-center text-muted py-4">No client activity yet.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
             </div>
         </div>
-    </div>
+    </section>
 
-    <div class="row mt-4">
-        <div class="col-md-6">
-            <div class="card">
-                <div class="card-header">
-                    <h5><i class="bi bi-cash-coin"></i> Payment Report</h5>
-                </div>
-                <div class="card-body">
-                    <p class="text-muted">Payment status and transaction history</p>
-                    <div class="btn-group" role="group">
-                        <a href="{% url 'export_payments_csv' %}" class="btn btn-primary">
-                            <i class="bi bi-download"></i> CSV
-                        </a>
-                        <a href="{% url 'export_payments_pdf' %}" class="btn btn-danger">
-                            <i class="bi bi-file-earmark-pdf"></i> PDF
-                        </a>
-                    </div>
-                </div>
+    <section class="dashboard-grid-2">
+        <div class="surface-panel">
+            <div class="panel-header">
+                <h3 class="panel-title"><i class="bi bi-diagram-3 me-2"></i>Trade summary</h3>
             </div>
+            <div class="metric-pill-row mb-3">
+                <span class="metric-pill"><i class="bi bi-receipt"></i>{{ trade_summary.final_invoices }} final invoices</span>
+                <span class="metric-pill"><i class="bi bi-wallet2"></i>{{ trade_summary.trade_payment_records }} trade payments</span>
+                <span class="metric-pill"><i class="bi bi-check2-square"></i>{{ trade_summary.paid_transactions }} paid transactions</span>
+            </div>
+            <p class="text-muted mb-0">Use this block for fast oversight of the active commercial workflow without drilling into supplier-level or record-level detail on the main dashboard.</p>
         </div>
 
-        <div class="col-md-6">
-            <div class="card">
-                <div class="card-header">
-                    <h5><i class="bi bi-archive"></i> Container Return Report</h5>
-                </div>
-                <div class="card-body">
-                    <p class="text-muted">Container return status and conditions</p>
-                    <div class="btn-group" role="group">
-                        <a href="{% url 'export_containers_csv' %}" class="btn btn-primary">
-                            <i class="bi bi-download"></i> CSV
-                        </a>
-                        <a href="{% url 'export_containers_pdf' %}" class="btn btn-danger">
-                            <i class="bi bi-file-earmark-pdf"></i> PDF
-                        </a>
-                    </div>
-                </div>
+        <div class="surface-panel">
+            <div class="panel-header">
+                <h3 class="panel-title"><i class="bi bi-people me-2"></i>Top clients</h3>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>Client</th>
+                            <th>Total Transactions</th>
+                            <th>Confirmed Orders</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for c in top_clients %}
+                        <tr>
+                            <td class="fw-semibold">{{ c.customer__name }}</td>
+                            <td>{{ c.total_transactions }}</td>
+                            <td><span class="badge bg-success">{{ c.confirmed_orders }}</span></td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="3" class="text-center text-muted py-4">No client activity yet.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
             </div>
         </div>
-    </div>
+    </section>
+
+    <section class="dashboard-grid-2" style="grid-template-columns: 1.4fr 1fr;">
+        <div class="chart-panel">
+            <div class="panel-header mb-3">
+                <h3 class="panel-title"><i class="bi bi-graph-up-arrow me-2"></i>Revenue trend</h3>
+            </div>
+            <canvas id="revenueTrendChart" height="120"></canvas>
+        </div>
+        <div class="chart-panel">
+            <div class="panel-header mb-3">
+                <h3 class="panel-title"><i class="bi bi-kanban me-2"></i>Trade pipeline</h3>
+            </div>
+            <canvas id="tradePipelineChart" height="140"></canvas>
+        </div>
+    </section>
+
+    <section class="surface-panel">
+        <div class="panel-header mb-3">
+            <h3 class="panel-title"><i class="bi bi-download me-2"></i>Exports</h3>
+        </div>
+        <div class="export-grid">
+            <a href="{% url 'export_transactions_csv' %}" class="btn btn-outline-primary">Trade Transactions CSV</a>
+            <a href="{% url 'export_transactions_pdf' %}" class="btn btn-outline-danger">Trade Transactions PDF</a>
+            <a href="{% url 'export_sourcing_csv' %}" class="btn btn-outline-primary">Sourcing CSV</a>
+            <a href="{% url 'export_sourcing_pdf' %}" class="btn btn-outline-danger">Sourcing PDF</a>
+            <a href="{% url 'export_proformas_csv' %}" class="btn btn-outline-primary">Proformas CSV</a>
+            <a href="{% url 'export_proformas_pdf' %}" class="btn btn-outline-danger">Proformas PDF</a>
+            <a href="{% url 'export_final_invoices_csv' %}" class="btn btn-outline-primary">Final Invoices CSV</a>
+            <a href="{% url 'export_final_invoices_pdf' %}" class="btn btn-outline-danger">Final Invoices PDF</a>
+            <a href="{% url 'export_purchase_orders_csv' %}" class="btn btn-outline-primary">Purchase Orders CSV</a>
+            <a href="{% url 'export_purchase_orders_pdf' %}" class="btn btn-outline-danger">Purchase Orders PDF</a>
+            <a href="{% url 'export_trade_payments_csv' %}" class="btn btn-outline-primary">Trade Payments CSV</a>
+            <a href="{% url 'export_trade_payments_pdf' %}" class="btn btn-outline-danger">Trade Payments PDF</a>
+            <a href="{% url 'export_shipments_csv' %}" class="btn btn-outline-primary">Shipments CSV</a>
+            <a href="{% url 'export_shipments_pdf' %}" class="btn btn-outline-danger">Shipments PDF</a>
+            <a href="{% url 'export_payments_csv' %}" class="btn btn-outline-primary">Payments CSV</a>
+            <a href="{% url 'export_payments_pdf' %}" class="btn btn-outline-danger">Payments PDF</a>
+        </div>
+    </section>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+    const trendLabels = {{ trend_labels_json|safe }};
+    const trendValues = {{ trend_values_json|safe }};
+    const tradePipelineLabels = {{ trade_pipeline_labels_json|safe }};
+    const tradePipelineValues = {{ trade_pipeline_values_json|safe }};
+
+    new Chart(document.getElementById('revenueTrendChart'), {
+        type: 'line',
+        data: {
+            labels: trendLabels,
+            datasets: [{
+                label: 'Revenue',
+                data: trendValues,
+                borderColor: '#67616b',
+                backgroundColor: 'rgba(212, 175, 55, 0.25)',
+                tension: 0.3,
+                fill: true
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: { legend: { display: false } },
+            scales: {
+                y: { beginAtZero: true }
+            }
+        }
+    });
+
+    new Chart(document.getElementById('tradePipelineChart'), {
+        type: 'bar',
+        data: {
+            labels: tradePipelineLabels,
+            datasets: [{
+                label: 'Transactions',
+                data: tradePipelineValues,
+                backgroundColor: ['#67616b', '#d4af37', '#9a948f', '#c5a14a', '#7d7781'],
+                borderRadius: 10
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: { legend: { display: false } },
+            scales: {
+                y: { beginAtZero: true, ticks: { precision: 0 } }
+            }
+        }
+    });
+</script>
 {% endblock %}

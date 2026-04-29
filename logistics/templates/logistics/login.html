@@ -1,40 +1,528 @@
 {% extends "logistics/base.html" %}
+{% load static %}
 
-{% block title %}Login - Roshe Group Logistics Portal{% endblock %}
+{% block title %}Sign in | GMI Terralink{% endblock %}
+
+{% block extra_css %}
+<style>
+  :root {
+    --gmi-black: #0a0a0a;
+    --gmi-black-2: #1a1a1a;
+    --gmi-cream: #f5e6a8;       /* cream yellow */
+    --gmi-cream-2: #f9efc4;
+    --gmi-cream-soft: #fbf7e4;
+    --gmi-ink: #0a0a0a;
+    --gmi-muted: #6b6b6b;
+  }
+
+  body { background: var(--gmi-cream-soft); }
+
+  .gmi-auth {
+    min-height: calc(100vh - 120px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: .75rem .75rem;
+  }
+
+  .gmi-auth-card {
+    width: 100%;
+    max-width: 880px;
+    background: #fff;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 18px 44px -22px rgba(0, 0, 0, 0.5),
+                0 4px 12px -8px rgba(0, 0, 0, 0.18);
+    display: grid;
+    grid-template-columns: 1.05fr 1fr;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+  }
+
+  /* Left brand panel */
+  .gmi-auth-brand {
+    position: relative;
+    padding: 1.2rem 1.4rem;
+    color: var(--gmi-cream);
+    background:
+      radial-gradient(900px 600px at -10% -20%, rgba(245,230,168,.18), transparent 60%),
+      radial-gradient(700px 500px at 110% 120%, rgba(245,230,168,.08), transparent 60%),
+      linear-gradient(135deg, var(--gmi-black) 0%, var(--gmi-black-2) 60%, #2a2a2a 100%);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .gmi-auth-brand::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(245,230,168,.05) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(245,230,168,.05) 1px, transparent 1px);
+    background-size: 38px 38px;
+    -webkit-mask-image: radial-gradient(ellipse at top right, #000 30%, transparent 75%);
+            mask-image: radial-gradient(ellipse at top right, #000 30%, transparent 75%);
+    pointer-events: none;
+    opacity: .6;
+  }
+  .gmi-auth-brand > * { position: relative; z-index: 1; }
+
+  .gmi-auth-logo {
+    width: 46px;
+    height: 46px;
+    background: var(--gmi-cream);
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 6px;
+    box-shadow: 0 8px 18px -8px rgba(0,0,0,.6);
+  }
+  .gmi-auth-logo img { width: 100%; height: 100%; object-fit: contain; }
+
+  .gmi-auth-wordmark {
+    margin-top: .45rem;
+    font-family: 'Space Grotesk', 'Plus Jakarta Sans', sans-serif;
+    font-weight: 700;
+    letter-spacing: .5px;
+    font-size: 1rem;
+    color: #fff;
+  }
+  .gmi-auth-wordmark span { color: var(--gmi-cream); }
+
+  .gmi-auth-kicker {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    margin-top: .55rem;
+    padding: .18rem .55rem;
+    background: rgba(245,230,168,.12);
+    border: 1px solid rgba(245,230,168,.3);
+    color: var(--gmi-cream);
+    border-radius: 999px;
+    font-size: .62rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .12em;
+    width: fit-content;
+  }
+
+  .gmi-auth-headline {
+    font-family: 'Space Grotesk', 'Plus Jakarta Sans', sans-serif;
+    font-weight: 700;
+    font-size: clamp(1.05rem, 1.6vw, 1.25rem);
+    line-height: 1.2;
+    margin: .35rem 0 .3rem;
+    letter-spacing: -.01em;
+    color: #fff;
+  }
+  .gmi-auth-sub {
+    color: rgba(255,255,255,.7);
+    font-size: .75rem;
+    line-height: 1.45;
+    max-width: 44ch;
+    margin: 0;
+  }
+
+  .gmi-auth-features {
+    margin-top: .65rem;
+    display: grid;
+    gap: .35rem;
+  }
+  .gmi-auth-feature {
+    display: flex;
+    gap: .55rem;
+    align-items: center;
+    padding: .4rem .55rem;
+    border-radius: 8px;
+    background: rgba(245,230,168,.05);
+    border: 1px solid rgba(245,230,168,.1);
+  }
+  .gmi-auth-feature i {
+    font-size: .85rem;
+    color: var(--gmi-cream);
+    flex-shrink: 0;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(245,230,168,.1);
+    border-radius: 6px;
+  }
+  .gmi-auth-feature strong {
+    display: block;
+    font-size: .74rem;
+    margin-bottom: 0;
+    color: #fff;
+    font-weight: 600;
+    line-height: 1.2;
+  }
+  .gmi-auth-feature span {
+    color: rgba(255,255,255,.55);
+    font-size: .66rem;
+    line-height: 1.3;
+  }
+
+  .gmi-auth-foot {
+    margin-top: auto;
+    padding-top: .65rem;
+    color: rgba(255,255,255,.42);
+    font-size: .62rem;
+    display: flex;
+    justify-content: space-between;
+    gap: .8rem;
+    flex-wrap: wrap;
+  }
+
+  /* Right form panel */
+  .gmi-auth-form {
+    padding: 1.2rem 1.4rem;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+
+  .gmi-auth-form-head { margin-bottom: .7rem; }
+  .gmi-auth-form-head h2 {
+    font-family: 'Space Grotesk', 'Plus Jakarta Sans', sans-serif;
+    font-weight: 700;
+    color: var(--gmi-ink);
+    font-size: 1.15rem;
+    margin: 0 0 .15rem;
+    letter-spacing: -.01em;
+  }
+  .gmi-auth-form-head p {
+    color: var(--gmi-muted);
+    margin: 0;
+    font-size: .76rem;
+  }
+
+  .gmi-field { margin-bottom: .5rem; }
+  .gmi-field label {
+    display: block;
+    font-size: .78rem;
+    font-weight: 600;
+    color: var(--gmi-ink);
+    margin-bottom: .3rem;
+  }
+  .gmi-input-wrap { position: relative; }
+  .gmi-input-wrap > i.bi {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--gmi-muted);
+    font-size: 1rem;
+    pointer-events: none;
+    transition: color .15s ease;
+  }
+  .gmi-input-wrap input {
+    width: 100%;
+    padding: .42rem .8rem .42rem 34px;
+    border: 1px solid #e0dcc4;
+    border-radius: 8px !important;
+    background: #fbf9ee;
+    font-size: .82rem;
+    color: var(--gmi-ink);
+    transition: border-color .15s ease, box-shadow .15s ease, background .15s ease;
+  }
+  .gmi-input-wrap input::placeholder { color: #a7a48e; }
+  .gmi-input-wrap input:focus {
+    outline: none;
+    border-color: var(--gmi-black);
+    background: #fff;
+    box-shadow: 0 0 0 4px rgba(245,230,168,.5);
+  }
+  .gmi-input-wrap:focus-within > i.bi { color: var(--gmi-black); }
+  .gmi-input-wrap input[type="password"] { padding-right: 42px; }
+
+  .gmi-pw-toggle {
+    position: absolute;
+    right: 4px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: transparent;
+    border: 0;
+    color: var(--gmi-muted);
+    width: 32px;
+    height: 32px;
+    border-radius: 7px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+  }
+  .gmi-pw-toggle:hover { color: var(--gmi-ink); background: var(--gmi-cream-2); }
+
+  .gmi-meta-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin: .15rem 0 .85rem;
+    font-size: .8rem;
+  }
+  .gmi-remember {
+    display: inline-flex;
+    align-items: center;
+    gap: .45rem;
+    color: var(--gmi-ink);
+    user-select: none;
+    cursor: pointer;
+    margin: 0;
+  }
+  .gmi-remember input { accent-color: var(--gmi-black); }
+  .gmi-meta-row a {
+    color: var(--gmi-black);
+    font-weight: 600;
+    text-decoration: none;
+    border-bottom: 1px dashed transparent;
+  }
+  .gmi-meta-row a:hover { border-bottom-color: var(--gmi-black); }
+
+  .gmi-caps {
+    display: none;
+    margin-top: .3rem;
+    font-size: .73rem;
+    color: #8a6d1f;
+    align-items: center;
+    gap: .3rem;
+  }
+  .gmi-caps.show { display: inline-flex; }
+
+  .gmi-submit {
+    width: 100%;
+    padding: .5rem 1rem;
+    background: linear-gradient(135deg, var(--gmi-black), var(--gmi-black-2));
+    color: var(--gmi-cream);
+    border: 1px solid var(--gmi-black);
+    border-radius: 8px !important;
+    font-weight: 600;
+    font-size: .85rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: .4rem;
+    box-shadow: 0 6px 16px -8px rgba(0,0,0,.55);
+    transition: transform .12s ease, filter .15s ease, background .15s ease, color .15s ease;
+    cursor: pointer;
+  }
+  .gmi-submit:hover { background: var(--gmi-cream); color: var(--gmi-black); transform: translateY(-1px); }
+  .gmi-submit:active { transform: translateY(0); }
+  .gmi-submit .spinner {
+    width: 16px; height: 16px;
+    border: 2px solid rgba(255,255,255,.4);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: gmi-spin .7s linear infinite;
+    display: none;
+  }
+  .gmi-submit.is-loading .spinner { display: inline-block; }
+  @keyframes gmi-spin { to { transform: rotate(360deg); } }
+
+  .gmi-divider {
+    display: flex;
+    align-items: center;
+    gap: .65rem;
+    margin: .55rem 0 .4rem;
+    color: #a7a48e;
+    font-size: .62rem;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+  }
+  .gmi-divider::before,
+  .gmi-divider::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: #ece7cd;
+  }
+
+  .gmi-help {
+    background: var(--gmi-cream-soft);
+    border: 1px solid #ece7cd;
+    border-radius: 8px;
+    padding: .4rem .65rem;
+    color: var(--gmi-muted);
+    font-size: .7rem;
+    line-height: 1.4;
+  }
+  .gmi-help i { color: var(--gmi-black); margin-right: .25rem; }
+
+  .gmi-alert {
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    color: #991b1b;
+    border-radius: 8px;
+    padding: .4rem .65rem;
+    font-size: .76rem;
+    margin-bottom: .55rem;
+    display: flex;
+    align-items: flex-start;
+    gap: .4rem;
+  }
+  .gmi-alert i { margin-top: 2px; }
+
+  @media (max-width: 900px) {
+    .gmi-auth-card { grid-template-columns: 1fr; max-width: 420px; }
+    .gmi-auth-brand { padding: 1rem 1.1rem; }
+    .gmi-auth-form { padding: 1rem 1.1rem; }
+    .gmi-auth-features { display: none; }
+    .gmi-auth-foot { display: none; }
+  }
+</style>
+{% endblock %}
 
 {% block content %}
-<div class="container mt-5">
-    <div class="row justify-content-center">
-        <div class="col-md-6">
-            <div class="card">
-                <div class="card-header text-center">
-                    <h3><i class="bi bi-box-seam"></i> Roshe Group Logistics Portal System</h3>
-                    <p class="mb-0" style="font-size: 0.9rem;">Login to Your Account</p>
-                </div>
-                <div class="card-body p-4">
-                    <form method="post">
-                        {% csrf_token %}
-                        
-                        <div class="mb-3">
-                            <label for="id_username" class="form-label">Username</label>
-                            <input type="text" class="form-control" id="id_username" name="username" required>
-                        </div>
-                        
-                        <div class="mb-3">
-                            <label for="id_password" class="form-label">Password</label>
-                            <input type="password" class="form-control" id="id_password" name="password" required>
-                        </div>
-                        
-                        <button type="submit" class="btn btn-primary w-100 mb-3">
-                            <i class="bi bi-box-arrow-in-right"></i> Login
-                        </button>
-                    </form>
-                </div>
-                <div class="card-footer bg-light text-center">
-                    <small>Roshe Group Offline Logistics Management System</small>
-                </div>
-            </div>
+<section class="gmi-auth">
+  <div class="gmi-auth-card" role="region" aria-label="Sign in">
+    <aside class="gmi-auth-brand">
+      <div class="gmi-auth-logo">
+        <img src="{% static 'images/gmi_logo.png' %}" alt="GMI Terralink logo">
+      </div>
+      <div class="gmi-auth-wordmark">GMI <span>Terralink</span></div>
+
+      <span class="gmi-auth-kicker"><i class="bi bi-shield-lock-fill"></i> Secure Operations Portal</span>
+      <h1 class="gmi-auth-headline">Run logistics, sourcing &amp; finance from one trusted workspace.</h1>
+      <p class="gmi-auth-sub">Sign in to manage cargo movements, supplier sourcing, invoicing and receipts &mdash; all aligned with the GMI Terralink standard.</p>
+
+      <div class="gmi-auth-features">
+        <div class="gmi-auth-feature">
+          <i class="bi bi-shield-check"></i>
+          <div>
+            <strong>Role-aware navigation</strong>
+            <span>Each team member only sees the modules relevant to their role.</span>
+          </div>
         </div>
+        <div class="gmi-auth-feature">
+          <i class="bi bi-lightning-charge"></i>
+          <div>
+            <strong>Faster decisions</strong>
+            <span>Clear dashboards, smart documents and real-time financial visibility.</span>
+          </div>
+        </div>
+        <div class="gmi-auth-feature">
+          <i class="bi bi-journal-richtext"></i>
+          <div>
+            <strong>Premium documents</strong>
+            <span>Invoices, receipts and POs that match the GMI Terralink brand.</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="gmi-auth-foot">
+        <span>&copy; {% now "Y" %} GMI Terralink Co. Ltd</span>
+        <span><i class="bi bi-geo-alt"></i> Kampala &middot; Mombasa</span>
+      </div>
+    </aside>
+
+    <div class="gmi-auth-form">
+      <div class="gmi-auth-form-head">
+        <h2>Welcome back</h2>
+        <p>Sign in to continue to your operations dashboard.</p>
+      </div>
+
+      {% if form.errors or form.non_field_errors %}
+        <div class="gmi-alert" role="alert">
+          <i class="bi bi-exclamation-triangle-fill"></i>
+          <div>
+            {% if form.non_field_errors %}{{ form.non_field_errors|join:" " }}
+            {% else %}Your username and password didn't match. Please try again.{% endif %}
+          </div>
+        </div>
+      {% endif %}
+
+      <form method="post" novalidate id="gmi-login-form" autocomplete="on">
+        {% csrf_token %}
+
+        <div class="gmi-field">
+          <label for="id_username">Username</label>
+          <div class="gmi-input-wrap">
+            <i class="bi bi-person"></i>
+            <input type="text" id="id_username" name="username"
+                   placeholder="e.g. admin" autocomplete="username"
+                   autocapitalize="off" autocorrect="off" spellcheck="false"
+                   required autofocus>
+          </div>
+        </div>
+
+        <div class="gmi-field">
+          <label for="id_password">Password</label>
+          <div class="gmi-input-wrap">
+            <i class="bi bi-key"></i>
+            <input type="password" id="id_password" name="password"
+                   placeholder="Enter your password" autocomplete="current-password" required>
+            <button type="button" class="gmi-pw-toggle" id="gmi-pw-toggle"
+                    aria-label="Show password" title="Show / hide password">
+              <i class="bi bi-eye"></i>
+            </button>
+          </div>
+          <span class="gmi-caps" id="gmi-caps">
+            <i class="bi bi-capslock-fill"></i> Caps Lock is on
+          </span>
+        </div>
+
+        <div class="gmi-meta-row">
+          <label class="gmi-remember">
+            <input type="checkbox" name="remember" id="gmi-remember">
+            Remember me
+          </label>
+          <a href="#" onclick="alert('Please contact the system administrator to reset your password.'); return false;">
+            Forgot password?
+          </a>
+        </div>
+
+        <input type="hidden" name="next" value="{{ next }}">
+
+        <button type="submit" class="gmi-submit" id="gmi-submit-btn">
+          <span class="spinner" aria-hidden="true"></span>
+          <span class="label"><i class="bi bi-box-arrow-in-right me-1"></i> Sign in to dashboard</span>
+        </button>
+      </form>
+
+      <div class="gmi-divider">Need help?</div>
+      <div class="gmi-help">
+        <i class="bi bi-info-circle-fill"></i>
+        Need access or a role change? Contact the system administrator or company director.
+      </div>
     </div>
-</div>
+  </div>
+</section>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  (function () {
+    const pw = document.getElementById('id_password');
+    const toggle = document.getElementById('gmi-pw-toggle');
+    const caps = document.getElementById('gmi-caps');
+    const form = document.getElementById('gmi-login-form');
+    const submitBtn = document.getElementById('gmi-submit-btn');
+
+    if (toggle && pw) {
+      toggle.addEventListener('click', function () {
+        const show = pw.type === 'password';
+        pw.type = show ? 'text' : 'password';
+        toggle.querySelector('i').className = show ? 'bi bi-eye-slash' : 'bi bi-eye';
+        toggle.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+        pw.focus();
+      });
+    }
+
+    function checkCaps(e) {
+      if (!caps || !e.getModifierState) return;
+      caps.classList.toggle('show', e.getModifierState('CapsLock'));
+    }
+    if (pw) {
+      pw.addEventListener('keydown', checkCaps);
+      pw.addEventListener('keyup', checkCaps);
+      pw.addEventListener('blur', function () { caps && caps.classList.remove('show'); });
+    }
+
+    if (form && submitBtn) {
+      form.addEventListener('submit', function () {
+        submitBtn.classList.add('is-loading');
+      });
+    }
+  })();
+</script>
 {% endblock %}

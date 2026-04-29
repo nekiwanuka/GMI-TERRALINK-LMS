@@ -1,8 +1,8 @@
 #!/bin/bash
-# Setup script for Roshe Group Logistics Portal System
+# Setup script for GMI TERRALINK Logistics Portal System
 
 echo "================================================"
-echo "Roshe Group Logistics Portal Management System Setup"
+echo "GMI TERRALINK Logistics Portal Management System Setup"
 echo "================================================"
 echo ""
 

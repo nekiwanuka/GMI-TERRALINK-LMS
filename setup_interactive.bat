@@ -1,6 +1,6 @@
 @echo off
 REM ========================================
-REM Roshe Group Logistics Portal Management System
+REM GMI TERRALINK Logistics Portal Management System
 REM Interactive Setup with Feature Selection
 REM ========================================
 
@@ -8,7 +8,7 @@ setlocal enabledelayedexpansion
 
 echo.
 echo ========================================
-echo ROSHE GROUP LOGISTICS PORTAL MANAGEMENT SYSTEM
+echo GMI TERRALINK LOGISTICS PORTAL MANAGEMENT SYSTEM
 echo Interactive Setup Wizard
 echo ========================================
 echo.
@@ -63,8 +63,8 @@ set /p CSV="   Install CSV export feature? (Y/N) [Y]: "
 if /i "!CSV!"=="N" set "INSTALL_CSV_EXPORT=N"
 echo.
 
-echo 5. Roshe Group Logo (optional)
-set /p LOGO="   Install Roshe Group logo and branding? (Y/N) [N]: "
+echo 5. GMI TERRALINK Logo (optional)
+set /p LOGO="   Install GMI TERRALINK logo and branding? (Y/N) [N]: "
 if /i "!LOGO!"=="Y" set "INSTALL_LOGO=Y"
 echo.
 
@@ -82,7 +82,7 @@ echo [REQUIRED] Core System .................... YES
 echo [OPTIONAL] Audit Logging ................ !INSTALL_AUDIT_LOG!
 echo [OPTIONAL] Reports Dashboard ........... !INSTALL_REPORTS!
 echo [OPTIONAL] CSV Export ................... !INSTALL_CSV_EXPORT!
-echo [OPTIONAL] Roshe Group Logo ............ !INSTALL_LOGO!
+echo [OPTIONAL] GMI TERRALINK Logo ............ !INSTALL_LOGO!
 echo [EXTRA] Desktop Shortcut ............... !CREATE_DESKTOP_SHORTCUT!
 echo.
 
@@ -158,11 +158,11 @@ if /i "!INSTALL_AUDIT_LOG!"=="N" (
 )
 
 if /i "!INSTALL_LOGO!"=="Y" (
-    echo Downloading Roshe Group logo...
+    echo Downloading GMI TERRALINK logo...
     if not exist "logistics\static\images" mkdir "logistics\static\images"
     
     REM Create a placeholder logo file
-    echo # Roshe Group Logo > logistics\static\images\roshe_logo.txt
+    echo # GMI TERRALINK Logo > logistics\static\images\roshe_logo.txt
     echo Logo files should be placed in: logistics/static/images/
     echo Download logo from: https://roshegroup.com/media/logo.png
     echo.
@@ -195,11 +195,11 @@ if /i "!CREATE_DESKTOP_SHORTCUT!"=="Y" (
     REM Create a VBS script to create the shortcut
     (
         echo Set oWS = WScript.CreateObject("WScript.Shell"^)
-        echo sLinkFile = "!DESKTOP!\Roshe Group Logistics Portal.lnk"
+        echo sLinkFile = "!DESKTOP!\GMI TERRALINK Logistics Portal.lnk"
         echo Set oLink = oWS.CreateShortcut(sLinkFile^)
         echo oLink.TargetPath = "!PROJECT_PATH!\run.py"
         echo oLink.WorkingDirectory = "!PROJECT_PATH!"
-        echo oLink.Description = "Roshe Group Logistics Portal Management System"
+        echo oLink.Description = "GMI TERRALINK Logistics Portal Management System"
         echo oLink.Save
     ) > create_shortcut.vbs
     
@@ -225,7 +225,7 @@ echo   - Core System ...................... YES
 echo   - Audit Logging .................. !INSTALL_AUDIT_LOG!
 echo   - Reports Dashboard ............. !INSTALL_REPORTS!
 echo   - CSV Export ..................... !INSTALL_CSV_EXPORT!
-echo   - Roshe Group Logo .............. !INSTALL_LOGO!
+echo   - GMI TERRALINK Logo .............. !INSTALL_LOGO!
 echo.
 echo First Login:
 echo   - Username: [admin account you just created]

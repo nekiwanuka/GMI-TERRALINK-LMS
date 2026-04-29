@@ -1,0 +1,63 @@
+{% comment %}
+  Reusable Trade/Loading closure card.
+  Required context:
+    - closure_items: list of {label, ok, detail}
+    - closure_ready: bool
+    - close_url, reopen_url: URLs (already resolved)
+    - object_is_closed: bool
+    - closed_at, closed_by_name, closure_notes (optional)
+    - lane_label: e.g. "Trade" or "Loading"
+{% endcomment %}
+<div class="card shadow-sm border-{% if object_is_closed %}success{% elif closure_ready %}primary{% else %}secondary{% endif %} mb-3">
+  <div class="card-header bg-{% if object_is_closed %}success{% elif closure_ready %}primary{% else %}light{% endif %} {% if object_is_closed or closure_ready %}text-white{% endif %} d-flex justify-content-between align-items-center">
+    <strong><i class="bi bi-check2-square"></i> {{ lane_label }} Closure</strong>
+    {% if object_is_closed %}
+      <span class="badge bg-light text-success"><i class="bi bi-lock-fill"></i> Closed</span>
+    {% elif closure_ready %}
+      <span class="badge bg-light text-primary"><i class="bi bi-unlock"></i> Ready to close</span>
+    {% else %}
+      <span class="badge bg-secondary">Pending items</span>
+    {% endif %}
+  </div>
+  <div class="card-body">
+    <ul class="list-group list-group-flush mb-3">
+      {% for item in closure_items %}
+        <li class="list-group-item d-flex justify-content-between align-items-center px-0">
+          <span>
+            {% if item.ok %}
+              <i class="bi bi-check-circle-fill text-success"></i>
+            {% else %}
+              <i class="bi bi-circle text-secondary"></i>
+            {% endif %}
+            {{ item.label }}
+          </span>
+          <small class="text-muted">{{ item.detail }}</small>
+        </li>
+      {% endfor %}
+    </ul>
+
+    {% if object_is_closed %}
+      <div class="alert alert-success mb-2 small">
+        Closed on {{ closed_at|date:"d M Y H:i" }}{% if closed_by_name %} by <strong>{{ closed_by_name }}</strong>{% endif %}.
+        {% if closure_notes %}<div class="mt-1">{{ closure_notes|linebreaksbr }}</div>{% endif %}
+      </div>
+      {% if user.is_superuser or user.role in 'ADMIN,DIRECTOR' %}
+        <form method="post" action="{{ reopen_url }}" onsubmit="return confirm('Reopen this {{ lane_label|lower }}?');">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-outline-warning btn-sm"><i class="bi bi-unlock"></i> Reopen</button>
+        </form>
+      {% endif %}
+    {% else %}
+      <form method="post" action="{{ close_url }}" onsubmit="return confirm('Close this {{ lane_label|lower }}? Future edits will be blocked.');">
+        {% csrf_token %}
+        <div class="mb-2">
+          <label class="form-label small mb-1">Closure notes (optional)</label>
+          <textarea name="closure_notes" class="form-control form-control-sm" rows="2" {% if not closure_ready %}disabled{% endif %}></textarea>
+        </div>
+        <button type="submit" class="btn btn-{% if closure_ready %}success{% else %}secondary{% endif %} btn-sm" {% if not closure_ready %}disabled{% endif %}>
+          <i class="bi bi-lock-fill"></i> Close {{ lane_label }}
+        </button>
+      </form>
+    {% endif %}
+  </div>
+</div>

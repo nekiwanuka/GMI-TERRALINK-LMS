@@ -1,0 +1,24 @@
+{% comment %}
+  Reusable lane department filter bar.
+  Requires context vars: active_lane, active_lane_label, can_switch_lane
+{% endcomment %}
+{% if active_lane is not None %}
+<div class="d-flex align-items-center gap-2 flex-wrap py-2 px-1 border-bottom mb-3">
+    <span class="text-muted small fw-semibold text-uppercase" style="letter-spacing:.05em">Department:</span>
+    <span class="badge bg-secondary">{{ active_lane_label }}</span>
+    {% if can_switch_lane %}
+    <a href="?lane=all"
+       class="btn btn-sm {% if active_lane == 'all' %}btn-dark{% else %}btn-outline-secondary{% endif %}">
+        <i class="bi bi-grid me-1"></i>All
+    </a>
+    <a href="?lane=logistics"
+       class="btn btn-sm {% if active_lane == 'logistics' %}btn-dark{% else %}btn-outline-secondary{% endif %}">
+        <i class="bi bi-box-seam me-1"></i>Logistics
+    </a>
+    <a href="?lane=sourcing"
+       class="btn btn-sm {% if active_lane == 'sourcing' %}btn-dark{% else %}btn-outline-secondary{% endif %}">
+        <i class="bi bi-globe2 me-1"></i>Sourcing / Trade
+    </a>
+    {% endif %}
+</div>
+{% endif %}

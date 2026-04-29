@@ -1,6 +1,6 @@
 {% extends "logistics/base.html" %}
 
-{% block title %}Container Returns - Roshe Group Logistics Portal{% endblock %}
+{% block title %}Container Returns - GMI TERRALINK Logistics Portal{% endblock %}
 
 {% block content %}
 <div class="container-fluid">
@@ -80,7 +80,7 @@
                             {% endif %}
                         </td>
                         <td>
-                            {% if user.role == 'superuser' %}
+                            {% if user.is_superuser or user.role == 'ADMIN' %}
                             <a href="{% url 'container_return_update' container.id %}" class="btn btn-sm btn-warning">
                                 <i class="bi bi-pencil"></i> Edit
                             </a>

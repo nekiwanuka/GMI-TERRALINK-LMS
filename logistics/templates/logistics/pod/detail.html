@@ -1,0 +1,70 @@
+{% extends "logistics/base.html" %}
+
+{% block title %}POD {{ pod.pod_number }} - GMI TERRALINK{% endblock %}
+
+{% block content %}
+<div class="container py-4" style="max-width:820px;">
+    <header class="mb-3 d-flex justify-content-between align-items-start" style="border-bottom:1px solid #ece7cd;padding-bottom:0.6rem;">
+        <div>
+            <span style="font-size:0.62rem;text-transform:uppercase;letter-spacing:0.1em;color:#8a8a8a;font-weight:700;">
+                <i class="bi bi-file-earmark-check me-1"></i>
+                {% if is_logistics %}Logistics lane{% else %}Sourcing &amp; Trading lane{% endif %}
+            </span>
+            <h1 style="font-size:1.15rem;font-weight:700;color:#1a1a1a;margin:0.15rem 0 0;">Proof of Delivery {{ pod.pod_number }}</h1>
+            <p style="font-size:0.8rem;color:#6b6b6b;margin:0;">
+                Reference: <strong>{{ pod.target_reference }}</strong>
+                &middot; Delivered {{ pod.delivered_at|date:"Y-m-d H:i" }}
+            </p>
+        </div>
+        <a href="{% url 'pod_delivery_note_pdf' pod.pk %}" class="btn btn-outline-primary btn-sm">
+            <i class="bi bi-download me-1"></i>Download Delivery Note
+        </a>
+    </header>
+
+    <div class="card" style="padding:1rem 1.1rem;">
+        <dl class="row mb-0 small">
+            <dt class="col-sm-4">Received by</dt>
+            <dd class="col-sm-8">{{ pod.received_by_name }}{% if pod.received_by_phone %} &middot; {{ pod.received_by_phone }}{% endif %}</dd>
+
+            {% if pod.delivery_address %}
+            <dt class="col-sm-4">Address</dt>
+            <dd class="col-sm-8">{{ pod.delivery_address }}</dd>
+            {% endif %}
+
+            {% if pod.gps_lat is not None and pod.gps_lng is not None %}
+            <dt class="col-sm-4">GPS</dt>
+            <dd class="col-sm-8">
+                <a href="https://www.google.com/maps?q={{ pod.gps_lat }},{{ pod.gps_lng }}" target="_blank" rel="noopener">
+                    {{ pod.gps_lat }}, {{ pod.gps_lng }}
+                </a>
+            </dd>
+            {% endif %}
+
+            {% if pod.notes %}
+            <dt class="col-sm-4">Notes</dt>
+            <dd class="col-sm-8">{{ pod.notes|linebreaksbr }}</dd>
+            {% endif %}
+
+            <dt class="col-sm-4">Captured by</dt>
+            <dd class="col-sm-8">{{ pod.created_by.get_full_name|default:pod.created_by.username }} on {{ pod.created_at|date:"Y-m-d H:i" }}</dd>
+        </dl>
+
+        {% if pod.signature_or_photo %}
+        <hr>
+        <h2 class="h6 fw-bold">Signature / Photo</h2>
+        <a href="{{ pod.signature_or_photo.url }}" target="_blank" rel="noopener">
+            <img src="{{ pod.signature_or_photo.url }}" alt="POD signature/photo"
+                 style="max-width:100%;max-height:380px;border:1px solid #ece7cd;border-radius:4px;">
+        </a>
+        {% endif %}
+    </div>
+
+    <div class="mt-3 d-flex gap-2">
+        {% if is_logistics %}
+            <a href="{% url 'loading_detail' pod.loading.pk %}" class="btn btn-outline-secondary btn-sm">Back to loading</a>
+        {% else %}
+            <a href="{% url 'transaction_detail' pod.fulfillment_order.transaction.pk %}" class="btn btn-outline-secondary btn-sm">Back to transaction</a>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

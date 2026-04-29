@@ -1,0 +1,62 @@
+{% extends 'logistics/base.html' %}
+{% block title %}Proof of Delivery Records{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h2 class="mb-0"><i class="bi bi-file-earmark-check"></i> Proof of Delivery Records</h2>
+  <div class="btn-group btn-group-sm" role="group">
+    <a href="{% url 'pod_list' %}" class="btn {% if not lane %}btn-primary{% else %}btn-outline-primary{% endif %}">All</a>
+    <a href="{% url 'pod_list' %}?lane=logistics" class="btn {% if lane == 'logistics' %}btn-info{% else %}btn-outline-info{% endif %}"><i class="bi bi-truck"></i> Logistics</a>
+    <a href="{% url 'pod_list' %}?lane=trading" class="btn {% if lane == 'trading' %}btn-warning{% else %}btn-outline-warning{% endif %}"><i class="bi bi-globe2"></i> Trading</a>
+  </div>
+</div>
+
+<div class="card shadow-sm">
+  <div class="table-responsive">
+    <table class="table table-hover mb-0 align-middle">
+      <thead class="table-light">
+        <tr>
+          <th>POD #</th>
+          <th>Lane</th>
+          <th>Reference</th>
+          <th>Client</th>
+          <th>Delivered</th>
+          <th>Received by</th>
+          <th class="text-end">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for pod in pods %}
+          <tr>
+            <td><strong>{{ pod.pod_number }}</strong></td>
+            <td>
+              {% if pod.loading_id %}
+                <span class="badge bg-info"><i class="bi bi-truck"></i> Logistics</span>
+              {% else %}
+                <span class="badge bg-warning text-dark"><i class="bi bi-globe2"></i> Trading</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if pod.loading %}
+                <a href="{% url 'loading_detail' pod.loading_id %}">{{ pod.loading.loading_id }}</a>
+              {% elif pod.fulfillment_order %}
+                <a href="{% url 'transaction_detail' pod.fulfillment_order.transaction_id %}">{{ pod.fulfillment_order.transaction.transaction_id }}</a>
+              {% endif %}
+            </td>
+            <td>
+              {% if pod.loading %}{{ pod.loading.client.name }}
+              {% elif pod.fulfillment_order %}{{ pod.fulfillment_order.transaction.customer.name }}{% endif %}
+            </td>
+            <td>{{ pod.delivered_at|date:"d M Y H:i" }}</td>
+            <td>{{ pod.received_by_name }}</td>
+            <td class="text-end">
+              <a href="{% url 'pod_detail' pod.pk %}" class="btn btn-sm btn-outline-primary"><i class="bi bi-eye"></i> View</a>
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="7" class="text-center text-muted py-4">No POD records found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
