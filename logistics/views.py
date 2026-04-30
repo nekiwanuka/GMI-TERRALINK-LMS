@@ -141,7 +141,6 @@ from .services import (
 )
 from .services.reporting import DirectorReportingService
 
-
 DEFAULT_PAGE_SIZE = 20
 AUDIT_PAGE_SIZE = 40
 
@@ -835,16 +834,31 @@ def loading_detail(request, pk):
                 Decimal("0.00"),
             )
 
+    freight_payment = getattr(loading, "payment", None)
+    freight_transactions = []
+    freight_total_paid = Decimal("0.00")
+    freight_balance = None
+    if freight_payment:
+        freight_transactions = list(
+            freight_payment.transactions.order_by("-payment_date")
+        )
+        freight_total_paid = freight_payment.amount_paid or Decimal("0.00")
+        freight_balance = freight_payment.balance
+
     context = {
         "loading": loading,
         "has_transit": hasattr(loading, "transit"),
-        "has_payment": hasattr(loading, "payment"),
+        "has_payment": freight_payment is not None,
         "chargeable_wm": chargeable_wm,
         "flow_transaction": flow_transaction,
         "proforma": proforma,
         "final_invoice": final_invoice,
         "total_paid": total_paid,
         "balance_due": balance_due,
+        "freight_payment": freight_payment,
+        "freight_transactions": freight_transactions,
+        "freight_total_paid": freight_total_paid,
+        "freight_balance": freight_balance,
     }
     closure_items, closure_ready = evaluate_loading_closure(loading)
     context["closure_items"] = closure_items
@@ -6385,12 +6399,12 @@ def evaluate_loading_closure(loading):
         _closure_item(
             "Freight invoice issued",
             invoice is not None,
-            invoice.invoice_number if invoice else "No invoice",
+            str(invoice) if invoice else "No invoice",
         )
     )
 
     payments = Payment.objects.filter(loading=loading)
-    total_paid = payments.aggregate(total=Sum("amount"))["total"] or 0
+    total_paid = payments.aggregate(total=Sum("amount_paid"))["total"] or 0
     invoice_total = invoice.total_amount if invoice else 0
     paid_ok = bool(invoice) and total_paid >= invoice_total and invoice_total > 0
     items.append(

@@ -215,6 +215,73 @@
                     {% endif %}
                 </div>
             </div>
+
+            <div class="card mb-3">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="bi bi-cash-stack"></i> Freight Payment</h5>
+                    {% if freight_payment %}
+                        {% if freight_balance and freight_balance > 0 %}
+                            <span class="badge bg-warning text-dark">Partial</span>
+                        {% elif freight_payment.amount_charged and freight_total_paid >= freight_payment.amount_charged %}
+                            <span class="badge bg-success">Paid</span>
+                        {% else %}
+                            <span class="badge bg-secondary">Unpaid</span>
+                        {% endif %}
+                    {% endif %}
+                </div>
+                <div class="card-body">
+                    {% if freight_payment %}
+                        <div class="row g-2 mb-2 small">
+                            <div class="col-6"><span class="text-muted">Charged:</span> <strong>{{ freight_payment.amount_charged|floatformat:2 }}</strong></div>
+                            <div class="col-6"><span class="text-muted">Paid:</span> <strong>{{ freight_total_paid|floatformat:2 }}</strong></div>
+                            <div class="col-6"><span class="text-muted">Balance:</span>
+                                <strong class="{% if freight_balance and freight_balance > 0 %}text-warning{% else %}text-success{% endif %}">
+                                    {{ freight_balance|default:0|floatformat:2 }}
+                                </strong>
+                            </div>
+                            <div class="col-6"><span class="text-muted">Basis:</span> {{ freight_payment.get_billing_basis_display }}</div>
+                        </div>
+
+                        {% if freight_transactions %}
+                        <h6 class="text-muted small text-uppercase mt-3 mb-2">Partial Payments ({{ freight_transactions|length }})</h6>
+                        <ul class="list-group list-group-flush small mb-2">
+                            {% for tx in freight_transactions %}
+                            <li class="list-group-item px-0 py-2 d-flex justify-content-between align-items-start">
+                                <div>
+                                    <div><strong>{{ tx.amount|floatformat:2 }}</strong>
+                                        <span class="text-muted">&middot; {{ tx.get_payment_method_display }}</span>
+                                    </div>
+                                    <div class="text-muted" style="font-size: 0.8rem;">
+                                        {{ tx.payment_date|date:"Y-m-d H:i" }}
+                                        {% if tx.reference %} &middot; Ref: {{ tx.reference }}{% endif %}
+                                    </div>
+                                </div>
+                                <span class="badge {% if tx.verification_status == 'approved' %}bg-success{% elif tx.verification_status == 'rejected' %}bg-danger{% else %}bg-secondary{% endif %}">
+                                    {{ tx.get_verification_status_display }}
+                                </span>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                        {% else %}
+                        <p class="text-muted small mb-2">No partial payments recorded yet.</p>
+                        {% endif %}
+
+                        <a href="{% url 'payment_detail' freight_payment.id %}" class="btn btn-sm btn-outline-primary w-100 mb-1">
+                            <i class="bi bi-eye"></i> View Payment
+                        </a>
+                        {% if freight_balance and freight_balance > 0 %}
+                        <a href="{% url 'payment_update' freight_payment.id %}" class="btn btn-sm btn-success w-100">
+                            <i class="bi bi-cash-coin"></i> Add Partial Payment
+                        </a>
+                        {% endif %}
+                    {% else %}
+                        <p class="text-muted small mb-2">No freight payment record has been created for this loading.</p>
+                        <a href="{% url 'payment_create_with_loading' loading.id %}" class="btn btn-sm btn-primary w-100">
+                            <i class="bi bi-plus-circle"></i> Create Freight Payment
+                        </a>
+                    {% endif %}
+                </div>
+            </div>
         </div>
     </div>
 </div>
