@@ -2,6 +2,7 @@
 
 import csv
 import json
+import mimetypes
 import os
 from datetime import timedelta
 from decimal import Decimal
@@ -10,13 +11,15 @@ from io import BytesIO
 from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
+from django.conf import settings
 from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Q, Sum, ProtectedError, Count
-from django.http import HttpResponse, JsonResponse
+from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
+from django.utils._os import safe_join
 
 from .pi_parser import (
     parse_purchase_inquiry,
@@ -566,6 +569,21 @@ def register_view(request):
     return render(request, "logistics/register.html", {"form": form})
 
 
+@login_required
+def protected_media(request, path):
+    """Serve uploaded files only after Django authentication has succeeded."""
+    normalized_path = os.path.normpath(path).replace("\\", "/").lstrip("/")
+    if normalized_path.startswith("../"):
+        raise Http404("File not found")
+
+    file_path = safe_join(settings.MEDIA_ROOT, normalized_path)
+    if not os.path.isfile(file_path):
+        raise Http404("File not found")
+
+    content_type, _ = mimetypes.guess_type(file_path)
+    return FileResponse(open(file_path, "rb"), content_type=content_type)
+
+
 # ===== DASHBOARD & USERS =====
 
 
@@ -822,33 +840,77 @@ def loading_detail(request, pk):
     total_paid = Decimal("0.00")
     balance_due = None
 
+    # Final invoice for the cargo can come from the (optional) source
+    # transaction, or directly from FinalInvoices linked to the loading.
     if flow_transaction:
         proforma = flow_transaction.proforma_invoices.order_by("-created_at").first()
         final_invoice = flow_transaction.final_invoices.order_by("-created_at").first()
+    if final_invoice is None:
+        final_invoice = (
+            FinalInvoice.objects.filter(loading=loading).order_by("-created_at").first()
+        )
+
+    # Aggregate every channel a freight payment can flow through:
+    #  * legacy Payment.transactions tied to the loading
+    #  * TransactionPaymentRecord posted against the FinalInvoice (the
+    #    "Record Invoice Payment" flow)
+    invoice_payment_records = []
+    invoice_records_total = Decimal("0.00")
+    if final_invoice is not None:
+        invoice_payment_records = list(
+            final_invoice.payment_records.order_by("-payment_date")
+        )
+        invoice_records_total = final_invoice.payment_records.aggregate(
+            total=Sum("amount")
+        )["total"] or Decimal("0.00")
+
+    if flow_transaction:
         total_paid = flow_transaction.payment_records.aggregate(total=Sum("amount"))[
             "total"
         ] or Decimal("0.00")
-        if final_invoice:
-            balance_due = max(
-                (final_invoice.total_amount or Decimal("0.00")) - total_paid,
-                Decimal("0.00"),
-            )
+    else:
+        total_paid = invoice_records_total
+
+    if final_invoice:
+        balance_due = max(
+            (final_invoice.total_amount or Decimal("0.00")) - total_paid,
+            Decimal("0.00"),
+        )
 
     freight_payment = getattr(loading, "payment", None)
     freight_transactions = []
-    freight_total_paid = Decimal("0.00")
-    freight_balance = None
+    legacy_freight_paid = Decimal("0.00")
     if freight_payment:
         freight_transactions = list(
             freight_payment.transactions.order_by("-payment_date")
         )
-        freight_total_paid = freight_payment.amount_paid or Decimal("0.00")
-        freight_balance = freight_payment.balance
+        legacy_freight_paid = freight_payment.amount_paid or Decimal("0.00")
+
+    # Combined view: invoice payments + legacy freight transactions both count
+    # as freight settlement on this loading. Avoid double counting by taking the
+    # max of invoice-scoped vs. transaction-scoped payment_records.
+    if flow_transaction is not None:
+        txn_records_total = flow_transaction.payment_records.aggregate(
+            total=Sum("amount")
+        )["total"] or Decimal("0")
+    else:
+        txn_records_total = Decimal("0")
+    invoice_route_paid = max(invoice_records_total, txn_records_total)
+    freight_total_paid = (legacy_freight_paid or Decimal("0.00")) + invoice_route_paid
+    if freight_payment and freight_payment.amount_charged:
+        freight_charged = freight_payment.amount_charged
+    elif final_invoice:
+        freight_charged = final_invoice.total_amount or Decimal("0.00")
+    else:
+        freight_charged = Decimal("0.00")
+    freight_balance = max(
+        (freight_charged or Decimal("0.00")) - freight_total_paid, Decimal("0.00")
+    )
 
     context = {
         "loading": loading,
         "has_transit": hasattr(loading, "transit"),
-        "has_payment": freight_payment is not None,
+        "has_payment": freight_payment is not None or bool(invoice_payment_records),
         "chargeable_wm": chargeable_wm,
         "flow_transaction": flow_transaction,
         "proforma": proforma,
@@ -857,7 +919,9 @@ def loading_detail(request, pk):
         "balance_due": balance_due,
         "freight_payment": freight_payment,
         "freight_transactions": freight_transactions,
+        "invoice_payment_records": invoice_payment_records,
         "freight_total_paid": freight_total_paid,
+        "freight_charged": freight_charged,
         "freight_balance": freight_balance,
     }
     closure_items, closure_ready = evaluate_loading_closure(loading)
@@ -5827,7 +5891,9 @@ def record_logistics_pod(request, loading_pk):
         return redirect("pod_detail", pk=loading.proof_of_delivery.pk)
 
     if request.method == "POST":
-        form = ProofOfDeliveryForm(request.POST, request.FILES)
+        form = ProofOfDeliveryForm(
+            request.POST, request.FILES, instance=ProofOfDelivery(loading=loading)
+        )
         if form.is_valid():
             pod = form.save(commit=False)
             pod.loading = loading
@@ -5864,7 +5930,11 @@ def record_trading_pod(request, fulfillment_pk):
         return redirect("pod_detail", pk=fulfillment.proof_of_delivery.pk)
 
     if request.method == "POST":
-        form = ProofOfDeliveryForm(request.POST, request.FILES)
+        form = ProofOfDeliveryForm(
+            request.POST,
+            request.FILES,
+            instance=ProofOfDelivery(fulfillment_order=fulfillment),
+        )
         if form.is_valid():
             pod = form.save(commit=False)
             pod.fulfillment_order = fulfillment
@@ -5929,6 +5999,7 @@ def pod_delivery_note_pdf(request, pk):
 
     _draw_standard_doc_header(pdf, width, height, "DELIVERY NOTE", pod.pod_number)
 
+    pdf.setFillColor(colors.black)
     y = height - 170
     pdf.setFont("Helvetica-Bold", 11)
     pdf.drawString(50, y, "Lane:")
@@ -6404,14 +6475,37 @@ def evaluate_loading_closure(loading):
     )
 
     payments = Payment.objects.filter(loading=loading)
-    total_paid = payments.aggregate(total=Sum("amount_paid"))["total"] or 0
-    invoice_total = invoice.total_amount if invoice else 0
-    paid_ok = bool(invoice) and total_paid >= invoice_total and invoice_total > 0
+    legacy_paid = payments.aggregate(total=Sum("amount_paid"))["total"] or Decimal("0")
+    total_charged = payments.aggregate(total=Sum("amount_charged"))["total"] or Decimal(
+        "0"
+    )
+    # Also count invoice-level payments (paid via the FinalInvoice "Record
+    # Payment" route) and any source-transaction payments tied to this cargo.
+    invoice_record_total = Decimal("0")
+    if invoice is not None:
+        invoice_record_total = invoice.payment_records.aggregate(total=Sum("amount"))[
+            "total"
+        ] or Decimal("0")
+    flow_transaction = getattr(loading, "source_transaction", None)
+    txn_total = Decimal("0")
+    if flow_transaction is not None:
+        txn_total = flow_transaction.payment_records.aggregate(total=Sum("amount"))[
+            "total"
+        ] or Decimal("0")
+    # Prefer the larger of invoice-scoped vs. transaction-scoped totals so the
+    # same payment isn't double-counted when recorded against both.
+    invoice_route_paid = max(invoice_record_total, txn_total)
+    total_paid = legacy_paid + invoice_route_paid
+    # Use the higher of the freight payment's charged amount or the final invoice
+    # total as the expected settlement target.
+    invoice_total = invoice.total_amount if invoice else Decimal("0")
+    expected_total = max(total_charged or Decimal("0"), invoice_total or Decimal("0"))
+    paid_ok = expected_total > 0 and total_paid >= expected_total
     items.append(
         _closure_item(
             "Freight payment settled",
             paid_ok,
-            f"Paid {total_paid} / {invoice_total}",
+            f"Paid {total_paid} / {expected_total}",
         )
     )
 

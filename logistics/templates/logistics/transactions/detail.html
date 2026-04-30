@@ -333,7 +333,7 @@
                                                 <td>{{ archive.archived_by.username }}</td>
                                                 <td>{{ archive.created_at|date:"d M Y H:i" }}</td>
                                                 <td class="text-end">
-                                                    <a href="{{ archive.archived_file.url }}" class="btn btn-sm btn-outline-dark" target="_blank">Open File</a>
+                                                    <a href="{% url 'protected_media' archive.archived_file.name %}" class="btn btn-sm btn-outline-dark" target="_blank" rel="noopener noreferrer">Open File</a>
                                                 </td>
                                             </tr>
                                             {% endfor %}

@@ -33,6 +33,7 @@ urlpatterns = [
         name="notifications_mark_all_read",
     ),
     path("register/", views.register_view, name="register"),
+    path("protected-media/<path:path>", views.protected_media, name="protected_media"),
     # Dashboard
     path("", views.dashboard, name="dashboard"),
     # Users

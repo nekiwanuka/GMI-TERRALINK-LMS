@@ -52,8 +52,8 @@
         {% if pod.signature_or_photo %}
         <hr>
         <h2 class="h6 fw-bold">Signature / Photo</h2>
-        <a href="{{ pod.signature_or_photo.url }}" target="_blank" rel="noopener">
-            <img src="{{ pod.signature_or_photo.url }}" alt="POD signature/photo"
+        <a href="{% url 'protected_media' pod.signature_or_photo.name %}" target="_blank" rel="noopener">
+            <img src="{% url 'protected_media' pod.signature_or_photo.name %}" alt="POD signature/photo"
                  style="max-width:100%;max-height:380px;border:1px solid #ece7cd;border-radius:4px;">
         </a>
         {% endif %}

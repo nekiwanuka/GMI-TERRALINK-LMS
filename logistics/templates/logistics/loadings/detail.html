@@ -2,258 +2,741 @@
 
 {% block title %}{{ loading.loading_id }} - GMI TERRALINK Logistics Portal{% endblock %}
 
+{% block extra_css %}
+<style>
+    .loading-page-shell {
+        max-width: 1440px;
+        margin-left: auto;
+        margin-right: auto;
+    }
+    .loading-hero {
+        position: relative;
+        background: #f2f4f7;
+        color: #1E1A23;
+        border: 1px solid #e0e5eb;
+        border-radius: 10px;
+        padding: 1.1rem;
+        margin-bottom: 1.25rem;
+        box-shadow: 0 8px 24px rgba(30, 26, 35, 0.08);
+        overflow: hidden;
+    }
+    .loading-hero:before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        border-top: 4px solid #6c4cba;
+        pointer-events: none;
+    }
+    .loading-hero > * { position: relative; z-index: 1; }
+    .manifest-layout {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(280px, 360px);
+        gap: 1rem;
+        align-items: stretch;
+    }
+    .manifest-main,
+    .manifest-actions {
+        background: #fff;
+        border: 1px solid #e0e5eb;
+        border-radius: 8px;
+        padding: 1rem;
+    }
+    .manifest-title-row {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        min-width: 0;
+    }
+    .manifest-icon {
+        width: 42px;
+        height: 42px;
+        border-radius: 8px;
+        background: #1E1A23;
+        color: #F4C21F;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.3rem;
+        flex: 0 0 auto;
+    }
+    .hero-eyebrow {
+        font-size: 0.72rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: #6c757d;
+        font-weight: 700;
+    }
+    .loading-hero h2 { color: #1E1A23; margin: 0; font-weight: 800; letter-spacing: 0; }
+    .loading-hero .hero-meta { color: #5d6570; font-size: 0.9rem; }
+    .loading-hero .hero-meta a { color: #1E1A23; font-weight: 600; }
+    .loading-hero .badge { font-weight: 500; padding: 0.45em 0.7em; }
+    .hero-route {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+        align-items: center;
+        gap: 0.85rem;
+        margin-top: 1rem;
+        max-width: 720px;
+    }
+    .route-point {
+        min-width: 0;
+        padding: 0.75rem 0.85rem;
+        border: 1px solid #e0e5eb;
+        border-radius: 8px;
+        background: #f8fafc;
+    }
+    .route-point .route-label { font-size: 0.67rem; text-transform: uppercase; letter-spacing: 0.06em; color: #6c757d; font-weight: 700; }
+    .route-point .route-value { color: #1E1A23; font-size: 0.98rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .route-arrow { color: #6c4cba; font-size: 1.3rem; }
+    .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        padding: 0.35rem 0.75rem;
+        border-radius: 999px;
+        background: #f8fafc;
+        color: #343a40;
+        border: 1px solid #e0e5eb;
+        font-size: 0.78rem;
+        font-weight: 500;
+    }
+    .pill i { font-size: 0.85rem; }
+    .action-cluster {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 0.5rem;
+    }
+    .action-cluster .btn { display: inline-flex; align-items: center; justify-content: center; gap: 0.35rem; min-height: 34px; }
+    .info-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 0.9rem 1.25rem; }
+    .info-cell .label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.5px; color: #6c757d; margin-bottom: 0.15rem; }
+    .info-cell .value { font-size: 0.95rem; font-weight: 500; color: #1E1A23; word-break: break-word; }
+    .info-cell .value a { color: #1E1A23; text-decoration: none; border-bottom: 1px dashed #c9c5cf; }
+    .info-cell .value a:hover { color: #6c4cba; }
+    .section-card { border: 1px solid #edf0f3; border-radius: 10px; box-shadow: 0 8px 20px rgba(30,26,35,0.05); margin-bottom: 1.1rem; }
+    .section-card .card-header { background: #f6f7f9; border-bottom: 1px solid #edf0f3; border-radius: 10px 10px 0 0; padding: 0.85rem 1.1rem; display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; }
+    .section-card .card-header h5, .section-card .card-header h6 { margin: 0; font-size: 1rem; font-weight: 600; color: #1E1A23; }
+    .section-card .card-body { padding: 1.1rem; }
+    .section-title-block { display: flex; align-items: center; gap: 0.65rem; min-width: 0; }
+    .section-icon {
+        width: 34px;
+        height: 34px;
+        border-radius: 8px;
+        background: #fff;
+        border: 1px solid #e0e5eb;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        color: #6c4cba;
+        flex: 0 0 auto;
+    }
+    .section-title { margin: 0; color: #1E1A23; font-size: 0.98rem; font-weight: 700; line-height: 1.15; }
+    .section-subtitle { margin-top: 0.1rem; color: #6c757d; font-size: 0.74rem; line-height: 1.2; }
+    .route-summary {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+        gap: 0.8rem;
+        align-items: stretch;
+        background: #f8fafc;
+        border: 1px solid #edf0f3;
+        border-radius: 8px;
+        padding: 0.85rem;
+        margin-bottom: 1rem;
+    }
+    .route-summary .node {
+        background: #fff;
+        border: 1px solid #edf0f3;
+        border-radius: 8px;
+        padding: 0.75rem;
+        min-width: 0;
+    }
+    .route-summary .node-label { font-size: 0.68rem; color: #6c757d; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700; }
+    .route-summary .node-value { color: #1E1A23; font-weight: 700; margin-top: 0.12rem; word-break: break-word; }
+    .route-summary .route-mid { display: flex; align-items: center; justify-content: center; color: #6c4cba; font-size: 1.35rem; }
+    .measure-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.7rem; margin-bottom: 1rem; }
+    .measure-tile { background: #fff; border: 1px solid #edf0f3; border-radius: 8px; padding: 0.75rem; min-width: 0; }
+    .measure-tile .measure-icon { color: #6c4cba; font-size: 1rem; margin-bottom: 0.35rem; }
+    .measure-tile .measure-label { font-size: 0.68rem; color: #6c757d; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700; }
+    .measure-tile .measure-value { color: #1E1A23; font-size: 1.05rem; font-weight: 800; line-height: 1.2; margin-top: 0.12rem; }
+    .stat-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem 1rem; margin-bottom: 0.75rem; }
+    .stat-row .stat-label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.4px; color: #6c757d; }
+    .stat-row .stat-value { font-size: 1rem; font-weight: 600; color: #1E1A23; }
+    .stat-row .stat-value.muted { color: #6c757d; font-weight: 500; }
+    .stat-row .stat-value.warn { color: #b97800; }
+    .stat-row .stat-value.ok { color: #1d7a34; }
+    .progress-thin { height: 6px; border-radius: 4px; background: #ececec; }
+    .progress-thin .bar { height: 100%; border-radius: 4px; background: linear-gradient(90deg, #5cb85c, #1d7a34); transition: width 0.4s; }
+    .progress-thin .bar.warn { background: linear-gradient(90deg, #f4c21f, #b97800); }
+    .partial-list { list-style: none; padding: 0; margin: 0; }
+    .partial-list li { padding: 0.6rem 0; border-bottom: 1px solid #f0f0f0; display: flex; justify-content: space-between; align-items: flex-start; gap: 0.5rem; }
+    .partial-list li:last-child { border-bottom: none; }
+    .partial-list .amt { font-weight: 600; color: #1E1A23; }
+    .partial-list .meta { font-size: 0.78rem; color: #6c757d; }
+    .empty-hint { font-size: 0.85rem; color: #6c757d; font-style: italic; margin-bottom: 0.5rem; }
+    .doc-actions .btn { font-size: 0.82rem; }
+    .document-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 0.65rem; }
+    .document-link {
+        display: flex;
+        align-items: center;
+        gap: 0.65rem;
+        padding: 0.78rem 0.85rem;
+        border: 1px solid #edf0f3;
+        border-radius: 8px;
+        text-decoration: none;
+        color: #1E1A23;
+        background: #fff;
+        transition: transform 0.16s, box-shadow 0.16s, border-color 0.16s;
+    }
+    .document-link:hover { color: #1E1A23; border-color: #c9c5cf; box-shadow: 0 6px 16px rgba(30,26,35,0.08); transform: translateY(-1px); }
+    .document-link .doc-icon { width: 34px; height: 34px; border-radius: 8px; background: #f1eef7; color: #6c4cba; display: flex; align-items: center; justify-content: center; flex: 0 0 auto; }
+    .document-link .doc-title { font-size: 0.9rem; font-weight: 700; line-height: 1.15; }
+    .document-link .doc-sub { font-size: 0.72rem; color: #6c757d; margin-top: 0.12rem; }
+    .description-block { background: #fafafb; border-left: 3px solid #F4C21F; padding: 0.75rem 1rem; border-radius: 0 6px 6px 0; color: #2c2530; }
+
+    /* KPI strip */
+    .kpi-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.85rem; margin-bottom: 1.1rem; }
+    .kpi-tile { position: relative; background: #fff; border-radius: 10px; padding: 0.95rem 1.1rem; box-shadow: 0 1px 4px rgba(0,0,0,0.06); border-left: 4px solid #ddd; overflow: hidden; }
+    .kpi-tile .kpi-icon { position: absolute; right: 0.85rem; top: 0.85rem; font-size: 1.6rem; opacity: 0.18; }
+    .kpi-tile .kpi-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.6px; color: #6c757d; font-weight: 600; }
+    .kpi-tile .kpi-value { font-size: 1.25rem; font-weight: 700; color: #1E1A23; margin-top: 0.15rem; line-height: 1.2; }
+    .kpi-tile .kpi-sub { font-size: 0.75rem; color: #6c757d; margin-top: 0.15rem; }
+    .kpi-tile.tile-status { border-left-color: #6c4cba; }
+    .kpi-tile.tile-status .kpi-icon { color: #6c4cba; }
+    .kpi-tile.tile-freight { border-left-color: #1d7a34; }
+    .kpi-tile.tile-freight .kpi-icon { color: #1d7a34; }
+    .kpi-tile.tile-invoice { border-left-color: #0d6efd; }
+    .kpi-tile.tile-invoice .kpi-icon { color: #0d6efd; }
+    .kpi-tile.tile-transit { border-left-color: #f4c21f; }
+    .kpi-tile.tile-transit .kpi-icon { color: #c69500; }
+    .kpi-tile.warn { border-left-color: #b97800; }
+    .kpi-tile.warn .kpi-value { color: #b97800; }
+    .kpi-tile.ok .kpi-value { color: #1d7a34; }
+
+    /* Lifecycle stepper */
+    .lifecycle { display: flex; align-items: center; gap: 0; background: #fff; border-radius: 10px; padding: 1rem 1.1rem; box-shadow: 0 1px 4px rgba(0,0,0,0.06); margin-bottom: 1.1rem; overflow-x: auto; }
+    .lifecycle .step { display: flex; flex-direction: column; align-items: center; min-width: 90px; flex: 1; position: relative; }
+    .lifecycle .step .dot { width: 32px; height: 32px; border-radius: 50%; background: #eceaf0; color: #9b94a6; display: flex; align-items: center; justify-content: center; font-size: 0.95rem; border: 2px solid #eceaf0; transition: all 0.2s; z-index: 1; }
+    .lifecycle .step .label { font-size: 0.74rem; color: #6c757d; margin-top: 0.4rem; text-align: center; line-height: 1.1; max-width: 100px; }
+    .lifecycle .step.done .dot { background: #1d7a34; border-color: #1d7a34; color: #fff; }
+    .lifecycle .step.done .label { color: #1d7a34; font-weight: 600; }
+    .lifecycle .step.active .dot { background: #fff; border-color: #6c4cba; color: #6c4cba; box-shadow: 0 0 0 4px rgba(108,76,186,0.18); }
+    .lifecycle .step.active .label { color: #6c4cba; font-weight: 600; }
+    .lifecycle .connector { flex: 1; height: 2px; background: #eceaf0; margin: 0 -4px; margin-bottom: 1.4rem; min-width: 24px; }
+    .lifecycle .connector.done { background: #1d7a34; }
+
+    /* Tightened section card visuals */
+    .section-card .card-header h5 i, .section-card .card-header h6 i { margin-right: 0.35rem; }
+    .ribbon-bar { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-top: 0.5rem; }
+    .ribbon-bar .ribbon { font-size: 0.72rem; padding: 0.25em 0.65em; border-radius: 999px; background: #f1eef7; color: #4b3e7d; font-weight: 500; }
+    @media (max-width: 991.98px) {
+        .manifest-layout { grid-template-columns: 1fr; }
+        .action-cluster { width: 100%; }
+        .hero-route, .route-summary { grid-template-columns: 1fr; }
+        .route-arrow, .route-summary .route-mid { transform: rotate(90deg); }
+        .measure-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media (max-width: 575.98px) {
+        .loading-hero { padding: 1.05rem; }
+        .kpi-strip { grid-template-columns: 1fr; }
+        .measure-grid { grid-template-columns: 1fr; }
+        .lifecycle { padding: 0.85rem; }
+    }
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="container mt-4">
+<div class="container-fluid loading-page-shell mt-4">
     {% url 'close_loading' loading.id as close_url_x %}
     {% url 'reopen_loading' loading.id as reopen_url_x %}
     {% include "logistics/partials/closure_card.html" with lane_label="Loading" close_url=close_url_x reopen_url=reopen_url_x object_is_closed=loading.is_closed closed_at=loading.closed_at closed_by_name=loading.closed_by.get_full_name closure_notes=loading.closure_notes %}
-    <div class="row">
-        <div class="col-md-8">
-            <div class="card">
-                <div class="card-header d-flex justify-content-between">
-                    <h3><i class="bi bi-box"></i> {{ loading.loading_id }}</h3>
-                    <div class="d-flex gap-2">
-                        <a href="{% url 'loading_document' loading.id %}" class="btn btn-sm btn-outline-primary">
-                            <i class="bi bi-file-earmark-pdf"></i>
-                            {% if loading.entry_type == 'GROUPAGE' %}Groupage Note{% else %}Bill of Lading{% endif %}
-                        </a>
-                        <a href="{% url 'loading_packing_list_document' loading.id %}" class="btn btn-sm btn-outline-primary">
-                            <i class="bi bi-file-earmark-break"></i> Packing List
-                        </a>
-                        {% if loading.proof_of_delivery %}
-                        <a href="{% url 'pod_detail' loading.proof_of_delivery.id %}" class="btn btn-sm btn-outline-success">
-                            <i class="bi bi-file-earmark-check"></i> POD {{ loading.proof_of_delivery.pod_number }}
-                        </a>
-                        {% else %}
-                        <a href="{% url 'record_logistics_pod' loading.id %}" class="btn btn-sm btn-success">
-                            <i class="bi bi-clipboard-check"></i> Record POD
-                        </a>
+
+    <!-- Hero header -->
+    <div class="loading-hero">
+        <div class="manifest-layout">
+            <div class="manifest-main">
+                <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
+                    <div class="manifest-title-row">
+                        <span class="manifest-icon"><i class="bi bi-box-seam-fill"></i></span>
+                        <div class="min-w-0">
+                            <div class="hero-eyebrow mb-1">Loading Manifest</div>
+                            <h2>{{ loading.loading_id }}</h2>
+                            <div class="hero-meta mt-1">
+                                <a href="{% url 'client_detail' loading.client.id %}" class="text-decoration-none">
+                                    <i class="bi bi-person-circle"></i> {{ loading.client.name }}
+                                </a>
+                                &middot; {{ loading.loading_date|date:"M j, Y" }}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="d-flex flex-wrap gap-2">
+                        <span class="pill"><i class="bi bi-tag-fill"></i> {{ loading.get_entry_type_display }}</span>
+                        {% if loading.container_size %}<span class="pill"><i class="bi bi-archive-fill"></i> {{ loading.get_container_size_display }}</span>{% endif %}
+                        {% if has_transit %}
+                            <span class="pill"><i class="bi bi-compass-fill"></i> {{ loading.transit.get_status_display }}</span>
                         {% endif %}
-                        {% if user.is_superuser or user.role == 'ADMIN' %}
-                        <a href="{% url 'loading_update' loading.id %}" class="btn btn-sm btn-warning">
-                            <i class="bi bi-pencil"></i> Edit
-                        </a>
+                        {% if loading.proof_of_delivery %}
+                            <span class="pill"><i class="bi bi-check-circle-fill"></i> POD captured</span>
                         {% endif %}
                     </div>
                 </div>
+
+                <div class="hero-route">
+                    <div class="route-point">
+                        <div class="route-label">Origin</div>
+                        <div class="route-value">{{ loading.origin }}</div>
+                    </div>
+                    <div class="route-arrow"><i class="bi bi-arrow-right"></i></div>
+                    <div class="route-point">
+                        <div class="route-label">Destination</div>
+                        <div class="route-value">{{ loading.destination }}</div>
+                    </div>
+                </div>
+            </div>
+            <div class="manifest-actions">
+                <div class="hero-eyebrow mb-2">Quick Actions</div>
+                <div class="doc-actions action-cluster">
+                <a href="{% url 'loading_document' loading.id %}" class="btn btn-outline-dark btn-sm" target="_blank" rel="noopener noreferrer">
+                    <i class="bi bi-file-earmark-pdf"></i>
+                    {% if loading.entry_type == 'GROUPAGE' %}Groupage Note{% else %}Bill of Lading{% endif %}
+                </a>
+                <a href="{% url 'loading_packing_list_document' loading.id %}" class="btn btn-outline-dark btn-sm" target="_blank" rel="noopener noreferrer">
+                    <i class="bi bi-file-earmark-break"></i> Packing List
+                </a>
+                {% if loading.proof_of_delivery %}
+                <a href="{% url 'pod_detail' loading.proof_of_delivery.id %}" class="btn btn-success btn-sm" target="_blank" rel="noopener noreferrer">
+                    <i class="bi bi-file-earmark-check"></i> POD {{ loading.proof_of_delivery.pod_number }}
+                </a>
+                {% else %}
+                <a href="{% url 'record_logistics_pod' loading.id %}" class="btn btn-warning btn-sm">
+                    <i class="bi bi-clipboard-check"></i> Record POD
+                </a>
+                {% endif %}
+                {% if user.is_superuser or user.role == 'ADMIN' %}
+                <a href="{% url 'loading_update' loading.id %}" class="btn btn-warning btn-sm">
+                    <i class="bi bi-pencil"></i> Edit
+                </a>
+                {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- KPI strip -->
+    <div class="kpi-strip">
+        <div class="kpi-tile tile-status">
+            <i class="bi bi-flag-fill kpi-icon"></i>
+            <div class="kpi-label">Loading Status</div>
+            <div class="kpi-value">
+                {% if loading.is_closed %}Closed
+                {% elif loading.proof_of_delivery %}Delivered
+                {% elif has_transit %}{{ loading.transit.get_status_display }}
+                {% else %}Open{% endif %}
+            </div>
+            <div class="kpi-sub">
+                {% if loading.is_closed %}Closed {{ loading.closed_at|date:"M j, Y" }}
+                {% else %}Loaded {{ loading.loading_date|date:"M j, Y" }}{% endif %}
+            </div>
+        </div>
+        <div class="kpi-tile tile-freight {% if freight_balance and freight_balance > 0 %}warn{% elif freight_charged and freight_total_paid >= freight_charged %}ok{% endif %}">
+            <i class="bi bi-cash-stack kpi-icon"></i>
+            <div class="kpi-label">Freight Settled</div>
+            <div class="kpi-value">{{ freight_total_paid|default:0|floatformat:2 }}</div>
+            <div class="kpi-sub">
+                {% if freight_charged %}of {{ freight_charged|floatformat:2 }}
+                    {% if freight_balance and freight_balance > 0 %} &middot; bal {{ freight_balance|floatformat:2 }}{% endif %}
+                {% else %}No charge set{% endif %}
+            </div>
+        </div>
+        <div class="kpi-tile tile-invoice {% if balance_due and balance_due > 0 %}warn{% elif final_invoice and balance_due == 0 %}ok{% endif %}">
+            <i class="bi bi-receipt kpi-icon"></i>
+            <div class="kpi-label">Invoice Balance</div>
+            <div class="kpi-value">
+                {% if final_invoice %}{{ balance_due|default:0|floatformat:2 }} {{ final_invoice.currency }}
+                {% else %}—{% endif %}
+            </div>
+            <div class="kpi-sub">
+                {% if final_invoice %}Total {{ final_invoice.total_amount|floatformat:2 }} {{ final_invoice.currency }}
+                {% else %}No invoice issued{% endif %}
+            </div>
+        </div>
+        <div class="kpi-tile tile-transit">
+            <i class="bi bi-truck kpi-icon"></i>
+            <div class="kpi-label">Transit</div>
+            <div class="kpi-value">
+                {% if has_transit %}{{ loading.transit.get_status_display }}
+                {% else %}Not started{% endif %}
+            </div>
+            <div class="kpi-sub">
+                {% if has_transit and loading.transit.eta_kampala %}ETA {{ loading.transit.eta_kampala|date:"M j, Y" }}
+                {% elif has_transit %}{{ loading.transit.vessel_name|default:'Vessel TBD' }}
+                {% else %}Add transit record{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Lifecycle stepper -->
+    <div class="lifecycle">
+        {% with has_inv=final_invoice has_pod=loading.proof_of_delivery has_arrived=loading.transit.status %}
+        <div class="step done"><div class="dot"><i class="bi bi-box-seam"></i></div><div class="label">Loaded</div></div>
+        <div class="connector {% if has_transit %}done{% endif %}"></div>
+        <div class="step {% if has_transit and has_arrived != 'arrived' %}active{% elif has_arrived == 'arrived' %}done{% endif %}">
+            <div class="dot"><i class="bi bi-compass"></i></div><div class="label">In Transit</div>
+        </div>
+        <div class="connector {% if has_arrived == 'arrived' %}done{% endif %}"></div>
+        <div class="step {% if has_arrived == 'arrived' and not has_pod %}active{% elif has_arrived == 'arrived' %}done{% endif %}">
+            <div class="dot"><i class="bi bi-geo-alt"></i></div><div class="label">Arrived</div>
+        </div>
+        <div class="connector {% if has_pod %}done{% endif %}"></div>
+        <div class="step {% if has_pod and not has_inv %}active{% elif has_pod %}done{% endif %}">
+            <div class="dot"><i class="bi bi-clipboard-check"></i></div><div class="label">POD</div>
+        </div>
+        <div class="connector {% if has_inv %}done{% endif %}"></div>
+        <div class="step {% if has_inv and balance_due and balance_due > 0 %}active{% elif has_inv and not balance_due %}done{% endif %}">
+            <div class="dot"><i class="bi bi-receipt-cutoff"></i></div><div class="label">Invoiced</div>
+        </div>
+        <div class="connector {% if has_inv and not balance_due %}done{% endif %}"></div>
+        <div class="step {% if loading.is_closed %}done{% elif has_inv and not balance_due %}active{% endif %}">
+            <div class="dot"><i class="bi bi-lock"></i></div><div class="label">Closed</div>
+        </div>
+        {% endwith %}
+    </div>
+
+    <div class="row g-3">
+        <div class="col-lg-8">
+            <!-- Shipment details -->
+            <div class="card section-card">
+                <div class="card-header">
+                    <div class="section-title-block">
+                        <span class="section-icon"><i class="bi bi-info-circle"></i></span>
+                        <div>
+                            <div class="section-title">Shipment Details</div>
+                            <div class="section-subtitle">Route, cargo measurements and container references</div>
+                        </div>
+                    </div>
+                </div>
                 <div class="card-body">
-                    <div class="row mb-3">
-                        <div class="col-md-6">
-                            <h6 class="text-muted">Client</h6>
-                            <p><a href="{% url 'client_detail' loading.client.id %}">{{ loading.client.name }}</a></p>
+                    <div class="route-summary">
+                        <div class="node">
+                            <div class="node-label">Pickup / Origin</div>
+                            <div class="node-value"><i class="bi bi-geo-alt-fill text-muted"></i> {{ loading.origin }}</div>
                         </div>
-                        <div class="col-md-6">
-                            <h6 class="text-muted">Loading Date</h6>
-                            <p>{{ loading.loading_date|date:"Y-m-d H:i" }}</p>
-                        </div>
-                    </div>
-
-                    <div class="row mb-3">
-                        <div class="col-md-6">
-                            <h6 class="text-muted">Entry Type</h6>
-                            <p>{{ loading.get_entry_type_display }}</p>
-                        </div>
-                        <div class="col-md-6">
-                            <h6 class="text-muted">Bill of Lading</h6>
-                            <p>{{ loading.bill_of_lading_number|default:'-' }}</p>
+                        <div class="route-mid"><i class="bi bi-arrow-right-circle-fill"></i></div>
+                        <div class="node">
+                            <div class="node-label">Delivery / Destination</div>
+                            <div class="node-value"><i class="bi bi-flag-fill text-muted"></i> {{ loading.destination }}</div>
                         </div>
                     </div>
 
-                    <div class="row mb-3">
-                        <div class="col-md-6">
-                            <h6 class="text-muted">Groupage Note</h6>
-                            <p>{{ loading.groupage_note_number|default:'-' }}</p>
+                    <div class="measure-grid">
+                        <div class="measure-tile">
+                            <div class="measure-icon"><i class="bi bi-box2-fill"></i></div>
+                            <div class="measure-label">Packages</div>
+                            <div class="measure-value">{{ loading.packages|default:'—' }}</div>
+                        </div>
+                        <div class="measure-tile">
+                            <div class="measure-icon"><i class="bi bi-speedometer2"></i></div>
+                            <div class="measure-label">Weight</div>
+                            <div class="measure-value">{% if loading.weight %}{{ loading.weight }} KG{% else %}—{% endif %}</div>
+                        </div>
+                        <div class="measure-tile">
+                            <div class="measure-icon"><i class="bi bi-bounding-box-circles"></i></div>
+                            <div class="measure-label">CBM</div>
+                            <div class="measure-value">{{ loading.cbm|default:'—' }}</div>
+                        </div>
+                        <div class="measure-tile">
+                            <div class="measure-icon"><i class="bi bi-calculator"></i></div>
+                            <div class="measure-label">Chargeable W/M</div>
+                            <div class="measure-value">{% if chargeable_wm is not None %}{{ chargeable_wm|floatformat:3 }}{% else %}—{% endif %}</div>
                         </div>
                     </div>
 
-                    <div class="row mb-3">
-                        <div class="col-md-6">
-                            <h6 class="text-muted">Origin</h6>
-                            <p>{{ loading.origin }}</p>
+                    <div class="info-grid">
+                        <div class="info-cell">
+                            <div class="label">Bill of Lading</div>
+                            <div class="value">{{ loading.bill_of_lading_number|default:'—' }}</div>
                         </div>
-                        <div class="col-md-6">
-                            <h6 class="text-muted">Destination</h6>
-                            <p>{{ loading.destination }}</p>
+                        <div class="info-cell">
+                            <div class="label">Groupage Note</div>
+                            <div class="value">{{ loading.groupage_note_number|default:'—' }}</div>
                         </div>
-                    </div>
-
-                    <div class="row mb-3">
-                        <div class="col-md-6">
-                            <h6 class="text-muted">Warehouse</h6>
-                            <p>{{ loading.warehouse_location|default:'-' }}</p>
+                        <div class="info-cell">
+                            <div class="label">Origin</div>
+                            <div class="value"><i class="bi bi-geo-alt-fill text-muted"></i> {{ loading.origin }}</div>
                         </div>
-                    </div>
-
-                    <div class="row mb-3">
-                        <div class="col-md-4">
-                            <h6 class="text-muted">Container Number</h6>
-                            <p><strong>{{ loading.container_number }}</strong></p>
+                        <div class="info-cell">
+                            <div class="label">Destination</div>
+                            <div class="value"><i class="bi bi-flag-fill text-muted"></i> {{ loading.destination }}</div>
                         </div>
-                        <div class="col-md-4">
-                            <h6 class="text-muted">Container Size</h6>
-                            <p>{{ loading.get_container_size_display|default:'-' }}</p>
+                        <div class="info-cell">
+                            <div class="label">Warehouse</div>
+                            <div class="value">{{ loading.warehouse_location|default:'—' }}</div>
                         </div>
-                        <div class="col-md-4">
-                            <h6 class="text-muted">Weight</h6>
-                            <p>
-                                {% if loading.weight %}
-                                    {{ loading.weight }} KG
-                                {% else %}
-                                    -
-                                {% endif %}
-                            </p>
+                        <div class="info-cell">
+                            <div class="label">Container Number</div>
+                            <div class="value">{{ loading.container_number|default:'—' }}</div>
                         </div>
-                    </div>
-
-                    <div class="row mb-3">
-                        <div class="col-md-4">
-                            <h6 class="text-muted">Packages</h6>
-                            <p>{{ loading.packages|default:'-' }}</p>
+                        <div class="info-cell">
+                            <div class="label">Container Size</div>
+                            <div class="value">{{ loading.get_container_size_display|default:'—' }}</div>
                         </div>
-                        <div class="col-md-4">
-                            <h6 class="text-muted">CBM</h6>
-                            <p>{{ loading.cbm|default:'-' }}</p>
+                        <div class="info-cell">
+                            <div class="label">Weight</div>
+                            <div class="value">{% if loading.weight %}{{ loading.weight }} KG{% else %}—{% endif %}</div>
                         </div>
-                        <div class="col-md-4">
-                            <h6 class="text-muted">Chargeable (W/M)</h6>
-                            <p>
-                                {% if chargeable_wm is not None %}
-                                    {{ chargeable_wm|floatformat:3 }}
-                                {% else %}
-                                    -
-                                {% endif %}
-                            </p>
+                        <div class="info-cell">
+                            <div class="label">Packages</div>
+                            <div class="value">{{ loading.packages|default:'—' }}</div>
+                        </div>
+                        <div class="info-cell">
+                            <div class="label">CBM</div>
+                            <div class="value">{{ loading.cbm|default:'—' }}</div>
+                        </div>
+                        <div class="info-cell">
+                            <div class="label">Chargeable W/M</div>
+                            <div class="value">{% if chargeable_wm is not None %}{{ chargeable_wm|floatformat:3 }}{% else %}—{% endif %}</div>
+                        </div>
+                        <div class="info-cell">
+                            <div class="label">Loading Date</div>
+                            <div class="value">{{ loading.loading_date|date:"Y-m-d H:i" }}</div>
                         </div>
                     </div>
 
-                    <div class="mb-3">
-                        <h6 class="text-muted">Item Description</h6>
-                        <p>{{ loading.item_description }}</p>
+                    {% if loading.item_description %}
+                    <div class="mt-3">
+                        <div class="info-cell mb-2"><div class="label">Item Description</div></div>
+                        <div class="description-block">{{ loading.item_description|linebreaksbr }}</div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Document hub -->
+            <div class="card section-card">
+                <div class="card-header">
+                    <div class="section-title-block">
+                        <span class="section-icon"><i class="bi bi-folder2-open"></i></span>
+                        <div>
+                            <div class="section-title">Document Hub</div>
+                            <div class="section-subtitle">Operational PDFs and commercial records</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="document-grid">
+                        <a href="{% url 'loading_document' loading.id %}" class="document-link" target="_blank" rel="noopener noreferrer">
+                            <span class="doc-icon"><i class="bi bi-file-earmark-pdf"></i></span>
+                            <span>
+                                <span class="doc-title">{% if loading.entry_type == 'GROUPAGE' %}Groupage Note{% else %}Bill of Lading{% endif %}</span>
+                                <span class="doc-sub d-block">Primary loading document</span>
+                            </span>
+                        </a>
+                        <a href="{% url 'loading_packing_list_document' loading.id %}" class="document-link" target="_blank" rel="noopener noreferrer">
+                            <span class="doc-icon"><i class="bi bi-file-earmark-break"></i></span>
+                            <span>
+                                <span class="doc-title">Packing List</span>
+                                <span class="doc-sub d-block">Cargo package breakdown</span>
+                            </span>
+                        </a>
+                        {% if loading.proof_of_delivery %}
+                        <a href="{% url 'pod_delivery_note_pdf' loading.proof_of_delivery.id %}" class="document-link" target="_blank" rel="noopener noreferrer">
+                            <span class="doc-icon"><i class="bi bi-file-earmark-check"></i></span>
+                            <span>
+                                <span class="doc-title">Delivery Note</span>
+                                <span class="doc-sub d-block">Proof of delivery PDF</span>
+                            </span>
+                        </a>
+                        {% endif %}
+                        {% if final_invoice %}
+                        <a href="{% url 'logistics_final_invoice_detail' final_invoice.id %}" class="document-link" target="_blank" rel="noopener noreferrer">
+                            <span class="doc-icon"><i class="bi bi-receipt-cutoff"></i></span>
+                            <span>
+                                <span class="doc-title">Final Invoice</span>
+                                <span class="doc-sub d-block">Commercial invoice record</span>
+                            </span>
+                        </a>
+                        {% endif %}
                     </div>
                 </div>
             </div>
         </div>
 
-        <div class="col-md-4">
-            <div class="card mb-3">
+        <div class="col-lg-4">
+            <!-- Transit -->
+            <div class="card section-card">
                 <div class="card-header">
-                    <h5><i class="bi bi-ship"></i> Transit</h5>
+                    <div class="section-title-block">
+                        <span class="section-icon"><i class="bi bi-compass-fill"></i></span>
+                        <div>
+                            <div class="section-title">Transit</div>
+                            <div class="section-subtitle">Movement status and vessel timeline</div>
+                        </div>
+                    </div>
+                    {% if has_transit %}<span class="badge bg-info">{{ loading.transit.get_status_display }}</span>{% endif %}
                 </div>
                 <div class="card-body">
                     {% if has_transit %}
-                        <p>Status: <span class="badge bg-info">{{ loading.transit.get_status_display }}</span></p>
-                        <p><small class="text-muted">ETA: {{ loading.transit.eta_kampala|date:"Y-m-d" }}</small></p>
-                        <a href="{% url 'transit_update' loading.transit.id %}" class="btn btn-sm btn-warning w-100">
-                            <i class="bi bi-pencil"></i> Update Transit
-                        </a>
-                        <a href="{% url 'transit_detail' loading.transit.id %}" class="btn btn-sm btn-outline-info w-100 mt-1">
-                            <i class="bi bi-clock-history"></i> View Timeline
-                        </a>
+                        <div class="stat-row">
+                            <div>
+                                <div class="stat-label">ETA Kampala</div>
+                                <div class="stat-value">{{ loading.transit.eta_kampala|date:"M j, Y"|default:'—' }}</div>
+                            </div>
+                            <div>
+                                <div class="stat-label">Vessel</div>
+                                <div class="stat-value muted">{{ loading.transit.vessel_name|default:'—' }}</div>
+                            </div>
+                        </div>
+                        <div class="d-grid gap-1">
+                            <a href="{% url 'transit_detail' loading.transit.id %}" class="btn btn-sm btn-outline-info">
+                                <i class="bi bi-clock-history"></i> View Timeline
+                            </a>
+                            <a href="{% url 'transit_update' loading.transit.id %}" class="btn btn-sm btn-warning">
+                                <i class="bi bi-pencil"></i> Update Transit
+                            </a>
+                        </div>
                     {% else %}
-                        <p class="text-muted">No transit record yet</p>
+                        <p class="empty-hint">No transit record yet.</p>
                         <a href="{% url 'transit_create_with_loading' loading.id %}" class="btn btn-sm btn-primary w-100">
-                            <i class="bi bi-plus"></i> Add Transit
+                            <i class="bi bi-plus-circle"></i> Add Transit
                         </a>
                     {% endif %}
                 </div>
             </div>
 
-            <div class="card">
+            <!-- Proof of Delivery -->
+            <div class="card section-card">
                 <div class="card-header">
-                    <h5><i class="bi bi-diagram-3"></i> Commercial Flow</h5>
+                    <div class="section-title-block">
+                        <span class="section-icon"><i class="bi bi-clipboard-check"></i></span>
+                        <div>
+                            <div class="section-title">Proof of Delivery</div>
+                            <div class="section-subtitle">Receiver confirmation and delivery note</div>
+                        </div>
+                    </div>
+                    {% if loading.proof_of_delivery %}<span class="badge bg-success">Captured</span>{% endif %}
                 </div>
                 <div class="card-body">
-                    {% if flow_transaction %}
-                        <p class="mb-2">Transaction: <strong>{{ flow_transaction.transaction_id }}</strong></p>
-                        <p class="mb-2">Proforma:
-                            {% if proforma %}
-                                <strong>PI-{{ proforma.id }}</strong>
-                            {% else %}
-                                <span class="text-muted">Pending</span>
-                            {% endif %}
-                        </p>
-                        <p class="mb-2">Final Invoice:
-                            {% if final_invoice %}
-                                <strong>FI-{{ final_invoice.id }}</strong>
-                            {% else %}
-                                <span class="text-muted">Pending confirmation</span>
-                            {% endif %}
-                        </p>
-                        <p class="mb-3">Payment:
-                            <span class="badge bg-info"><i class="bi bi-truck"></i> Logistics</span>
-                            {% if final_invoice %}
-                                {% if balance_due is not None and balance_due > 0 %}
-                                    <strong>Balance {{ balance_due|floatformat:2 }} {{ final_invoice.currency }}</strong>
-                                {% else %}
-                                    <strong>Paid in full</strong>
-                                {% endif %}
-                            {% else %}
-                                <span class="text-muted">Starts after final invoice</span>
-                            {% endif %}
-                        </p>
-
-                        {% if proforma %}
-                        <a href="{% url 'logistics_proforma_update' proforma.id %}" class="btn btn-sm btn-primary w-100 mb-2">
-                            <i class="bi bi-pencil-square"></i> Edit Quotation / Proforma
-                        </a>
-                        {% endif %}
-                        {% if final_invoice %}
-                        <a href="{% url 'logistics_final_invoice_detail' final_invoice.id %}" class="btn btn-sm btn-outline-dark w-100 mb-2">
-                            <i class="bi bi-receipt-cutoff"></i> Open Final Invoice
-                        </a>
-                        {% endif %}
-                        {% if final_invoice and balance_due is not None and balance_due > 0 %}
-                        <a href="{% url 'sourcing_payment_create_for' flow_transaction.id %}" class="btn btn-sm btn-success w-100">
-                            <i class="bi bi-cash-coin"></i> Record Payment
-                        </a>
-                        {% endif %}
+                    {% if loading.proof_of_delivery %}
+                        {% with pod=loading.proof_of_delivery %}
+                        <div class="stat-row">
+                            <div>
+                                <div class="stat-label">POD #</div>
+                                <div class="stat-value">{{ pod.pod_number }}</div>
+                            </div>
+                            <div>
+                                <div class="stat-label">Delivered</div>
+                                <div class="stat-value muted">{{ pod.delivery_date|date:"M j, Y"|default:'—' }}</div>
+                            </div>
+                            <div>
+                                <div class="stat-label">Received By</div>
+                                <div class="stat-value muted">{{ pod.received_by|default:'—' }}</div>
+                            </div>
+                            <div>
+                                <div class="stat-label">Condition</div>
+                                <div class="stat-value muted">{{ pod.get_condition_display|default:'—' }}</div>
+                            </div>
+                        </div>
+                        <div class="d-grid gap-1">
+                            <a href="{% url 'pod_detail' pod.id %}" class="btn btn-sm btn-outline-success" target="_blank" rel="noopener noreferrer">
+                                <i class="bi bi-eye"></i> View POD
+                            </a>
+                            <a href="{% url 'pod_delivery_note_pdf' pod.id %}" class="btn btn-sm btn-outline-dark" target="_blank" rel="noopener noreferrer">
+                                <i class="bi bi-file-earmark-pdf"></i> Delivery Note PDF
+                            </a>
+                        </div>
+                        {% endwith %}
                     {% else %}
-                        <p class="text-muted">No quotation / invoice flow has been started for this cargo yet.</p>
-                        <a href="{% url 'loading_start_flow' loading.id %}" class="btn btn-sm btn-primary w-100">
-                            <i class="bi bi-play-circle"></i> Start Quotation / Proforma
+                        <p class="empty-hint">Delivery not yet confirmed.</p>
+                        <a href="{% url 'record_logistics_pod' loading.id %}" class="btn btn-sm btn-warning w-100">
+                            <i class="bi bi-clipboard-plus"></i> Record Delivery
                         </a>
                     {% endif %}
                 </div>
             </div>
 
-            <div class="card mb-3">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0"><i class="bi bi-cash-stack"></i> Freight Payment</h5>
-                    {% if freight_payment %}
+            <!-- Freight Payment -->
+            <div class="card section-card">
+                <div class="card-header">
+                    <div class="section-title-block">
+                        <span class="section-icon"><i class="bi bi-cash-stack"></i></span>
+                        <div>
+                            <div class="section-title">Freight Payment</div>
+                            <div class="section-subtitle">Charges, balances and recorded receipts</div>
+                        </div>
+                    </div>
+                    {% if has_payment %}
                         {% if freight_balance and freight_balance > 0 %}
                             <span class="badge bg-warning text-dark">Partial</span>
-                        {% elif freight_payment.amount_charged and freight_total_paid >= freight_payment.amount_charged %}
-                            <span class="badge bg-success">Paid</span>
+                        {% elif freight_charged and freight_total_paid >= freight_charged %}
+                            <span class="badge bg-success">Settled</span>
                         {% else %}
                             <span class="badge bg-secondary">Unpaid</span>
                         {% endif %}
                     {% endif %}
                 </div>
                 <div class="card-body">
-                    {% if freight_payment %}
-                        <div class="row g-2 mb-2 small">
-                            <div class="col-6"><span class="text-muted">Charged:</span> <strong>{{ freight_payment.amount_charged|floatformat:2 }}</strong></div>
-                            <div class="col-6"><span class="text-muted">Paid:</span> <strong>{{ freight_total_paid|floatformat:2 }}</strong></div>
-                            <div class="col-6"><span class="text-muted">Balance:</span>
-                                <strong class="{% if freight_balance and freight_balance > 0 %}text-warning{% else %}text-success{% endif %}">
-                                    {{ freight_balance|default:0|floatformat:2 }}
-                                </strong>
+                    {% if has_payment or freight_charged %}
+                        <div class="stat-row">
+                            <div>
+                                <div class="stat-label">Charged</div>
+                                <div class="stat-value">{{ freight_charged|floatformat:2 }}</div>
                             </div>
-                            <div class="col-6"><span class="text-muted">Basis:</span> {{ freight_payment.get_billing_basis_display }}</div>
+                            <div>
+                                <div class="stat-label">Paid</div>
+                                <div class="stat-value ok">{{ freight_total_paid|floatformat:2 }}</div>
+                            </div>
+                            <div>
+                                <div class="stat-label">Balance</div>
+                                <div class="stat-value {% if freight_balance and freight_balance > 0 %}warn{% else %}ok{% endif %}">
+                                    {{ freight_balance|default:0|floatformat:2 }}
+                                </div>
+                            </div>
+                            <div>
+                                <div class="stat-label">Basis</div>
+                                <div class="stat-value muted">
+                                    {% if freight_payment %}{{ freight_payment.get_billing_basis_display }}{% else %}Invoice{% endif %}
+                                </div>
+                            </div>
                         </div>
 
-                        {% if freight_transactions %}
-                        <h6 class="text-muted small text-uppercase mt-3 mb-2">Partial Payments ({{ freight_transactions|length }})</h6>
-                        <ul class="list-group list-group-flush small mb-2">
-                            {% for tx in freight_transactions %}
-                            <li class="list-group-item px-0 py-2 d-flex justify-content-between align-items-start">
+                        {% if freight_charged %}
+                        <div class="progress-thin mb-3">
+                            {% widthratio freight_total_paid freight_charged 100 as pct %}
+                            <div class="bar {% if freight_balance and freight_balance > 0 %}warn{% endif %}" style="width: {{ pct|default:0 }}%; max-width: 100%;"></div>
+                        </div>
+                        {% endif %}
+
+                        {% if invoice_payment_records %}
+                        <div class="stat-label mb-1">Invoice Payments ({{ invoice_payment_records|length }})</div>
+                        <ul class="partial-list mb-3">
+                            {% for rec in invoice_payment_records %}
+                            <li>
                                 <div>
-                                    <div><strong>{{ tx.amount|floatformat:2 }}</strong>
-                                        <span class="text-muted">&middot; {{ tx.get_payment_method_display }}</span>
+                                    <div class="amt">{{ rec.amount|floatformat:2 }} {{ rec.currency }}
+                                        <span class="text-muted small">&middot; {{ rec.get_payment_method_display }}</span>
                                     </div>
-                                    <div class="text-muted" style="font-size: 0.8rem;">
-                                        {{ tx.payment_date|date:"Y-m-d H:i" }}
-                                        {% if tx.reference %} &middot; Ref: {{ tx.reference }}{% endif %}
+                                    <div class="meta">
+                                        {{ rec.payment_date|date:"M j, Y H:i" }}
+                                        {% if rec.reference %}&middot; Ref: {{ rec.reference }}{% endif %}
+                                        {% if rec.is_full_payment %}&middot; <span class="text-success">Full</span>{% endif %}
+                                    </div>
+                                </div>
+                                <span class="badge bg-success">Recorded</span>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                        {% endif %}
+
+                        {% if freight_transactions %}
+                        <div class="stat-label mb-1">Direct Freight Payments ({{ freight_transactions|length }})</div>
+                        <ul class="partial-list mb-3">
+                            {% for tx in freight_transactions %}
+                            <li>
+                                <div>
+                                    <div class="amt">{{ tx.amount|floatformat:2 }}
+                                        <span class="text-muted small">&middot; {{ tx.get_payment_method_display }}</span>
+                                    </div>
+                                    <div class="meta">
+                                        {{ tx.payment_date|date:"M j, Y H:i" }}
+                                        {% if tx.reference %}&middot; Ref: {{ tx.reference }}{% endif %}
                                     </div>
                                 </div>
                                 <span class="badge {% if tx.verification_status == 'approved' %}bg-success{% elif tx.verification_status == 'rejected' %}bg-danger{% else %}bg-secondary{% endif %}">
@@ -262,22 +745,105 @@
                             </li>
                             {% endfor %}
                         </ul>
-                        {% else %}
-                        <p class="text-muted small mb-2">No partial payments recorded yet.</p>
                         {% endif %}
 
-                        <a href="{% url 'payment_detail' freight_payment.id %}" class="btn btn-sm btn-outline-primary w-100 mb-1">
-                            <i class="bi bi-eye"></i> View Payment
-                        </a>
-                        {% if freight_balance and freight_balance > 0 %}
-                        <a href="{% url 'payment_update' freight_payment.id %}" class="btn btn-sm btn-success w-100">
-                            <i class="bi bi-cash-coin"></i> Add Partial Payment
-                        </a>
+                        {% if not invoice_payment_records and not freight_transactions %}
+                        <p class="empty-hint">No payments recorded yet.</p>
                         {% endif %}
+
+                        <div class="d-grid gap-1">
+                            {% if freight_payment %}
+                            <a href="{% url 'payment_detail' freight_payment.id %}" class="btn btn-sm btn-outline-primary">
+                                <i class="bi bi-eye"></i> View Freight Payment Record
+                            </a>
+                            {% endif %}
+                            {% if final_invoice %}
+                            <a href="{% url 'logistics_final_invoice_detail' final_invoice.id %}" class="btn btn-sm btn-outline-dark" target="_blank" rel="noopener noreferrer">
+                                <i class="bi bi-receipt-cutoff"></i> Open Invoice
+                            </a>
+                            {% endif %}
+                            {% if freight_balance and freight_balance > 0 %}
+                                {% if freight_payment %}
+                                <a href="{% url 'payment_update' freight_payment.id %}" class="btn btn-sm btn-success">
+                                    <i class="bi bi-cash-coin"></i> Add Partial Payment
+                                </a>
+                                {% elif flow_transaction %}
+                                <a href="{% url 'sourcing_payment_create_for' flow_transaction.id %}" class="btn btn-sm btn-success">
+                                    <i class="bi bi-cash-coin"></i> Record Invoice Payment
+                                </a>
+                                {% endif %}
+                            {% endif %}
+                        </div>
                     {% else %}
-                        <p class="text-muted small mb-2">No freight payment record has been created for this loading.</p>
+                        <p class="empty-hint">No freight payment record created yet.</p>
                         <a href="{% url 'payment_create_with_loading' loading.id %}" class="btn btn-sm btn-primary w-100">
                             <i class="bi bi-plus-circle"></i> Create Freight Payment
+                        </a>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Commercial flow -->
+            <div class="card section-card">
+                <div class="card-header">
+                    <div class="section-title-block">
+                        <span class="section-icon"><i class="bi bi-diagram-3"></i></span>
+                        <div>
+                            <div class="section-title">Commercial Flow</div>
+                            <div class="section-subtitle">Quotation, invoice and sourcing payment status</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body">
+                    {% if flow_transaction %}
+                        <div class="stat-row">
+                            <div>
+                                <div class="stat-label">Transaction</div>
+                                <div class="stat-value">{{ flow_transaction.transaction_id }}</div>
+                            </div>
+                            <div>
+                                <div class="stat-label">Proforma</div>
+                                <div class="stat-value {% if not proforma %}muted{% endif %}">
+                                    {% if proforma %}PI-{{ proforma.id }}{% else %}Pending{% endif %}
+                                </div>
+                            </div>
+                            <div>
+                                <div class="stat-label">Final Invoice</div>
+                                <div class="stat-value {% if not final_invoice %}muted{% endif %}">
+                                    {% if final_invoice %}FI-{{ final_invoice.id }}{% else %}Pending{% endif %}
+                                </div>
+                            </div>
+                            <div>
+                                <div class="stat-label">Invoice Balance</div>
+                                <div class="stat-value {% if balance_due and balance_due > 0 %}warn{% else %}ok{% endif %}">
+                                    {% if final_invoice %}
+                                        {% if balance_due and balance_due > 0 %}{{ balance_due|floatformat:2 }} {{ final_invoice.currency }}{% else %}Paid{% endif %}
+                                    {% else %}—{% endif %}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="d-grid gap-1">
+                            {% if proforma %}
+                            <a href="{% url 'logistics_proforma_update' proforma.id %}" class="btn btn-sm btn-outline-primary">
+                                <i class="bi bi-pencil-square"></i> Edit Proforma
+                            </a>
+                            {% endif %}
+                            {% if final_invoice %}
+                            <a href="{% url 'logistics_final_invoice_detail' final_invoice.id %}" class="btn btn-sm btn-outline-dark" target="_blank" rel="noopener noreferrer">
+                                <i class="bi bi-receipt-cutoff"></i> Open Final Invoice
+                            </a>
+                            {% endif %}
+                            {% if final_invoice and balance_due and balance_due > 0 %}
+                            <a href="{% url 'sourcing_payment_create_for' flow_transaction.id %}" class="btn btn-sm btn-success">
+                                <i class="bi bi-cash-coin"></i> Record Invoice Payment
+                            </a>
+                            {% endif %}
+                        </div>
+                    {% else %}
+                        <p class="empty-hint">No quotation / invoice flow has been started.</p>
+                        <a href="{% url 'loading_start_flow' loading.id %}" class="btn btn-sm btn-primary w-100">
+                            <i class="bi bi-play-circle"></i> Start Quotation / Proforma
                         </a>
                     {% endif %}
                 </div>
