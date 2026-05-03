@@ -5,11 +5,14 @@
 {% block content %}
 <div class="container-fluid">
 
-    <!-- Header -->
     <div class="d-flex justify-content-between align-items-center mb-3">
         <div>
-            <h1 class="mb-0"><i class="bi bi-diagram-3"></i> {{ transaction.transaction_id }}</h1>
-            <small class="text-muted">{{ transaction.customer.name }} — {{ transaction.list_status_display|default:transaction.get_status_display }}</small>
+            <h2 class="mb-1"><i class="bi bi-diagram-3"></i> {{ transaction.transaction_id }}</h2>
+            <div class="d-flex flex-wrap align-items-center gap-2 text-muted small">
+                <strong class="text-dark">{{ transaction.customer.name }}</strong>
+                <span class="badge {{ transaction.list_status_class|default:'bg-primary' }}">{{ transaction.list_status_display|default:transaction.get_status_display }}</span>
+                {% if transaction.estimated_delivery %}<span>ETA {{ transaction.estimated_delivery|date:"Y-m-d" }}</span>{% endif %}
+            </div>
         </div>
         <a href="{% url 'transaction_update' transaction.id %}" class="btn btn-warning {% if transaction.is_closed %}disabled{% endif %}">
             <i class="bi bi-pencil"></i> Edit
@@ -20,64 +23,12 @@
     {% url 'reopen_transaction' transaction.id as reopen_url_x %}
     {% include "logistics/partials/closure_card.html" with lane_label="Trade" close_url=close_url_x reopen_url=reopen_url_x object_is_closed=transaction.is_closed closed_at=transaction.closed_at closed_by_name=transaction.closed_by.get_full_name closure_notes=transaction.closure_notes %}
 
-    <!-- Status summary cards -->
-    <div class="row g-2 mb-4">
-        <div class="col-md-3">
-            <div class="card border-0 bg-light">
-                <div class="card-body py-2">
-                    <small class="text-muted d-block">Customer</small>
-                    <strong>{{ transaction.customer.name }}</strong>
-                    {% if transaction.customer.company_name %}
-                    <div class="text-muted small">{{ transaction.customer.company_name }}</div>
-                    {% endif %}
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card border-0 bg-light">
-                <div class="card-body py-2">
-                    <small class="text-muted d-block">Status</small>
-                    <span class="badge {{ transaction.list_status_class|default:'bg-primary' }} fs-6">{{ transaction.list_status_display|default:transaction.get_status_display }}</span>
-                    {% if transaction.status == 'SENT_TO_SOURCING' %}
-                    <div class="text-muted small mt-1">
-                        {% if sourcing_entry_count %}
-                        {{ sourcing_entry_count }} sourcing record{{ sourcing_entry_count|pluralize }} active.
-                        {% else %}
-                        Intake is queued but no sourcing work has started yet.
-                        {% endif %}
-                    </div>
-                    {% endif %}
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card border-0 bg-light">
-                <div class="card-body py-2">
-                    <small class="text-muted d-block">Est. Delivery</small>
-                    <strong>{{ transaction.estimated_delivery|date:"Y-m-d"|default:"—" }}</strong>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card border-0 bg-light">
-                <div class="card-body py-2">
-                    <small class="text-muted d-block">Created By</small>
-                    <strong>{{ transaction.created_by.username }}</strong>
-                    <div class="text-muted small">{{ transaction.created_at|date:"Y-m-d" }}</div>
-                </div>
-            </div>
-        </div>
-    </div>
-
     {% if transaction.description %}
-    <div class="alert alert-secondary py-2 mb-3">
+    <div class="alert alert-secondary py-2 mb-3 small">
         <strong>Description:</strong> {{ transaction.description }}
         {% if transaction.notes %}<br><strong>Notes:</strong> {{ transaction.notes }}{% endif %}
     </div>
     {% endif %}
-
-    <!-- ===== WORKFLOW PIPELINE ===== -->
-    <h5 class="mb-3 text-muted"><i class="bi bi-arrow-right-circle"></i> Workflow Pipeline</h5>
 
     <div class="row g-3">
 
@@ -89,10 +40,6 @@
                     <span class="badge bg-light text-dark">{{ documents.count }} file(s)</span>
                 </div>
                 <div class="card-body">
-                    <p class="text-muted small mb-3">
-                        Upload the client's Purchase Inquiry document. Supported formats: <strong>PDF, Word (.docx), TXT</strong>.
-                        The system will extract the text automatically.
-                    </p>
                     <form method="post" action="{% url 'transaction_document_upload' transaction.id %}" enctype="multipart/form-data">
                         {% csrf_token %}
                         <div class="mb-2">
@@ -288,66 +235,6 @@
                             </div>
                         </li>
                         {% endfor %}
-
-                    <div class="col-12">
-                        <div class="card">
-                            <div class="card-header d-flex justify-content-between align-items-center bg-dark text-white">
-                                <strong>Extracted Document Archive</strong>
-                                <span class="badge bg-light text-dark">{{ document_archives|length }} archived</span>
-                            </div>
-                            <div class="card-body p-0">
-                                {% if document_archives %}
-                                <div class="table-responsive">
-                                    <table class="table table-sm align-middle mb-0">
-                                        <thead class="table-light">
-                                            <tr>
-                                                <th>Type</th>
-                                                <th>Source File</th>
-                                                <th>Extracted Snapshot</th>
-                                                <th>Archived By</th>
-                                                <th>When</th>
-                                                <th class="text-end">Access</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {% for archive in document_archives %}
-                                            <tr>
-                                                <td>
-                                                    <span class="badge {% if archive.document_type == 'CLIENT_PI' %}bg-primary{% else %}bg-secondary{% endif %}">
-                                                        {{ archive.get_document_type_display }}
-                                                    </span>
-                                                </td>
-                                                <td>
-                                                    <div class="fw-semibold">{{ archive.original_filename }}</div>
-                                                    <small class="text-muted">Linked to {{ archive.document }}</small>
-                                                </td>
-                                                <td>
-                                                    {% if archive.structured_data and archive.structured_data.items %}
-                                                    <small class="text-success">Structured data captured with {{ archive.structured_data.items|length }} item{{ archive.structured_data.items|length|pluralize }}.</small>
-                                                    {% elif archive.extracted_text %}
-                                                    <small class="text-muted">{{ archive.extracted_text|truncatechars:120 }}</small>
-                                                    {% else %}
-                                                    <small class="text-muted">No extracted text stored.</small>
-                                                    {% endif %}
-                                                </td>
-                                                <td>{{ archive.archived_by.username }}</td>
-                                                <td>{{ archive.created_at|date:"d M Y H:i" }}</td>
-                                                <td class="text-end">
-                                                    <a href="{% url 'protected_media' archive.archived_file.name %}" class="btn btn-sm btn-outline-dark" target="_blank" rel="noopener noreferrer">Open File</a>
-                                                </td>
-                                            </tr>
-                                            {% endfor %}
-                                        </tbody>
-                                    </table>
-                                </div>
-                                {% else %}
-                                <div class="p-3 text-muted text-center">
-                                    Extracted uploads will appear here as archived snapshots once documents are uploaded and processed.
-                                </div>
-                                {% endif %}
-                            </div>
-                        </div>
-                    </div>
                     </ul>
                     {% else %}
                     <div class="text-muted text-center py-4">
@@ -358,6 +245,45 @@
                 </div>
             </div>
         </div>
+
+        {% if document_archives %}
+        <div class="col-12">
+            <details class="card border-0 shadow-sm">
+                <summary class="card-header bg-light fw-semibold" style="cursor:pointer;">
+                    Extracted document archive <span class="badge bg-secondary ms-2">{{ document_archives|length }}</span>
+                </summary>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-sm align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Type</th>
+                                    <th>Source File</th>
+                                    <th>When</th>
+                                    <th class="text-end">Access</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for archive in document_archives %}
+                                <tr>
+                                    <td><span class="badge {% if archive.document_type == 'CLIENT_PI' %}bg-primary{% else %}bg-secondary{% endif %}">{{ archive.get_document_type_display }}</span></td>
+                                    <td>
+                                        <div class="fw-semibold">{{ archive.original_filename }}</div>
+                                        <small class="text-muted">Archived by {{ archive.archived_by.username }}</small>
+                                    </td>
+                                    <td>{{ archive.created_at|date:"d M Y H:i" }}</td>
+                                    <td class="text-end">
+                                        <a href="{% url 'protected_media' archive.archived_file.name %}" class="btn btn-sm btn-outline-dark" target="_blank" rel="noopener noreferrer">Open File</a>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </details>
+        </div>
+        {% endif %}
 
         <!-- STEP 4: Final Invoice -->
         {% if final_invoices %}
@@ -423,11 +349,11 @@
             </div>
         </div>
 
-        <!-- STEP 6: Shipping Charge Rule -->
+        <!-- Step 6: Shipping Charge Rule -->
         <div class="col-lg-6">
-            <div class="card h-100">
-                <div class="card-header bg-secondary text-white"><strong>Step 6 — Shipping Charge Decision</strong></div>
-                <div class="card-body">
+            <details class="card h-100">
+                <summary class="card-header bg-light fw-semibold" style="cursor:pointer;">Billing rule</summary>
+                <div class="card-body small">
                     {% if latest_invoice %}
                         {% if shipping_charge_included %}
                         <div class="alert alert-success mb-0">
@@ -444,7 +370,7 @@
                     <div class="text-muted">No final invoice yet. Shipping-charge rule applies after invoice creation.</div>
                     {% endif %}
                 </div>
-            </div>
+            </details>
         </div>
 
         <div class="col-12">
@@ -613,8 +539,8 @@
                     </div>
 
                     {% if final_invoice_purchase_orders %}
-                    <div class="mt-3 border rounded p-3 bg-light-subtle">
-                        <div class="fw-semibold mb-2">Related Purchase Orders Under This Invoice</div>
+                    <details class="mt-3 border rounded p-3 bg-light-subtle">
+                        <summary class="fw-semibold" style="cursor:pointer;">Related purchase orders</summary>
                         <div class="d-flex flex-wrap gap-2">
                             {% for purchase_order in final_invoice_purchase_orders %}
                             <a href="{% url 'purchase_order_detail' purchase_order.pk %}" class="btn btn-sm btn-outline-secondary">
@@ -622,12 +548,12 @@
                             </a>
                             {% endfor %}
                         </div>
-                    </div>
+                    </details>
                     {% endif %}
 
                     {% if transaction_inventory_items %}
-                    <div class="mt-3 border rounded p-3 bg-light-subtle">
-                        <div class="fw-semibold mb-2">Transaction Warehouse Stock</div>
+                    <details class="mt-3 border rounded p-3 bg-light-subtle">
+                        <summary class="fw-semibold" style="cursor:pointer;">Transaction warehouse stock</summary>
                         <div class="row g-2">
                             {% for item in transaction_inventory_items %}
                             <div class="col-md-4">
@@ -641,7 +567,7 @@
                             </div>
                             {% endfor %}
                         </div>
-                    </div>
+                    </details>
                     {% endif %}
                     {% else %}
                     <div class="text-muted">
