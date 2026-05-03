@@ -8,6 +8,7 @@ from django.db.models import Sum
 from decimal import Decimal, InvalidOperation
 import ast
 import json
+import re
 
 
 def _parse_line_items(raw_value):
@@ -418,6 +419,10 @@ class SignatureProfileForm(forms.ModelForm):
 class ClientForm(forms.ModelForm):
     """Form for creating and updating clients"""
 
+    @staticmethod
+    def _normalize_phone(value):
+        return re.sub(r"\D+", "", value or "")
+
     class Meta:
         model = Client
         fields = (
@@ -465,6 +470,35 @@ class ClientForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["remarks"].required = False
+
+    def clean(self):
+        cleaned_data = super().clean()
+        name = (cleaned_data.get("name") or "").strip()
+        phone = cleaned_data.get("phone") or ""
+        normalized_phone = self._normalize_phone(phone)
+        if not name or not normalized_phone:
+            return cleaned_data
+
+        duplicate_candidates = Client.objects.filter(name__iexact=name)
+        if self.instance and self.instance.pk:
+            duplicate_candidates = duplicate_candidates.exclude(pk=self.instance.pk)
+
+        duplicate = next(
+            (
+                client
+                for client in duplicate_candidates.only("client_id", "name", "phone")
+                if self._normalize_phone(client.phone) == normalized_phone
+            ),
+            None,
+        )
+        if duplicate:
+            message = (
+                f"A client named {duplicate.name} with this phone number already "
+                f"exists ({duplicate.client_id}). Review the existing client before saving."
+            )
+            self.add_error("name", message)
+            self.add_error("phone", message)
+        return cleaned_data
 
 
 class LoadingForm(forms.ModelForm):
