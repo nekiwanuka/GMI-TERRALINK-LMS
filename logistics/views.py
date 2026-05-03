@@ -6132,13 +6132,13 @@ def record_trading_pod(request, fulfillment_pk):
             pod.save()
             messages.success(
                 request,
-                f"Proof of Delivery {pod.pod_number} recorded for fulfillment {fulfillment.fulfillment_id}.",
+                f"Proof of Delivery {pod.pod_number} recorded for fulfillment {fulfillment.source_reference}.",
             )
             _notify_roles(
                 title="Proof of Delivery captured",
                 message=(
                     f"POD {pod.pod_number} recorded for fulfillment "
-                    f"{fulfillment.fulfillment_id} (txn {fulfillment.transaction.transaction_id})."
+                    f"{fulfillment.source_reference} (txn {fulfillment.transaction.transaction_id})."
                 ),
                 link=f"/pod/{pod.pk}/",
                 category="trading",

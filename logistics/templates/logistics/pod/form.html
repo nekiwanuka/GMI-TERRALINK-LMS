@@ -15,7 +15,7 @@
                 Closing loading <strong>{{ target.loading_id }}</strong>
                 {% if target.client %} for {{ target.client.name }}{% endif %}.
             {% else %}
-                Closing fulfillment <strong>{{ target.fulfillment_id }}</strong>
+                Closing fulfillment <strong>{{ target.source_reference }}</strong>
                 for transaction {{ target.transaction.transaction_id }}
                 ({{ target.transaction.customer.name }}).
             {% endif %}
