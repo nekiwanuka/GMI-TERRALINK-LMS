@@ -1511,6 +1511,79 @@ input:focus {
   font-size: 0.95rem;
 }
 
+.client-form-page {
+  gap: 1rem;
+}
+
+.client-form-hero {
+  padding: 1.15rem 1.35rem;
+  border-radius: 18px;
+  box-shadow: var(--gmi-shadow-sm);
+}
+
+.client-form-hero::after {
+  width: 112px;
+  height: 112px;
+  right: -28px;
+  bottom: -34px;
+  opacity: 0.45;
+}
+
+.client-form-hero .workspace-hero-grid {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.client-form-hero .workspace-hero-copy h1 {
+  margin: 0.2rem 0 0.25rem;
+  font-size: 1.65rem;
+  line-height: 1.15;
+}
+
+.client-form-hero .workspace-hero-copy p {
+  max-width: 58ch;
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
+.client-form-hero .eyebrow-label {
+  font-size: 0.68rem;
+}
+
+.client-form-hero .workspace-badge {
+  min-width: 96px;
+  padding: 0.65rem 0.75rem;
+  border-radius: 14px;
+}
+
+.client-form-hero .workspace-badge strong {
+  font-size: 1rem;
+}
+
+.client-help-panel {
+  padding: 1rem;
+  border-radius: 16px;
+  box-shadow: var(--gmi-shadow-sm);
+}
+
+.client-help-panel .panel-title {
+  font-size: 1rem;
+}
+
+.client-help-panel .workspace-stack {
+  gap: 0.75rem;
+}
+
+.client-help-panel .detail-item {
+  padding: 0.85rem;
+  border-radius: 12px;
+}
+
+.client-help-panel .detail-item .value {
+  font-size: 0.9rem;
+  line-height: 1.35;
+}
+
 @media (max-width: 991.98px) {
   .client-toolbar-actions {
     justify-content: flex-start !important;

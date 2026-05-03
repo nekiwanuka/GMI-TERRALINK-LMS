@@ -3,8 +3,8 @@
 {% block title %}{% if title %}{{ title }}{% else %}Client{% endif %} - GMI TERRALINK Logistics Portal{% endblock %}
 
 {% block content %}
-<div class="workspace-stack">
-    <section class="workspace-hero">
+<div class="workspace-stack client-form-page">
+    <section class="workspace-hero client-form-hero">
         <div class="workspace-hero-grid">
             <div class="workspace-hero-copy">
                 <span class="eyebrow-label"><i class="bi bi-person-vcard-fill"></i> Client profile editor</span>
@@ -20,8 +20,8 @@
         </div>
     </section>
 
-    <div class="row g-4">
-        <div class="col-xl-8">
+    <div class="row g-3 align-items-start">
+        <div class="col-xl-9">
             <section class="card workspace-card mb-0">
                 <div class="card-header">
                     <div>
@@ -29,7 +29,7 @@
                         <small class="text-white-50">Required fields are used throughout the operational workflow.</small>
                     </div>
                 </div>
-                <div class="card-body p-4">
+                <div class="card-body p-3 p-lg-4">
                     <form method="post">
                         {% csrf_token %}
 
@@ -102,8 +102,8 @@
             </section>
         </div>
 
-        <div class="col-xl-4">
-            <section class="surface-panel h-100">
+        <div class="col-xl-3">
+            <section class="surface-panel client-help-panel">
                 <div class="panel-header">
                     <h3 class="panel-title"><i class="bi bi-info-circle me-2"></i>What matters here</h3>
                 </div>
