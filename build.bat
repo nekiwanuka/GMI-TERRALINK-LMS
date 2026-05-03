@@ -30,7 +30,7 @@ echo Build Complete!
 echo ================================================
 echo.
 echo Your executable is located at:
-echo   dist\RosheLogistics.exe
+echo   dist\GMITerralink.exe
 echo.
 echo You can now distribute this .exe file to other computers.
 echo.

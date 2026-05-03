@@ -1,6 +1,5 @@
 """
-Django settings for roshe_logistics project.
-Offline Desktop Logistics Management System for GMI TERRALINK
+Django settings for GMI Terralink Logistics Management System.
 """
 
 import os
@@ -156,9 +155,6 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
-STATICFILES_DIRS = [
-    BASE_DIR / "logistics" / "static",
-]
 
 # Media files
 MEDIA_URL = "/media/"

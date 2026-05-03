@@ -1,3 +1,3 @@
 """
-Package marker for roshe_logistics project
+Package marker for GMI Terralink Logistics Management System.
 """

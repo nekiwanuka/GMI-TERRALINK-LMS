@@ -1,10 +1,5 @@
 """
-WSGI config for roshe_logistics project.
-
-It exposes the WSGI callable as a module-level variable named ``application``.
-
-For more information on this file, see
-https://docs.djangoproject.com/en/4.2/howto/deployment/wsgi/
+WSGI config for GMI Terralink Logistics Management System.
 """
 
 import os

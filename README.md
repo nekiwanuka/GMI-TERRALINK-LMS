@@ -216,7 +216,7 @@ pip install pyinstaller
    ```
 
 3. **Find your .exe:**
-   The executable will be in `dist/RosheLogistics.exe`
+   The executable will be in `dist\GMITerralink.exe`
 
 4. **Optional: Create installer using NSIS**
    - Install NSIS from https://nsis.sourceforge.io/
@@ -435,7 +435,7 @@ sys.argv = ['manage.py', 'runserver', '127.0.0.1:8001']
 **GMI TERRALINK Contact Information:**
 
 - Phone: +256 788 239000 | +8613416137544
-- Email: info@roshegroup.com | roshegroup@gmail.com
+- Email: gmiterralinkinfo@gmail.com
 - Address: Plot 13 Mukwano Courts, Buganda Road, floor 2 Room 201–202 I
 
 ## 📄 License & Copyright

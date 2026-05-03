@@ -162,9 +162,9 @@ if /i "!INSTALL_LOGO!"=="Y" (
     if not exist "logistics\static\images" mkdir "logistics\static\images"
     
     REM Create a placeholder logo file
-    echo # GMI TERRALINK Logo > logistics\static\images\roshe_logo.txt
+    echo # GMI TERRALINK Logo > logistics\static\images\gmi_logo.txt
     echo Logo files should be placed in: logistics/static/images/
-    echo Download logo from: https://roshegroup.com/media/logo.png
+    echo Download logo from: https://gmiterralink.com
     echo.
 )
 

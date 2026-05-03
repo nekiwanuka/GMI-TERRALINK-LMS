@@ -26,7 +26,7 @@ def create_logo_directories():
 def create_sample_logo():
     """Create a sample SVG logo for GMI TERRALINK"""
     logo_path = (
-        Path(__file__).parent / "logistics" / "static" / "images" / "roshe_logo.svg"
+        Path(__file__).parent / "logistics" / "static" / "images" / "gmi_logo.svg"
     )
 
     svg_content = """<svg viewBox="0 0 200 80" xmlns="http://www.w3.org/2000/svg">
@@ -217,7 +217,7 @@ def main():
         print("=" * 50)
         print("\nNext steps:")
         print("1. Replace sample logo with official GMI TERRALINK logo")
-        print("   Location: logistics/static/images/roshe_logo.svg")
+        print("   Location: logistics/static/images/gmi_logo.svg")
         print("2. Run the application: python run.py")
         print("3. You should see GMI TERRALINK branding throughout the UI")
         print()
