@@ -339,6 +339,33 @@ def _can_switch_lane(user):
     }
 
 
+def _can_edit_closed_trade_documents(user):
+    return user.is_superuser or getattr(user, "role", "") in {"ADMIN", "DIRECTOR"}
+
+
+def _closed_trade_filter_q():
+    return Q(status__in=["CLOSED", "DELIVERED"]) | Q(closed_at__isnull=False)
+
+
+def _trade_documents_locked(transaction):
+    return (
+        transaction.status in {"CLOSED", "DELIVERED"}
+        or transaction.closed_at is not None
+    )
+
+
+def _locked_trade_document_response(request, transaction):
+    if _trade_documents_locked(transaction) and not _can_edit_closed_trade_documents(
+        request.user
+    ):
+        messages.error(
+            request,
+            "This trade is closed. Only the Director or System Admin can edit documents.",
+        )
+        return redirect("transaction_detail", pk=transaction.pk)
+    return None
+
+
 def _apply_transaction_lane(queryset, lane):
     if lane == "logistics":
         return queryset.filter(source_loading__isnull=False)
@@ -2085,7 +2112,8 @@ def container_return_update(request, pk):
 
 @login_required
 def transaction_list(request):
-    lane = _resolve_lane(request)
+    closed_filter = request.GET.get("closed", "").strip()
+    lane = "sourcing" if closed_filter == "1" else _resolve_lane(request)
     transactions = _apply_transaction_lane(
         Transaction.objects.select_related("customer", "created_by").annotate(
             sourcing_entry_count=Count("sourcing_entries", distinct=True)
@@ -2100,8 +2128,13 @@ def transaction_list(request):
             | Q(customer__name__icontains=search)
             | Q(customer__client_id__icontains=search)
         )
-    if status:
+    if closed_filter == "1":
+        transactions = transactions.filter(_closed_trade_filter_q())
+    elif closed_filter == "0":
+        transactions = transactions.exclude(_closed_trade_filter_q())
+    elif status:
         transactions = transactions.filter(status=status)
+    transactions = transactions.order_by("-created_at")
     page_obj, query_string, page_range = paginate_queryset(request, transactions)
     for transaction in page_obj:
         _apply_transaction_status_badge(
@@ -2114,6 +2147,7 @@ def transaction_list(request):
             "transactions": page_obj,
             "search": search,
             "status_filter": status,
+            "closed_filter": closed_filter,
             "status_choices": Transaction.STATUS_CHOICES,
             "page_obj": page_obj,
             "query_string": query_string,
@@ -2246,6 +2280,10 @@ def transaction_detail(request, pk):
             "supplier"
         ),
         "sourcing_entry_count": sourcing_entry_count,
+        "can_edit_closed_trade_documents": _can_edit_closed_trade_documents(
+            request.user
+        ),
+        "trade_documents_locked": _trade_documents_locked(transaction),
     }
     closure_items, closure_ready = evaluate_transaction_closure(transaction)
     context["closure_items"] = closure_items
@@ -2296,6 +2334,9 @@ def transaction_update(request, pk):
 @login_required
 def transaction_document_upload(request, pk):
     transaction = get_object_or_404(Transaction, pk=pk)
+    locked_response = _locked_trade_document_response(request, transaction)
+    if locked_response:
+        return locked_response
     if request.method != "POST":
         return redirect("transaction_detail", pk=pk)
     form = DocumentForm(request.POST, request.FILES)
@@ -2350,6 +2391,9 @@ def transaction_document_upload(request, pk):
 def document_edit_pi(request, pk):
     """Allow editing the structured PI data extracted from a CLIENT_PI document."""
     document = get_object_or_404(Document, pk=pk, document_type="CLIENT_PI")
+    locked_response = _locked_trade_document_response(request, document.transaction)
+    if locked_response:
+        return locked_response
     if request.method == "POST":
         sd = document.structured_data or {}
         sd["client_name"] = request.POST.get("client_name", "").strip()
@@ -3360,6 +3404,11 @@ def proforma_create(request):
 
         initial_transaction = Txn.objects.filter(pk=transaction_pk).first()
 
+    if initial_transaction and request.method != "POST":
+        locked_response = _locked_trade_document_response(request, initial_transaction)
+        if locked_response:
+            return locked_response
+
     if request.method == "POST":
         errors = []
         transaction_id = request.POST.get("transaction")
@@ -3423,6 +3472,11 @@ def proforma_create(request):
                 txn = Transaction.objects.get(pk=transaction_id)
             except Transaction.DoesNotExist:
                 errors.append("Transaction not found.")
+
+        if not errors:
+            locked_response = _locked_trade_document_response(request, txn)
+            if locked_response:
+                return locked_response
 
         if not errors:
             proforma = ProformaInvoice.objects.create(
@@ -3536,6 +3590,9 @@ def proforma_update(request, pk):
     )
     if canonical and request.method != "POST":
         return canonical
+    locked_response = _locked_trade_document_response(request, proforma.transaction)
+    if locked_response:
+        return locked_response
     is_freight = bool(proforma.loading_id)
     form_values = _build_proforma_form_values(proforma=proforma)
     if proforma.status == "SENT":
@@ -3645,6 +3702,9 @@ def proforma_confirm(request, pk):
     )
     if canonical and request.method != "POST":
         return canonical
+    locked_response = _locked_trade_document_response(request, proforma.transaction)
+    if locked_response:
+        return locked_response
     if request.method == "POST":
         final_items = []
         subtotal = Decimal("0")
@@ -4019,6 +4079,11 @@ def final_invoice_create(request):
                 errors.append("Transaction not found.")
 
         if not errors:
+            locked_response = _locked_trade_document_response(request, txn)
+            if locked_response:
+                return locked_response
+
+        if not errors:
             invoice = FinalInvoice.objects.create(
                 transaction=txn,
                 loading=getattr(txn, "source_loading", None),
@@ -4055,6 +4120,14 @@ def final_invoice_create(request):
             messages.error(request, error)
     else:
         transaction_pk = request.GET.get("transaction", "")
+        if transaction_pk:
+            initial_transaction = Transaction.objects.filter(pk=transaction_pk).first()
+            if initial_transaction:
+                locked_response = _locked_trade_document_response(
+                    request, initial_transaction
+                )
+                if locked_response:
+                    return locked_response
     return render(
         request,
         "logistics/invoicing/final_form.html",
@@ -4075,6 +4148,9 @@ def final_invoice_update(request, pk):
     )
     if canonical and request.method != "POST":
         return canonical
+    locked_response = _locked_trade_document_response(request, invoice.transaction)
+    if locked_response:
+        return locked_response
     locked_paid_total = _final_invoice_total_paid(invoice)
     if locked_paid_total > 0:
         messages.error(
@@ -4393,6 +4469,8 @@ def purchase_order_list(request):
         "transaction__customer", "created_by", "parent_po", "final_invoice"
     )
     page_obj, query_string, page_range = paginate_queryset(request, purchase_orders)
+    for purchase_order in page_obj:
+        _decorate_purchase_order_status(purchase_order)
     return render(
         request,
         "logistics/invoicing/purchase_order_list.html",
@@ -4507,6 +4585,7 @@ def purchase_order_detail(request, pk):
         ),
         pk=pk,
     )
+    _decorate_purchase_order_status(purchase_order)
     base_po = purchase_order.root_po
     sibling_splits = base_po.split_purchase_orders.select_related(
         "created_by"
@@ -6848,6 +6927,36 @@ def _po_supplier_summary(purchase_order):
     return payments, total_paid, balance_due
 
 
+def _purchase_order_effective_status(purchase_order, total_paid=None):
+    if total_paid is None:
+        total_paid = purchase_order.supplier_payments.aggregate(total=Sum("amount"))[
+            "total"
+        ] or Decimal("0.00")
+    subtotal = purchase_order.subtotal or Decimal("0.00")
+    if subtotal > 0 and total_paid >= subtotal:
+        return "FULFILLED"
+    supplier_name = (purchase_order.supplier_name or "").strip().lower()
+    has_named_supplier = supplier_name and "pending" not in supplier_name
+    if total_paid > 0 or has_named_supplier:
+        return "SENT"
+    return purchase_order.status or "PENDING"
+
+
+def _decorate_purchase_order_status(purchase_order, persist=False):
+    total_paid = purchase_order.supplier_payments.aggregate(total=Sum("amount"))[
+        "total"
+    ] or Decimal("0.00")
+    effective_status = _purchase_order_effective_status(purchase_order, total_paid)
+    purchase_order.effective_status = effective_status
+    purchase_order.effective_status_display = dict(PurchaseOrder.STATUS_CHOICES).get(
+        effective_status, purchase_order.get_status_display()
+    )
+    if persist and effective_status != purchase_order.status:
+        purchase_order.status = effective_status
+        purchase_order.save(update_fields=["status", "updated_at"])
+    return purchase_order
+
+
 @login_required
 @role_required("ADMIN", "DIRECTOR", "FINANCE", "PROCUREMENT")
 def record_supplier_payment(request, po_pk):
@@ -6870,6 +6979,7 @@ def record_supplier_payment(request, po_pk):
                 payment.supplier_name = purchase_order.supplier_name
             payment.created_by = request.user
             payment.save()
+            _decorate_purchase_order_status(purchase_order, persist=True)
             log_audit(
                 "supplier_payment",
                 "create",

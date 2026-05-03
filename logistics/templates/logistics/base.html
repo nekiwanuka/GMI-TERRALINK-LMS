@@ -431,7 +431,7 @@
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link {% if request.resolver_match.url_name == 'transaction_list' and request.GET.status == 'CLOSED' %}active{% endif %}" href="{% url 'transaction_list' %}?status=CLOSED" data-bs-toggle="tooltip" data-bs-placement="right" title="Closed trade transactions archive">
+                        <a class="nav-link {% if request.resolver_match.url_name == 'transaction_list' and request.GET.closed == '1' %}active{% endif %}" href="{% url 'transaction_list' %}?closed=1" data-bs-toggle="tooltip" data-bs-placement="right" title="Closed trade transactions archive">
                             <i class="bi bi-lock-fill"></i> Closed Trades
                         </a>
                     </li>

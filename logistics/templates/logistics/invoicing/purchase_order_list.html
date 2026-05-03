@@ -81,8 +81,8 @@
                         <td>{{ po.supplier_name }}</td>
                         <td class="text-end">{{ po.subtotal }}</td>
                         <td>
-                            <span class="badge {% if po.status == 'FULFILLED' %}bg-success{% elif po.status == 'SENT' %}bg-primary{% else %}bg-warning text-dark{% endif %}">
-                                {{ po.get_status_display }}
+                            <span class="badge {% if po.effective_status == 'FULFILLED' %}bg-success{% elif po.effective_status == 'SENT' %}bg-primary{% else %}bg-warning text-dark{% endif %}">
+                                {{ po.effective_status_display|default:po.get_status_display }}
                             </span>
                         </td>
                         <td>{{ po.created_at|date:"Y-m-d H:i" }}</td>

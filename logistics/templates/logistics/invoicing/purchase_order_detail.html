@@ -161,7 +161,7 @@
         {% include "logistics/components/document_header.html" with doc_label="PURCHASE ORDER" doc_number=purchase_order.po_number doc_meta=purchase_order.transaction.transaction_id %}
         <div class="card-header po-topbar d-flex justify-content-between align-items-center border-top-0">
             <strong class="mb-0">Procurement Instruction</strong>
-            <span class="badge po-status">{{ purchase_order.get_status_display }}</span>
+            <span class="badge po-status">{{ purchase_order.effective_status_display|default:purchase_order.get_status_display }}</span>
         </div>
         <div class="card-body">
             <div class="po-metadata-strip mb-2">
