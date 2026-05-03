@@ -53,7 +53,9 @@
     .pf-ribbon-bar,
     .pf-table thead th,
     .pf-total-pill,
-    .pf-bottom-strip {
+    .pf-bottom-strip,
+    .pf-international-box,
+    .pf-international-ribbon {
         -webkit-print-color-adjust: exact;
         print-color-adjust: exact;
     }
@@ -355,6 +357,70 @@
     color: #7e858f;
 }
 
+.pf-signature-image {
+    display: block;
+    max-width: 150px;
+    max-height: 58px;
+    object-fit: contain;
+    margin: 0 0 4px auto;
+}
+
+.pf-signed-meta {
+    display: block;
+    font-size: 8.5px;
+    color: #6f7680;
+    line-height: 1.25;
+}
+
+.pf-international-footer {
+    margin: auto 24px 14px;
+    border-top: 1px solid #d7dcdf;
+    padding-top: 8px;
+    color: #4e5563;
+    font-size: 9.5px;
+    line-height: 1.35;
+}
+
+.pf-international-grid {
+    display: grid;
+    grid-template-columns: 1.1fr 0.95fr 1fr;
+    gap: 8px;
+}
+
+.pf-international-box {
+    border: 1px solid #e4e7ea;
+    background: #fbfcfd;
+    padding: 7px 8px;
+    min-height: 74px;
+}
+
+.pf-international-box h6 {
+    margin: 0 0 4px;
+    font-size: 9px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    color: #4f4a52;
+}
+
+.pf-international-box p {
+    margin: 0 0 3px;
+}
+
+.pf-international-ribbon {
+    margin-top: 6px;
+    padding: 5px 8px;
+    background: #fbf7e4;
+    border: 1px solid #ece7cd;
+    color: #4f4a52;
+    text-align: center;
+    font-size: 9px;
+}
+
+.pf-international-ribbon strong {
+    color: #9b7622;
+}
+
 .pf-bottom-strip {
     margin-top: 8px;
     background: #ffffff;
@@ -495,6 +561,9 @@
             <a href="{% if proforma.loading %}{% url 'logistics_proforma_pdf' proforma.pk %}{% else %}{% url 'sourcing_proforma_pdf' proforma.pk %}{% endif %}" class="btn btn-sm btn-outline-danger me-1" target="_blank">
                 <i class="bi bi-file-pdf"></i> Download PDF
             </a>
+            <a href="{% url 'proforma_sign' proforma.pk %}" class="btn btn-sm {% if document_signature %}btn-outline-success{% else %}btn-outline-dark{% endif %} me-1">
+                <i class="bi bi-pen"></i> {% if document_signature %}Signed{% else %}Sign{% endif %}
+            </a>
             {% if proforma.status != 'SENT' %}
             <a href="{% if proforma.loading %}{% url 'logistics_proforma_confirm' proforma.pk %}{% else %}{% url 'sourcing_proforma_confirm' proforma.pk %}{% endif %}" class="btn btn-sm btn-success me-1">
                 <i class="bi bi-check2-circle"></i> Confirm to Invoice
@@ -589,8 +658,40 @@
     </div>
 
     <div class="pf-signature">
+        {% if document_signature and document_signature.signature_profile.signature_image %}
+        <img src="{% url 'protected_media' document_signature.signature_profile.signature_image.name %}" alt="Authorized signature" class="pf-signature-image">
+        <span class="pf-sign-line">{{ document_signature.signer_name }}</span>
+        <small>{{ document_signature.signer_title }}</small>
+        <span class="pf-signed-meta">Signed {{ document_signature.signed_at|date:"d M Y, H:i" }}</span>
+        {% else %}
         <span class="pf-sign-line">Signature</span>
-        <small>Your Name Here</small>
+        <small>For GMI Terralink Co. Ltd</small>
+        {% endif %}
+    </div>
+
+    <div class="pf-international-footer">
+        <div class="pf-international-grid">
+            <div class="pf-international-box">
+                <h6>International quotation terms</h6>
+                <p>Prices are quoted Ex-Works unless otherwise agreed in writing. Freight, insurance, customs duties, taxes, demurrage, bank charges, and destination fees are for the buyer account unless expressly included.</p>
+                <p>Validity: {{ proforma.validity_date|date:"d M Y" }}. Final availability and carrier schedules remain subject to supplier confirmation.</p>
+            </div>
+            <div class="pf-international-box">
+                <h6>Payment reference</h6>
+                <p><strong>Bank:</strong> Stanbic Bank Uganda</p>
+                <p><strong>Account:</strong> GMI Terralink Co. Ltd</p>
+                <p><strong>SWIFT:</strong> SBICUGKX</p>
+                <p>Quote <strong>PI-{{ proforma.pk }}</strong> and {{ proforma.transaction.transaction_id }} on all international remittances.</p>
+            </div>
+            <div class="pf-international-box">
+                <h6>Trade compliance</h6>
+                <p>Delivery timelines are estimates and may vary due to port operations, customs controls, carrier space, force majeure, inspections, or regulatory actions.</p>
+                <p>Email confirmations, signed copies, receipts, and system records form part of the commercial file.</p>
+            </div>
+        </div>
+        <div class="pf-international-ribbon">
+            <strong>Service Portfolio:</strong> Procurement &middot; Sea &amp; Air Freight Logistics &middot; Mining &amp; Equipment Solutions &middot; Translation Services &middot; Money Transfer
+        </div>
     </div>
 
 </div>

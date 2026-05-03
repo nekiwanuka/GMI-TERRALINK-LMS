@@ -33,6 +33,7 @@ urlpatterns = [
         name="notifications_mark_all_read",
     ),
     path("register/", views.register_view, name="register"),
+    path("signatures/profile/", views.signature_profile, name="signature_profile"),
     path("protected-media/<path:path>", views.protected_media, name="protected_media"),
     # Dashboard
     path("", views.dashboard, name="dashboard"),
@@ -350,6 +351,9 @@ urlpatterns = [
         "invoicing/proformas/<int:pk>/", views.proforma_detail, name="proforma_detail"
     ),
     path(
+        "invoicing/proformas/<int:pk>/sign/", views.proforma_sign, name="proforma_sign"
+    ),
+    path(
         "invoicing/proformas/<int:pk>/update/",
         views.proforma_update,
         name="proforma_update",
@@ -370,6 +374,11 @@ urlpatterns = [
         "invoicing/final/<int:pk>/",
         views.final_invoice_detail,
         name="final_invoice_detail",
+    ),
+    path(
+        "invoicing/final/<int:pk>/sign/",
+        views.final_invoice_sign,
+        name="final_invoice_sign",
     ),
     path(
         "invoicing/final/<int:pk>/update/",

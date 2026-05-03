@@ -1,0 +1,49 @@
+{% extends "logistics/base.html" %}
+
+{% block title %}Sign {{ document_label }} - GMI TERRALINK{% endblock %}
+
+{% block content %}
+<div class="workspace-stack">
+    <section class="workspace-hero">
+        <div class="workspace-hero-grid">
+            <div class="workspace-hero-copy">
+                <span class="eyebrow-label"><i class="bi bi-pen"></i> Online signing</span>
+                <h1>Sign {{ document_label }}.</h1>
+                <p>Your uploaded signature, name, title, and signing time will be recorded on this document.</p>
+            </div>
+        </div>
+    </section>
+
+    <section class="surface-panel">
+        <div class="row g-4 align-items-start">
+            <div class="col-lg-7">
+                {% if existing_signature %}
+                <div class="alert alert-warning">
+                    This document is already signed by <strong>{{ existing_signature.signer_name }}</strong>. Signing again will update the signature record and timestamp.
+                </div>
+                {% endif %}
+                <form method="post">
+                    {% csrf_token %}
+                    <label for="signature-note" class="form-label fw-semibold">Signing note</label>
+                    <input id="signature-note" name="note" class="form-control" maxlength="255" placeholder="Optional note, e.g. approved for issue">
+                    <div class="d-flex gap-2 mt-4">
+                        <button type="submit" class="btn btn-dark"><i class="bi bi-pen me-1"></i>Sign Document</button>
+                        <a href="{{ detail_url }}" class="btn btn-outline-secondary">Cancel</a>
+                        <a href="{% url 'signature_profile' %}?next={{ detail_url|urlencode }}" class="btn btn-outline-primary">Update Signature</a>
+                    </div>
+                </form>
+            </div>
+            <div class="col-lg-5">
+                <div class="p-3 border rounded-2 bg-light">
+                    <div class="small text-uppercase text-muted fw-bold mb-2">Signature preview</div>
+                    <div class="bg-white border rounded-2 p-3 text-center mb-3">
+                        <img src="{% url 'protected_media' profile.signature_image.name %}" alt="Signature preview" style="max-width:100%;max-height:120px;object-fit:contain;">
+                    </div>
+                    <div class="fw-semibold">{{ profile.display_name }}</div>
+                    <div class="text-muted small">{{ profile.title }}</div>
+                </div>
+            </div>
+        </div>
+    </section>
+</div>
+{% endblock %}

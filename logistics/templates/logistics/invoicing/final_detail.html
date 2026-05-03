@@ -76,6 +76,9 @@
     font-family: 'Segoe UI', Arial, sans-serif;
     font-size: 13px;
     color: #4f4a52;
+    display: flex;
+    flex-direction: column;
+    min-height: 1050px;
 }
 .inv-band {
     background: #67616b;
@@ -353,6 +356,22 @@
     color: #333;
 }
 .inv-sign-block .sign-meta { color: #888; font-size: 11px; }
+.inv-signature-image {
+    display: block;
+    max-width: 160px;
+    max-height: 62px;
+    object-fit: contain;
+    margin-bottom: 4px;
+}
+.inv-sign-block .sign-line.signed {
+    margin-top: 0;
+}
+.inv-signed-meta {
+    display: block;
+    margin-top: 2px;
+    font-size: 10px;
+    color: #777;
+}
 .inv-customer-meta { font-size: 12px; color: #555; line-height: 1.55; }
 .inv-customer-meta i { color: #b89028; margin-right: 4px; }
 .inv-tbl tfoot td { font-size: 12.5px; }
@@ -383,6 +402,9 @@
             {% endif %}
             <a href="{% if invoice.loading %}{% url 'logistics_final_invoice_pdf' invoice.pk %}{% else %}{% url 'sourcing_final_invoice_pdf' invoice.pk %}{% endif %}" class="btn btn-sm btn-outline-danger me-1" target="_blank">
                 <i class="bi bi-file-pdf"></i> Download PDF
+            </a>
+            <a href="{% url 'final_invoice_sign' invoice.pk %}" class="btn btn-sm {% if document_signature %}btn-outline-success{% else %}btn-outline-dark{% endif %} me-1">
+                <i class="bi bi-pen"></i> {% if document_signature %}Signed{% else %}Sign{% endif %}
             </a>
             {% if balance > 0 %}
             <a href="{% url 'sourcing_payment_create_for' invoice.transaction.pk %}" class="btn btn-sm btn-success me-1">
@@ -639,7 +661,14 @@
         </div>
         <div class="inv-sign-block">
             <div class="sign-meta">Authorized Signature</div>
+            {% if document_signature and document_signature.signature_profile.signature_image %}
+            <img src="{% url 'protected_media' document_signature.signature_profile.signature_image.name %}" alt="Authorized signature" class="inv-signature-image">
+            <div class="sign-line signed">{{ document_signature.signer_name }}</div>
+            <div class="text-muted small">{{ document_signature.signer_title }}</div>
+            <span class="inv-signed-meta">Signed {{ document_signature.signed_at|date:"d M Y, H:i" }}</span>
+            {% else %}
             <div class="sign-line">For GMI Terralink Co. Ltd</div>
+            {% endif %}
         </div>
     </div>
 
@@ -648,6 +677,8 @@
         <span>Generated {{ invoice.created_at|date:"d M Y, H:i" }}</span>
         <span>FI-{{ invoice.pk }} &nbsp;|&nbsp; {{ invoice.transaction.transaction_id }}</span>
     </div>
+
+    {% include "logistics/components/document_terms_footer.html" %}
 
 </div>
 </div>

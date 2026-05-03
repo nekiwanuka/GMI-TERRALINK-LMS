@@ -8,6 +8,15 @@
 .po-shell {
     border: 1px solid #67616b;
     border-radius: 0;
+    display: flex;
+    flex-direction: column;
+    min-height: 1050px;
+}
+
+.po-shell > .card-body {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
 }
 .po-topbar {
     background: #67616b;
@@ -216,8 +225,6 @@
             </div>
             {% endif %}
 
-            {% include "logistics/components/document_terms_footer.html" %}
-
             <div class="mt-4 card shadow-sm">
               <div class="card-header d-flex justify-content-between align-items-center">
                 <strong><i class="bi bi-cash-stack"></i> Supplier Payments</strong>
@@ -262,6 +269,8 @@
                 </table>
               </div>
             </div>
+
+                        {% include "logistics/components/document_terms_footer.html" %}
         </div>
     </div>
 </div>

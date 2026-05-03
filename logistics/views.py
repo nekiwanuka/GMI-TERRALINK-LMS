@@ -7,11 +7,13 @@ import os
 from datetime import timedelta
 from decimal import Decimal
 from io import BytesIO
+from urllib.parse import quote
 
 from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
 from django.conf import settings
+from django.contrib.contenttypes.models import ContentType
 from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Q, Sum, ProtectedError, Count
@@ -19,6 +21,7 @@ from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils._os import safe_join
 
 from .pi_parser import (
@@ -92,6 +95,7 @@ from .forms import (
     ProformaInvoiceForm,
     ProofOfDeliveryForm,
     ShipmentLegForm,
+    SignatureProfileForm,
     SourcingForm,
     SupplierForm,
     SupplierPaymentForm,
@@ -116,6 +120,7 @@ from .models import (
     CustomUser,
     Document,
     DocumentArchive,
+    DocumentSignature,
     FinalInvoice,
     FulfillmentLine,
     FulfillmentOrder,
@@ -133,6 +138,7 @@ from .models import (
     SupplierPayment,
     SupplierProduct,
     ShipmentLeg,
+    SignatureProfile,
     Transaction,
     TransactionPaymentRecord,
     Transit,
@@ -173,6 +179,77 @@ def _redirect_back(request, default="dashboard"):
     if target:
         return redirect(target)
     return redirect(default)
+
+
+def _safe_next_url(request):
+    target = request.POST.get("next") or request.GET.get("next") or ""
+    if target and url_has_allowed_host_and_scheme(
+        target,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        return target
+    if target.startswith("/") and not target.startswith("//"):
+        return target
+    return ""
+
+
+def _document_signature_for(document):
+    content_type = ContentType.objects.get_for_model(document, for_concrete_model=False)
+    return (
+        DocumentSignature.objects.select_related("signed_by", "signature_profile")
+        .filter(content_type=content_type, object_id=document.pk)
+        .first()
+    )
+
+
+def _sign_business_document(request, *, document, detail_route, document_label):
+    next_url = reverse(detail_route, kwargs={"pk": document.pk})
+    profile = SignatureProfile.objects.filter(user=request.user).first()
+
+    if not profile or not profile.can_sign:
+        messages.warning(
+            request,
+            "Upload and activate your signature before signing this document.",
+        )
+        return redirect(
+            f"{reverse('signature_profile')}?next={quote(next_url, safe='')}"
+        )
+
+    if request.method == "POST":
+        content_type = ContentType.objects.get_for_model(
+            document, for_concrete_model=False
+        )
+        note = (request.POST.get("note") or "").strip()[:255]
+        signature, _created = DocumentSignature.objects.update_or_create(
+            content_type=content_type,
+            object_id=document.pk,
+            defaults={
+                "signed_by": request.user,
+                "signature_profile": profile,
+                "signer_name": profile.display_name,
+                "signer_title": profile.title,
+                "note": note,
+                "signed_at": timezone.now(),
+            },
+        )
+        messages.success(
+            request,
+            f"{document_label} signed by {signature.signer_name}.",
+        )
+        return redirect(detail_route, pk=document.pk)
+
+    return render(
+        request,
+        "logistics/signatures/sign_document.html",
+        {
+            "document": document,
+            "document_label": document_label,
+            "detail_url": next_url,
+            "profile": profile,
+            "existing_signature": _document_signature_for(document),
+        },
+    )
 
 
 def _user_default_lane(user):
@@ -334,6 +411,30 @@ def _latest_final_invoice_for_client(client):
         .order_by("-is_confirmed", "-created_at")
         .first()
     )
+
+
+def _final_invoice_total_paid(invoice):
+    """Return paid total for a final invoice across current and legacy ledgers."""
+    if not invoice:
+        return Decimal("0.00")
+
+    invoice_record_total = invoice.payment_records.aggregate(total=Sum("amount"))[
+        "total"
+    ] or Decimal("0.00")
+    transaction_record_total = Decimal("0.00")
+    if invoice_record_total <= 0:
+        transaction_record_total = invoice.transaction.payment_records.aggregate(
+            total=Sum("amount")
+        )["total"] or Decimal("0.00")
+
+    legacy_filter = Q(final_invoice=invoice)
+    if invoice.loading_id:
+        legacy_filter |= Q(loading=invoice.loading)
+    legacy_total = Payment.objects.filter(legacy_filter).aggregate(
+        total=Sum("amount_paid")
+    )["total"] or Decimal("0.00")
+
+    return max(invoice_record_total, transaction_record_total, legacy_total)
 
 
 def _build_loading_proforma_items(loading):
@@ -567,6 +668,35 @@ def register_view(request):
     else:
         form = UserRegistrationForm()
     return render(request, "logistics/register.html", {"form": form})
+
+
+@login_required
+def signature_profile(request):
+    """Allow a logged-in staff user to upload their official signature image."""
+    profile, _created = SignatureProfile.objects.get_or_create(
+        user=request.user,
+        defaults={
+            "title": getattr(
+                request.user, "get_role_display", lambda: "Authorized Signatory"
+            )(),
+        },
+    )
+    next_url = _safe_next_url(request)
+    if request.method == "POST":
+        form = SignatureProfileForm(request.POST, request.FILES, instance=profile)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Your signature profile has been updated.")
+            if next_url:
+                return redirect(next_url)
+            return redirect("signature_profile")
+    else:
+        form = SignatureProfileForm(instance=profile)
+    return render(
+        request,
+        "logistics/signatures/profile.html",
+        {"form": form, "profile": profile, "next_url": next_url},
+    )
 
 
 @login_required
@@ -2050,6 +2180,7 @@ def transaction_detail(request, pk):
     invoice_balance = 0
     shipping_charge_included = False
     if latest_invoice:
+        total_paid = _final_invoice_total_paid(latest_invoice)
         invoice_balance = max(latest_invoice.total_amount - total_paid, 0)
         shipping_charge_included = (
             (latest_invoice.sourcing_fee or 0)
@@ -2058,12 +2189,7 @@ def transaction_detail(request, pk):
         ) > 0
     final_invoices = list(transaction.final_invoices.select_related("created_by")[:10])
     for fi in final_invoices:
-        paid_total = fi.payment_records.aggregate(total=Sum("amount"))["total"] or 0
-        if paid_total <= 0:
-            paid_total = (
-                fi.transaction.payment_records.aggregate(total=Sum("amount"))["total"]
-                or 0
-            )
+        paid_total = _final_invoice_total_paid(fi)
         fi.can_edit_invoice = paid_total <= 0
     fulfillment_lines = []
     shipment_legs = []
@@ -2477,16 +2603,7 @@ def fulfillment_order_create(request, transaction_pk):
             pk=final_invoice_id,
             transaction=transaction,
         )
-        linked_invoice_total_paid = (
-            linked_invoice.payment_records.aggregate(total=Sum("amount"))["total"] or 0
-        )
-        if linked_invoice_total_paid <= 0:
-            linked_invoice_total_paid = (
-                linked_invoice.transaction.payment_records.aggregate(
-                    total=Sum("amount")
-                )["total"]
-                or 0
-            )
+        linked_invoice_total_paid = _final_invoice_total_paid(linked_invoice)
         if linked_invoice_total_paid < (linked_invoice.total_amount or 0):
             messages.error(
                 request,
@@ -3379,10 +3496,30 @@ def proforma_detail(request, pk):
     if canonical:
         return canonical
     final_invoice = proforma.transaction.final_invoices.order_by("-created_at").first()
+    document_signature = _document_signature_for(proforma)
     return render(
         request,
         "logistics/invoicing/proforma_detail.html",
-        {"proforma": proforma, "final_invoice": final_invoice},
+        {
+            "proforma": proforma,
+            "final_invoice": final_invoice,
+            "document_signature": document_signature,
+        },
+    )
+
+
+@login_required
+@role_required("PROCUREMENT", "FINANCE", "DIRECTOR", "ADMIN")
+def proforma_sign(request, pk):
+    proforma = get_object_or_404(
+        ProformaInvoice.objects.select_related("transaction__customer", "loading"),
+        pk=pk,
+    )
+    return _sign_business_document(
+        request,
+        document=proforma,
+        detail_route=_proforma_route_name(proforma, "detail"),
+        document_label=f"Proforma PI-{proforma.pk}",
     )
 
 
@@ -3735,12 +3872,7 @@ def final_invoice_list(request):
     page_obj, query_string, page_range = paginate_queryset(request, invoices)
 
     for inv in page_obj:
-        total_paid = inv.payment_records.aggregate(total=Sum("amount"))["total"] or 0
-        if total_paid <= 0:
-            total_paid = (
-                inv.transaction.payment_records.aggregate(total=Sum("amount"))["total"]
-                or 0
-            )
+        total_paid = _final_invoice_total_paid(inv)
         balance = max((inv.total_amount or 0) - total_paid, 0)
         inv.total_paid_for_display = total_paid
         inv.balance_for_display = balance
@@ -3784,12 +3916,7 @@ def final_invoice_detail(request, pk):
     )
     if canonical:
         return canonical
-    total_paid = invoice.payment_records.aggregate(total=Sum("amount"))["total"] or 0
-    if total_paid <= 0:
-        total_paid = (
-            invoice.transaction.payment_records.aggregate(total=Sum("amount"))["total"]
-            or 0
-        )
+    total_paid = _final_invoice_total_paid(invoice)
     purchase_orders_qs = invoice.transaction.purchase_orders.filter(
         Q(final_invoice=invoice) | Q(final_invoice__isnull=True)
     ).select_related("parent_po")
@@ -3819,6 +3946,7 @@ def final_invoice_detail(request, pk):
     can_generate_po = (
         total_paid_decimal >= (invoice.total_amount or 0) and purchase_order is None
     )
+    document_signature = _document_signature_for(invoice)
     return render(
         request,
         "logistics/invoicing/final_detail.html",
@@ -3832,7 +3960,23 @@ def final_invoice_detail(request, pk):
             "purchase_order": purchase_order,
             "split_purchase_orders": split_purchase_orders,
             "can_generate_po": can_generate_po,
+            "document_signature": document_signature,
         },
+    )
+
+
+@login_required
+@role_required("PROCUREMENT", "FINANCE", "DIRECTOR", "ADMIN")
+def final_invoice_sign(request, pk):
+    invoice = get_object_or_404(
+        FinalInvoice.objects.select_related("transaction__customer", "loading"),
+        pk=pk,
+    )
+    return _sign_business_document(
+        request,
+        document=invoice,
+        detail_route=_final_invoice_route_name(invoice, "detail"),
+        document_label=f"Final Invoice FI-{invoice.pk}",
     )
 
 
@@ -3931,14 +4075,7 @@ def final_invoice_update(request, pk):
     )
     if canonical and request.method != "POST":
         return canonical
-    locked_paid_total = (
-        invoice.payment_records.aggregate(total=Sum("amount"))["total"] or 0
-    )
-    if locked_paid_total <= 0:
-        locked_paid_total = (
-            invoice.transaction.payment_records.aggregate(total=Sum("amount"))["total"]
-            or 0
-        )
+    locked_paid_total = _final_invoice_total_paid(invoice)
     if locked_paid_total > 0:
         messages.error(
             request,
@@ -4101,9 +4238,7 @@ def final_invoice_generate_purchase_order(request, pk):
     )
     if canonical and request.method != "POST":
         return canonical
-    total_paid = (
-        invoice.transaction.payment_records.aggregate(total=Sum("amount"))["total"] or 0
-    )
+    total_paid = _final_invoice_total_paid(invoice)
     if total_paid < (invoice.total_amount or 0):
         messages.error(
             request,
@@ -5407,22 +5542,79 @@ def log_audit(model_type, action, object_id, object_str, user):
 @login_required
 @director_required
 def director_finance_summary(request):
-    """Director-only reporting endpoint for revenue, balances, status counts and trends."""
+    """Director-only finance summary rendered as an executive UI."""
+    all_invoices = list(
+        FinalInvoice.objects.select_related("transaction__customer", "loading")
+    )
+    total_billed = sum(
+        (invoice.total_amount or Decimal("0.00")) for invoice in all_invoices
+    )
+    total_collected = sum(
+        _final_invoice_total_paid(invoice) for invoice in all_invoices
+    )
+    outstanding_balance = max(total_billed - total_collected, Decimal("0.00"))
+    collection_rate = (
+        round((total_collected / total_billed) * Decimal("100.00"), 2)
+        if total_billed
+        else Decimal("0.00")
+    )
+
     conversion = DirectorReportingService.conversion_rate()
     top_clients = DirectorReportingService.top_clients()
-    payload = {
-        "total_revenue": float(DirectorReportingService.total_revenue() or 0),
-        "outstanding_balances": float(
-            DirectorReportingService.outstanding_balances() or 0
-        ),
+    status_counts = DirectorReportingService.transactions_per_status()
+    trend_labels, trend_values = DirectorReportingService.revenue_trend()
+    status_labels, status_values = (
+        DirectorReportingService.transaction_status_breakdown()
+    )
+    trade_summary = DirectorReportingService.trade_activity_summary()
+    commission_totals = DirectorReportingService.commission_totals()
+
+    recent_invoices = list(
+        FinalInvoice.objects.select_related(
+            "transaction__customer", "created_by", "loading"
+        ).order_by("-created_at")[:8]
+    )
+    for invoice in recent_invoices:
+        paid_total = _final_invoice_total_paid(invoice)
+        balance = max(
+            (invoice.total_amount or Decimal("0.00")) - paid_total, Decimal("0.00")
+        )
+        invoice.total_paid_for_display = paid_total
+        invoice.balance_for_display = balance
+        if paid_total > 0 and balance <= 0:
+            invoice.payment_status_label = "Paid"
+            invoice.payment_status_class = "bg-success"
+        elif paid_total > 0:
+            invoice.payment_status_label = "Partial Payment"
+            invoice.payment_status_class = "bg-warning text-dark"
+        else:
+            invoice.payment_status_label = "Unpaid"
+            invoice.payment_status_class = "bg-secondary"
+
+    context = {
+        "total_billed": total_billed,
+        "total_collected": total_collected,
+        "outstanding_balance": outstanding_balance,
+        "collection_rate": collection_rate,
+        "confirmed_revenue": DirectorReportingService.total_revenue()
+        or Decimal("0.00"),
+        "legacy_outstanding_estimate": DirectorReportingService.outstanding_balances()
+        or Decimal("0.00"),
         "active_shipments": DirectorReportingService.active_shipments_count(),
         "conversion_rate": conversion,
         "top_clients": top_clients,
-        "profit_estimate": float(DirectorReportingService.profit_estimate() or 0),
-        "transactions_per_status": DirectorReportingService.transactions_per_status(),
-        "revenue_trends": DirectorReportingService.revenue_trends(),
+        "profit_estimate": DirectorReportingService.profit_estimate()
+        or Decimal("0.00"),
+        "transactions_per_status": status_counts,
+        "trade_summary": trade_summary,
+        "commission_totals": commission_totals,
+        "recent_invoices": recent_invoices,
+        "trend_labels_json": json.dumps(trend_labels),
+        "trend_values_json": json.dumps(trend_values),
+        "status_labels_json": json.dumps(status_labels),
+        "status_values_json": json.dumps(status_values),
     }
-    return JsonResponse(payload)
+    return render(request, "logistics/reports/director_finance_summary.html", context)
 
 
 # ===== RECEIPTS =====
@@ -5558,9 +5750,7 @@ def sourcing_payment_create(request, transaction_pk=None):
         )
         if fi:
             initial["final_invoice"] = fi
-            total_paid = (
-                txn.payment_records.aggregate(total=Sum("amount"))["total"] or 0
-            )
+            total_paid = _final_invoice_total_paid(fi)
             amount_due = max(fi.total_amount - total_paid, 0)
             initial["currency"] = fi.currency
             initial["amount_due_snapshot"] = amount_due
@@ -5635,9 +5825,7 @@ def sourcing_payment_create(request, transaction_pk=None):
             "-is_confirmed", "-created_at"
         ).first()
     if selected_txn and selected_invoice:
-        total_paid = (
-            selected_txn.payment_records.aggregate(total=Sum("amount"))["total"] or 0
-        )
+        total_paid = _final_invoice_total_paid(selected_invoice)
         amount_due = max(selected_invoice.total_amount - total_paid, 0)
 
     return render(
@@ -5697,7 +5885,9 @@ def sourcing_payment_due_info(request):
         selected_invoice = invoice_queryset.first()
 
     total_paid = (
-        transaction.payment_records.aggregate(total=Sum("amount"))["total"] or 0
+        _final_invoice_total_paid(selected_invoice)
+        if selected_invoice
+        else (transaction.payment_records.aggregate(total=Sum("amount"))["total"] or 0)
     )
 
     if not selected_invoice:
@@ -6404,7 +6594,7 @@ def evaluate_transaction_closure(transaction):
         _closure_item(
             "Proforma invoice issued",
             proforma is not None,
-            proforma.proforma_number if proforma else "No proforma yet",
+            str(proforma) if proforma else "No proforma yet",
         )
     )
 
@@ -6413,12 +6603,14 @@ def evaluate_transaction_closure(transaction):
         _closure_item(
             "Final invoice issued",
             final_invoice is not None,
-            final_invoice.invoice_number if final_invoice else "No final invoice",
+            str(final_invoice) if final_invoice else "No final invoice",
         )
     )
 
     total_paid = (
-        transaction.payment_records.aggregate(total=Sum("amount"))["total"] or 0
+        _final_invoice_total_paid(final_invoice)
+        if final_invoice
+        else (transaction.payment_records.aggregate(total=Sum("amount"))["total"] or 0)
     )
     invoice_total = final_invoice.total_amount if final_invoice else 0
     paid_ok = bool(final_invoice) and total_paid >= invoice_total and invoice_total > 0

@@ -84,12 +84,52 @@ TEMPLATES = [
 WSGI_APPLICATION = "gmi_terralink.wsgi.application"
 
 # Database
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
+# Local development stays on SQLite. Production defaults to PostgreSQL when
+# DEBUG=False, using the DB_* values configured in cPanel/environment variables.
+DATABASE_MODE = config("DATABASE_MODE", default=("sqlite" if DEBUG else "postgres"))
+DATABASE_MODE = DATABASE_MODE.strip().lower()
+
+if DATABASE_MODE == "sqlite":
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": config("SQLITE_NAME", default=str(BASE_DIR / "db.sqlite3")),
+        }
     }
-}
+elif DATABASE_MODE == "postgres":
+    required_database_settings = [
+        "DB_NAME",
+        "DB_USER",
+        "DB_PASSWORD",
+        "DB_HOST",
+        "DB_PORT",
+    ]
+    missing_database_settings = [
+        setting
+        for setting in required_database_settings
+        if not config(setting, default="")
+    ]
+    if missing_database_settings:
+        raise ImproperlyConfigured(
+            "Missing PostgreSQL database settings: "
+            + ", ".join(missing_database_settings)
+        )
+
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": config("DB_NAME"),
+            "USER": config("DB_USER"),
+            "PASSWORD": config("DB_PASSWORD"),
+            "HOST": config("DB_HOST"),
+            "PORT": config("DB_PORT", default="5432"),
+        }
+    }
+else:
+    raise ImproperlyConfigured(
+        "DATABASE_MODE must be either 'sqlite' for local development or "
+        "'postgres' for deployment."
+    )
 
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [

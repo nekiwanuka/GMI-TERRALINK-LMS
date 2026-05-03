@@ -5,8 +5,8 @@
 {% block content %}
 <style>
 @page {
-    size: A4 portrait;
-    margin: 10mm;
+    size: A4 landscape;
+    margin: 6mm;
 }
 
 @media print {
@@ -32,7 +32,8 @@
         position: absolute !important;
         left: 0 !important;
         top: 0 !important;
-        width: 100% !important;
+        width: 285mm !important;
+        max-width: 285mm !important;
         margin: 0 !important;
         padding: 0 !important;
     }
@@ -47,6 +48,21 @@
     .pi-print-root,
     .row > [class*='col-'] {
         display: none !important;
+    }
+
+    .sourcing-sheet-print .row {
+        display: flex !important;
+        flex-wrap: nowrap !important;
+        gap: 4mm !important;
+        margin: 0 0 4mm 0 !important;
+    }
+
+    .sourcing-sheet-print .row > [class*='col-'] {
+        display: block !important;
+        flex: 1 1 0 !important;
+        width: 50% !important;
+        max-width: 50% !important;
+        padding: 0 !important;
     }
 
     .app-shell,
@@ -70,9 +86,80 @@
         border: 1px solid #d6d6d6 !important;
         border-radius: 0 !important;
         width: 100% !important;
-        max-width: 100% !important;
+        max-width: 285mm !important;
         page-break-inside: auto !important;
         break-inside: auto !important;
+    }
+
+    .pi-doc-header {
+        padding: 8px 12px 7px !important;
+    }
+
+    .pi-doc-body {
+        padding: 8px 10px !important;
+    }
+
+    .pi-section-title {
+        margin-bottom: 3px !important;
+        padding-bottom: 2px !important;
+        font-size: 0.56rem !important;
+    }
+
+    .sourcing-print-table,
+    .worksheet-table {
+        table-layout: fixed !important;
+        width: 100% !important;
+        border-collapse: collapse !important;
+        border-spacing: 0 !important;
+    }
+
+    .worksheet-table col.col-index { width: 7mm; }
+    .worksheet-table col.col-item { width: 38mm; }
+    .worksheet-table col.col-qty { width: 12mm; }
+    .worksheet-table col.col-unit { width: 13mm; }
+    .worksheet-table col.col-supplier { width: 24mm; }
+    .worksheet-table col.col-contact { width: 21mm; }
+    .worksheet-table col.col-cost { width: 15mm; }
+    .worksheet-table col.col-preferred { width: 13mm; }
+    .worksheet-table col.col-notes { width: 23mm; }
+
+    .sourcing-print-table td,
+    .sourcing-print-table th,
+    .worksheet-table td,
+    .worksheet-table th {
+        border: 0.45pt solid #8f98a3 !important;
+        font-size: 0.52rem !important;
+        line-height: 1.12 !important;
+        padding: 2px 3px !important;
+        overflow-wrap: anywhere !important;
+        word-break: break-word !important;
+        vertical-align: top !important;
+    }
+
+    .worksheet-table th {
+        background: #d9e2ec !important;
+        color: #111 !important;
+        font-size: 0.48rem !important;
+        text-align: center !important;
+        text-transform: uppercase !important;
+    }
+
+    .worksheet-table tbody tr {
+        height: 7.5mm !important;
+    }
+
+    .print-value-line {
+        min-height: 4.5mm !important;
+        border-bottom: 0 !important;
+    }
+
+    .sourcing-print-footer-box {
+        min-height: 22mm !important;
+        border: 0.45pt solid #8f98a3 !important;
+        border-radius: 0 !important;
+        padding: 4px 6px !important;
+        font-size: 0.58rem !important;
+        line-height: 1.2 !important;
     }
 
     .pi-document pre {
@@ -226,7 +313,7 @@
 }
 .print-value-line {
     min-height: 20px;
-    border-bottom: 1px dashed #8f8f8f;
+    border-bottom: 0;
 }
 @media (max-width: 991.98px) {
     .sourcing-line-meta {
@@ -276,23 +363,40 @@
                 <div class="mb-3">
                     <div class="pi-section-title">Supplier Price Collection Sheet</div>
                     <table class="table table-bordered worksheet-table mb-0">
+                        <colgroup>
+                            <col class="col-index">
+                            <col class="col-item">
+                            <col class="col-qty">
+                            <col class="col-unit">
+                            <col class="col-supplier">
+                            <col class="col-contact">
+                            <col class="col-cost">
+                            <col class="col-supplier">
+                            <col class="col-contact">
+                            <col class="col-cost">
+                            <col class="col-supplier">
+                            <col class="col-contact">
+                            <col class="col-cost">
+                            <col class="col-preferred">
+                            <col class="col-notes">
+                        </colgroup>
                         <thead>
                             <tr>
-                                <th style="width:4%;">#</th>
-                                <th style="width:16%;">Item</th>
-                                <th style="width:6%;">Qty</th>
-                                <th style="width:6%;">Unit</th>
-                                <th style="width:9%;">Quote A Supplier</th>
-                                <th style="width:9%;">A Contact</th>
-                                <th style="width:7%;">A Cost</th>
-                                <th style="width:9%;">Quote B Supplier</th>
-                                <th style="width:9%;">B Contact</th>
-                                <th style="width:7%;">B Cost</th>
-                                <th style="width:9%;">Quote C Supplier</th>
-                                <th style="width:9%;">C Contact</th>
-                                <th style="width:7%;">C Cost</th>
-                                <th style="width:7%;">Preferred</th>
-                                <th style="width:10%;">Notes</th>
+                                <th>#</th>
+                                <th>Item</th>
+                                <th>Qty</th>
+                                <th>Unit</th>
+                                <th>Quote A Supplier</th>
+                                <th>A Contact</th>
+                                <th>A Cost</th>
+                                <th>Quote B Supplier</th>
+                                <th>B Contact</th>
+                                <th>B Cost</th>
+                                <th>Quote C Supplier</th>
+                                <th>C Contact</th>
+                                <th>C Cost</th>
+                                <th>Preferred</th>
+                                <th>Notes</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -332,6 +436,7 @@
                                 <td><div class="print-value-line"></div></td>
                                 <td><div class="print-value-line"></div></td>
                                 <td><div class="print-value-line"></div></td>
+                                <td><div class="print-value-line"></div></td>
                             </tr>
                             {% endfor %}
                         </tbody>
@@ -340,11 +445,11 @@
                 <div class="row g-3 mt-2">
                     <div class="col-6">
                         <div class="pi-section-title">Notes / Terms / Conditions</div>
-                        <div style="min-height:64px;border:1px solid #dee2e6;border-radius:8px;padding:10px;white-space:pre-wrap;">{{ form.notes.value|default:"" }}</div>
+                        <div class="sourcing-print-footer-box" style="min-height:64px;border:1px solid #dee2e6;border-radius:8px;padding:10px;white-space:pre-wrap;">{{ form.notes.value|default:"" }}</div>
                     </div>
                     <div class="col-6">
                         <div class="pi-section-title">Collected By / Date</div>
-                        <div style="min-height:64px;border:1px solid #dee2e6;border-radius:8px;padding:10px;"></div>
+                        <div class="sourcing-print-footer-box" style="min-height:64px;border:1px solid #dee2e6;border-radius:8px;padding:10px;"></div>
                     </div>
                 </div>
             </div>

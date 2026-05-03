@@ -325,6 +325,7 @@ from .models import (
     TransactionPaymentRecord,
     Transit,
     ShipmentLeg,
+    SignatureProfile,
 )
 
 
@@ -379,6 +380,39 @@ class UserRegistrationForm(UserCreationForm):
     class Meta:
         model = CustomUser
         fields = ("username", "email", "first_name", "last_name", "phone", "role")
+
+
+class SignatureProfileForm(forms.ModelForm):
+    """Upload or update a user's official document signature."""
+
+    class Meta:
+        model = SignatureProfile
+        fields = ("signature_image", "title", "is_active")
+        widgets = {
+            "signature_image": forms.ClearableFileInput(
+                attrs={"class": "form-control", "accept": "image/*"}
+            ),
+            "title": forms.TextInput(
+                attrs={
+                    "class": "form-control",
+                    "placeholder": "Authorized Signatory",
+                }
+            ),
+            "is_active": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+        }
+
+    def clean_signature_image(self):
+        signature_image = self.cleaned_data.get("signature_image")
+        if not signature_image:
+            return signature_image
+        allowed_extensions = (".png", ".jpg", ".jpeg", ".webp")
+        if not signature_image.name.lower().endswith(allowed_extensions):
+            raise forms.ValidationError(
+                "Upload a PNG, JPG, JPEG, or WEBP signature image."
+            )
+        if signature_image.size > 2 * 1024 * 1024:
+            raise forms.ValidationError("Signature image must be 2 MB or smaller.")
+        return signature_image
 
 
 class ClientForm(forms.ModelForm):
@@ -1919,20 +1953,37 @@ class ProofOfDeliveryForm(forms.ModelForm):
                 attrs={"class": "form-control"}
             ),
             "gps_lat": forms.NumberInput(
-                attrs={"class": "form-control", "step": "any", "placeholder": "0.000000"}
+                attrs={
+                    "class": "form-control",
+                    "step": "any",
+                    "placeholder": "0.000000",
+                }
             ),
             "gps_lng": forms.NumberInput(
-                attrs={"class": "form-control", "step": "any", "placeholder": "0.000000"}
+                attrs={
+                    "class": "form-control",
+                    "step": "any",
+                    "placeholder": "0.000000",
+                }
             ),
             "notes": forms.Textarea(
-                attrs={"class": "form-control", "rows": 3, "placeholder": "Optional notes"}
+                attrs={
+                    "class": "form-control",
+                    "rows": 3,
+                    "placeholder": "Optional notes",
+                }
             ),
         }
         input_formats = {"delivered_at": ["%Y-%m-%dT%H:%M", "%Y-%m-%d %H:%M:%S"]}
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["delivered_at"].input_formats = ["%Y-%m-%dT%H:%M", "%Y-%m-%d %H:%M:%S"]
+        self.fields["delivered_at"].input_formats = [
+            "%Y-%m-%dT%H:%M",
+            "%Y-%m-%d %H:%M:%S",
+        ]
+
+
 class SupplierPaymentForm(forms.ModelForm):
     class Meta:
         from .models import SupplierPayment

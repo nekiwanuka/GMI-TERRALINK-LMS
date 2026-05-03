@@ -74,3 +74,6 @@ from .commission import COMMISSION_CURRENCY_CHOICES, Commission  # noqa: F401
 
 # Proof of Delivery — close-out artifact for both business lines.
 from .proof_of_delivery import ProofOfDelivery  # noqa: F401
+
+# Reusable uploaded staff signatures and document signing audit trail.
+from .signatures import DocumentSignature, SignatureProfile  # noqa: F401
