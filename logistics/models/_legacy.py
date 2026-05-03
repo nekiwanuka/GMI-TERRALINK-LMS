@@ -232,9 +232,9 @@ class Client(models.Model):
 
     @classmethod
     def generate_unique_id(cls):
-        """Generate a unique client ID prefixed with RGL."""
+        """Generate a unique client ID prefixed with GTL."""
         while True:
-            candidate = f"RGL{_random_digits(10)}"
+            candidate = f"GTL{_random_digits(5)}"
             if not cls.objects.filter(client_id=candidate).exists():
                 return candidate
 
