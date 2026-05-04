@@ -153,6 +153,12 @@ from .services.reporting import DirectorReportingService
 
 DEFAULT_PAGE_SIZE = 20
 AUDIT_PAGE_SIZE = 40
+MIN_CONTAINS_SEARCH_LENGTH = 3
+
+
+def _text_search_q(field_name, value):
+    lookup = "icontains" if len(value) >= MIN_CONTAINS_SEARCH_LENGTH else "istartswith"
+    return Q(**{f"{field_name}__{lookup}": value})
 
 
 def _notify_roles(*, title, message, link="", category="system", roles=None):
@@ -775,12 +781,12 @@ def user_list(request):
 def client_list(request):
     lane = _resolve_lane(request)
     clients = _apply_client_lane(Client.objects.all(), lane)
-    search = request.GET.get("search", "")
+    search = request.GET.get("search", "").strip()
     if search:
         clients = clients.filter(
-            Q(client_id__icontains=search)
-            | Q(name__icontains=search)
-            | Q(contact_person__icontains=search)
+            _text_search_q("client_id", search)
+            | _text_search_q("name", search)
+            | _text_search_q("contact_person", search)
         )
     page_obj, query_string, page_range = paginate_queryset(request, clients)
     return render(
@@ -891,12 +897,12 @@ def client_delete(request, pk):
 def loading_list(request):
     lane = _resolve_lane_with_path(request)
     loadings = _apply_loading_lane(Loading.objects.select_related("client"), lane)
-    search = request.GET.get("search", "")
+    search = request.GET.get("search", "").strip()
     if search:
         loadings = loadings.filter(
-            Q(loading_id__icontains=search)
-            | Q(client__name__icontains=search)
-            | Q(origin__icontains=search)
+            _text_search_q("loading_id", search)
+            | _text_search_q("client__name", search)
+            | _text_search_q("origin", search)
         )
     closed_filter = request.GET.get("closed")
     if closed_filter == "1":
@@ -2125,9 +2131,9 @@ def transaction_list(request):
     status = request.GET.get("status", "").strip()
     if search:
         transactions = transactions.filter(
-            Q(transaction_id__icontains=search)
-            | Q(customer__name__icontains=search)
-            | Q(customer__client_id__icontains=search)
+            _text_search_q("transaction_id", search)
+            | _text_search_q("customer__name", search)
+            | _text_search_q("customer__client_id", search)
         )
     if closed_filter == "1":
         transactions = transactions.filter(_closed_trade_filter_q())

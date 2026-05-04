@@ -89,6 +89,10 @@ class Notification(models.Model):
 
     class Meta:
         ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["recipient", "is_read", "-created_at"]),
+            models.Index(fields=["category", "-created_at"]),
+        ]
 
     def __str__(self):
         return f"{self.title} -> {self.recipient.username}"
@@ -226,6 +230,11 @@ class Client(models.Model):
 
     class Meta:
         ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["name"]),
+            models.Index(fields=["phone"]),
+            models.Index(fields=["-created_at"]),
+        ]
 
     def __str__(self):
         return f"{self.client_id} - {self.name}"
@@ -296,6 +305,12 @@ class Loading(models.Model):
 
     class Meta:
         ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["entry_type", "closed_at"]),
+            models.Index(fields=["client", "-created_at"]),
+            models.Index(fields=["origin"]),
+            models.Index(fields=["-created_at"]),
+        ]
 
     def __str__(self):
         return f"{self.loading_id} - {self.client.name}"
@@ -657,6 +672,11 @@ class AuditLog(models.Model):
     class Meta:
         ordering = ["-timestamp"]
         verbose_name_plural = "Audit Logs"
+        indexes = [
+            models.Index(fields=["-timestamp"]),
+            models.Index(fields=["model_type", "action", "-timestamp"]),
+            models.Index(fields=["user", "-timestamp"]),
+        ]
 
     def __str__(self):
         return f"{self.get_action_display()} - {self.get_model_type_display()} ({self.object_str})"
@@ -885,6 +905,12 @@ class Transaction(models.Model):
 
     class Meta:
         ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["status", "closed_at"]),
+            models.Index(fields=["customer", "-created_at"]),
+            models.Index(fields=["source_loading"]),
+            models.Index(fields=["-created_at"]),
+        ]
 
     def __str__(self):
         return self.transaction_id

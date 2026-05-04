@@ -322,16 +322,30 @@
                             {% if shell_module_notification_counts.cargo %}<span class="sidebar-count-badge ms-auto">{{ shell_module_notification_counts.cargo }}</span>{% endif %}
                         </a>
                     </li>
+                    {% if user.is_superuser or user.role in 'ADMIN,DIRECTOR,FINANCE' %}
+                    <li class="nav-item">
+                        <button class="nav-link nav-link-toggle {% if 'proforma' in request.resolver_match.url_name or 'final_invoice' in request.resolver_match.url_name %}active{% endif %}" type="button" data-bs-toggle="collapse" data-bs-target="#sidebarInvoicingMenuLogistics" aria-expanded="{% if 'proforma' in request.resolver_match.url_name or 'final_invoice' in request.resolver_match.url_name %}true{% else %}false{% endif %}" aria-controls="sidebarInvoicingMenuLogistics" title="Cargo proformas and cargo invoices">
+                            <span class="nav-link-label"><i class="bi bi-receipt-cutoff"></i> Cargo Documents</span>
+                            <i class="bi bi-chevron-down sidebar-caret"></i>
+                        </button>
+                        <div class="collapse sidebar-submenu-wrap {% if 'proforma' in request.resolver_match.url_name or 'final_invoice' in request.resolver_match.url_name %}show{% endif %}" id="sidebarInvoicingMenuLogistics">
+                            <div class="sidebar-submenu">
+                                <a class="sidebar-submenu-link {% if 'proforma' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'logistics_proforma_list' %}">
+                                    <span class="sidebar-submenu-text"><i class="bi bi-file-earmark-text"></i> Proforma</span>
+                                    <span class="sidebar-count-badge">{{ shell_proforma_count_logistics }}</span>
+                                </a>
+                                <a class="sidebar-submenu-link {% if 'final_invoice' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'logistics_final_invoice_list' %}">
+                                    <span class="sidebar-submenu-text"><i class="bi bi-file-earmark-check"></i> Invoice</span>
+                                    <span class="sidebar-count-badge">{{ shell_final_invoice_count_logistics }}</span>
+                                </a>
+                            </div>
+                        </div>
+                    </li>
+                    {% endif %}
                     <li class="nav-item">
                         <a class="nav-link {% if 'transit' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'transit_list' %}" data-bs-toggle="tooltip" data-bs-placement="right" title="Transit tracking and vessel monitoring">
                             <i class="bi bi-compass-fill"></i> Transit
                             {% if shell_module_notification_counts.transit %}<span class="sidebar-count-badge ms-auto">{{ shell_module_notification_counts.transit }}</span>{% endif %}
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link {% if 'container' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'container_return_list' %}" data-bs-toggle="tooltip" data-bs-placement="right" title="Container return status and reconciliation">
-                            <i class="bi bi-archive-fill"></i> Containers
-                            {% if shell_module_notification_counts.containers %}<span class="sidebar-count-badge ms-auto">{{ shell_module_notification_counts.containers }}</span>{% endif %}
                         </a>
                     </li>
                     {% if user.is_superuser or user.role in 'ADMIN,DIRECTOR,FINANCE,OFFICE_ADMIN' %}
@@ -357,29 +371,15 @@
                         </a>
                     </li>
                     <li class="nav-item">
+                        <a class="nav-link {% if 'container' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'container_return_list' %}" data-bs-toggle="tooltip" data-bs-placement="right" title="Container return status and reconciliation">
+                            <i class="bi bi-archive-fill"></i> Containers
+                            {% if shell_module_notification_counts.containers %}<span class="sidebar-count-badge ms-auto">{{ shell_module_notification_counts.containers }}</span>{% endif %}
+                        </a>
+                    </li>
+                    <li class="nav-item">
                         <a class="nav-link {% if request.resolver_match.url_name == 'loading_list' and request.GET.closed == '1' %}active{% endif %}" href="{% url 'loading_list' %}?closed=1" data-bs-toggle="tooltip" data-bs-placement="right" title="Closed loadings archive">
                             <i class="bi bi-lock-fill"></i> Closed Loadings
                         </a>
-                    </li>
-                    {% endif %}
-                    {% if user.is_superuser or user.role in 'ADMIN,DIRECTOR,FINANCE' %}
-                    <li class="nav-item">
-                        <button class="nav-link nav-link-toggle {% if 'proforma' in request.resolver_match.url_name or 'final_invoice' in request.resolver_match.url_name %}active{% endif %}" type="button" data-bs-toggle="collapse" data-bs-target="#sidebarInvoicingMenuLogistics" aria-expanded="{% if 'proforma' in request.resolver_match.url_name or 'final_invoice' in request.resolver_match.url_name %}true{% else %}false{% endif %}" aria-controls="sidebarInvoicingMenuLogistics" title="Cargo proformas and cargo invoices">
-                            <span class="nav-link-label"><i class="bi bi-receipt-cutoff"></i> Cargo</span>
-                            <i class="bi bi-chevron-down sidebar-caret"></i>
-                        </button>
-                        <div class="collapse sidebar-submenu-wrap {% if 'proforma' in request.resolver_match.url_name or 'final_invoice' in request.resolver_match.url_name %}show{% endif %}" id="sidebarInvoicingMenuLogistics">
-                            <div class="sidebar-submenu">
-                                <a class="sidebar-submenu-link {% if 'proforma' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'logistics_proforma_list' %}">
-                                    <span class="sidebar-submenu-text"><i class="bi bi-file-earmark-text"></i> Proforma</span>
-                                    <span class="sidebar-count-badge">{{ shell_proforma_count_logistics }}</span>
-                                </a>
-                                <a class="sidebar-submenu-link {% if 'final_invoice' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'logistics_final_invoice_list' %}">
-                                    <span class="sidebar-submenu-text"><i class="bi bi-file-earmark-check"></i> Invoice</span>
-                                    <span class="sidebar-count-badge">{{ shell_final_invoice_count_logistics }}</span>
-                                </a>
-                            </div>
-                        </div>
                     </li>
                     {% endif %}
                     {% endif %}
@@ -413,33 +413,11 @@
                             {% if shell_module_notification_counts.suppliers %}<span class="sidebar-count-badge ms-auto">{{ shell_module_notification_counts.suppliers }}</span>{% endif %}
                         </a>
                     </li>
-                    <li class="nav-item">
-                        <a class="nav-link {% if 'inventory' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'inventory_list' %}" data-bs-toggle="tooltip" data-bs-placement="right" title="Warehouse stock and storage tracking">
-                            <i class="bi bi-boxes"></i> Warehouse
-                            {% if shell_module_notification_counts.inventory %}<span class="sidebar-count-badge ms-auto">{{ shell_module_notification_counts.inventory }}</span>{% endif %}
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link {% if 'fulfillment' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'fulfillment_list' %}" data-bs-toggle="tooltip" data-bs-placement="right" title="Warehouse allocation, port movement and inland delivery tracking">
-                            <i class="bi bi-signpost-split-fill"></i> Fulfillment
-                            {% if shell_module_notification_counts.fulfillment %}<span class="sidebar-count-badge ms-auto">{{ shell_module_notification_counts.fulfillment }}</span>{% endif %}
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link {% if 'pod' in request.resolver_match.url_name and request.GET.lane == 'trading' %}active{% endif %}" href="{% url 'pod_list' %}?lane=trading" data-bs-toggle="tooltip" data-bs-placement="right" title="Proof of Delivery records for trading orders">
-                            <i class="bi bi-file-earmark-check"></i> Proof of Delivery
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link {% if request.resolver_match.url_name == 'transaction_list' and request.GET.closed == '1' %}active{% endif %}" href="{% url 'transaction_list' %}?closed=1" data-bs-toggle="tooltip" data-bs-placement="right" title="Closed trade transactions archive">
-                            <i class="bi bi-lock-fill"></i> Closed Trades
-                        </a>
-                    </li>
                     {% endif %}
                     {% if user.is_superuser or user.role in 'ADMIN,DIRECTOR,FINANCE' %}
                     <li class="nav-item">
                         <button class="nav-link nav-link-toggle {% if 'proforma' in request.resolver_match.url_name or 'final_invoice' in request.resolver_match.url_name %}active{% endif %}" type="button" data-bs-toggle="collapse" data-bs-target="#sidebarInvoicingMenuSourcing" aria-expanded="{% if 'proforma' in request.resolver_match.url_name or 'final_invoice' in request.resolver_match.url_name %}true{% else %}false{% endif %}" aria-controls="sidebarInvoicingMenuSourcing" title="Sourcing proformas and sourcing invoices">
-                            <span class="nav-link-label"><i class="bi bi-receipt-cutoff"></i> Sourcing</span>
+                            <span class="nav-link-label"><i class="bi bi-receipt-cutoff"></i> Sourcing Billing</span>
                             {% if shell_module_notification_counts.invoicing %}<span class="sidebar-count-badge ms-2">{{ shell_module_notification_counts.invoicing }}</span>{% endif %}
                             <i class="bi bi-chevron-down sidebar-caret"></i>
                         </button>
@@ -477,6 +455,30 @@
                         <a class="nav-link {% if 'receipt' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'receipt_list' %}" data-bs-toggle="tooltip" data-bs-placement="right" title="Immutable receipts and reversal records">
                             <i class="bi bi-receipt"></i> Receipts
                             {% if shell_module_notification_counts.receipts %}<span class="sidebar-count-badge ms-auto">{{ shell_module_notification_counts.receipts }}</span>{% endif %}
+                        </a>
+                    </li>
+                    {% endif %}
+                    {% if user.is_superuser or user.role in 'ADMIN,DIRECTOR,PROCUREMENT' %}
+                    <li class="nav-item">
+                        <a class="nav-link {% if 'inventory' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'inventory_list' %}" data-bs-toggle="tooltip" data-bs-placement="right" title="Warehouse stock and storage tracking">
+                            <i class="bi bi-boxes"></i> Warehouse
+                            {% if shell_module_notification_counts.inventory %}<span class="sidebar-count-badge ms-auto">{{ shell_module_notification_counts.inventory }}</span>{% endif %}
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if 'fulfillment' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'fulfillment_list' %}" data-bs-toggle="tooltip" data-bs-placement="right" title="Warehouse allocation, port movement and inland delivery tracking">
+                            <i class="bi bi-signpost-split-fill"></i> Fulfillment
+                            {% if shell_module_notification_counts.fulfillment %}<span class="sidebar-count-badge ms-auto">{{ shell_module_notification_counts.fulfillment }}</span>{% endif %}
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if 'pod' in request.resolver_match.url_name and request.GET.lane == 'trading' %}active{% endif %}" href="{% url 'pod_list' %}?lane=trading" data-bs-toggle="tooltip" data-bs-placement="right" title="Proof of Delivery records for trading orders">
+                            <i class="bi bi-file-earmark-check"></i> Proof of Delivery
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.resolver_match.url_name == 'transaction_list' and request.GET.closed == '1' %}active{% endif %}" href="{% url 'transaction_list' %}?closed=1" data-bs-toggle="tooltip" data-bs-placement="right" title="Closed trade transactions archive">
+                            <i class="bi bi-lock-fill"></i> Closed Trades
                         </a>
                     </li>
                     {% endif %}

@@ -1,4 +1,8 @@
+from django.db.models import Count, Q
+
 from logistics.models import FinalInvoice, Notification, ProformaInvoice
+
+SHELL_MODULE_BADGE_SCAN_LIMIT = 250
 
 
 def _shell_resolve_lane(request):
@@ -19,8 +23,11 @@ def logistics_shell_context(request):
     if not getattr(request, "user", None) or not request.user.is_authenticated:
         return {}
 
-    notifications = list(request.user.notifications.all()[:6])
-    unread_qs = request.user.notifications.filter(is_read=False)
+    notification_qs = request.user.notifications.all()
+    notifications = list(
+        notification_qs.only("title", "message", "link", "is_read", "created_at")[:6]
+    )
+    unread_qs = notification_qs.filter(is_read=False)
     unread_count = unread_qs.count()
 
     module_counts = {
@@ -43,9 +50,9 @@ def logistics_shell_context(request):
         "audit": 0,
     }
 
-    def _module_for(notification):
-        link = (notification.link or "").lower()
-        category = (notification.category or "").lower()
+    def _module_for(category, link):
+        link = (link or "").lower()
+        category = (category or "").lower()
 
         if "/invoicing/" in link or category == "invoice":
             return "invoicing"
@@ -83,30 +90,33 @@ def logistics_shell_context(request):
             return "audit"
         return None
 
-    for notification in unread_qs.only("category", "link"):
-        module_key = _module_for(notification)
+    unread_badge_rows = unread_qs.values_list("category", "link")[
+        :SHELL_MODULE_BADGE_SCAN_LIMIT
+    ]
+    for category, link in unread_badge_rows:
+        module_key = _module_for(category, link)
         if module_key in module_counts:
             module_counts[module_key] += 1
 
     from logistics.views import _can_switch_lane, _lane_label
 
     active_lane = _shell_resolve_lane(request)
+    proforma_counts = ProformaInvoice.objects.aggregate(
+        logistics=Count("id", filter=Q(loading__isnull=False)),
+        sourcing=Count("id", filter=Q(loading__isnull=True)),
+    )
+    final_invoice_counts = FinalInvoice.objects.aggregate(
+        logistics=Count("id", filter=Q(loading__isnull=False)),
+        sourcing=Count("id", filter=Q(loading__isnull=True)),
+    )
     return {
         "shell_notifications": notifications,
         "shell_notifications_unread_count": unread_count,
         "shell_module_notification_counts": module_counts,
-        "shell_proforma_count_logistics": ProformaInvoice.objects.filter(
-            loading__isnull=False
-        ).count(),
-        "shell_proforma_count_sourcing": ProformaInvoice.objects.filter(
-            loading__isnull=True
-        ).count(),
-        "shell_final_invoice_count_logistics": FinalInvoice.objects.filter(
-            loading__isnull=False
-        ).count(),
-        "shell_final_invoice_count_sourcing": FinalInvoice.objects.filter(
-            loading__isnull=True
-        ).count(),
+        "shell_proforma_count_logistics": proforma_counts["logistics"],
+        "shell_proforma_count_sourcing": proforma_counts["sourcing"],
+        "shell_final_invoice_count_logistics": final_invoice_counts["logistics"],
+        "shell_final_invoice_count_sourcing": final_invoice_counts["sourcing"],
         "shell_active_lane": active_lane,
         "shell_active_lane_label": _lane_label(active_lane),
         "shell_can_switch_lane": _can_switch_lane(request.user),
