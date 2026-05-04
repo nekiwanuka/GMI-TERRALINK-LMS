@@ -1046,6 +1046,29 @@ class ContainerReturnForm(NormalizedTextMixin, forms.ModelForm):
         self.fields["container_size"].required = False
         self.fields["remarks"].required = False
 
+    def clean(self):
+        cleaned_data = super().clean()
+        container_number = cleaned_data.get("container_number")
+        loading = cleaned_data.get("loading")
+        if container_number and loading:
+            duplicate = ContainerReturn.objects.filter(
+                loading=loading,
+                container_number__iexact=container_number,
+            )
+            if self.instance and self.instance.pk:
+                duplicate = duplicate.exclude(pk=self.instance.pk)
+            existing_return = duplicate.first()
+            if existing_return:
+                self.add_error(
+                    "container_number",
+                    "This container return has already been captured for the selected loading.",
+                )
+                self.add_error(
+                    "loading",
+                    f"Existing return record: {existing_return.container_number} on {existing_return.return_date:%Y-%m-%d}.",
+                )
+        return cleaned_data
+
 
 class TransactionForm(NormalizedTextMixin, forms.ModelForm):
     """Form for creating and updating core transactions."""
