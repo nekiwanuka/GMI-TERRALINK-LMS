@@ -1,0 +1,285 @@
+:root {
+  --primary: #4f4a52;
+  --secondary: #67616b;
+  --accent: #d4af37;
+  --primary-fg: #ffffff;
+  --body-fg: #3f3a43;
+  --body-bg: #f5f1e7;
+  --body-quiet-color: #7c7580;
+  --border-color: rgba(103, 97, 107, 0.16);
+  --link-fg: #4f4a52;
+  --link-hover-color: #b79224;
+  --button-bg: #4f4a52;
+  --button-hover-bg: #3f3a43;
+  --default-button-bg: #d4af37;
+  --default-button-hover-bg: #b79224;
+  --delete-button-bg: #b23a33;
+  --delete-button-hover-bg: #912d29;
+  --gmi-shadow: 0 24px 64px rgba(79, 74, 82, 0.18);
+}
+
+body {
+  background:
+    radial-gradient(circle at top left, rgba(212, 175, 55, 0.18), transparent 30%),
+    linear-gradient(180deg, #fbfaf5 0%, #f0eadc 100%);
+  color: var(--body-fg);
+  font-family: "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+#header {
+  min-height: 64px;
+  background: rgba(255, 252, 246, 0.96);
+  border-bottom: 1px solid var(--border-color);
+  color: var(--body-fg);
+  box-shadow: 0 10px 26px rgba(79, 74, 82, 0.08);
+}
+
+#branding h1,
+#branding h1 a:link,
+#branding h1 a:visited {
+  color: var(--body-fg);
+}
+
+.gmi-admin-brand,
+.gmi-admin-brand-link {
+  display: flex;
+  align-items: center;
+}
+
+.gmi-admin-brand-link {
+  gap: 0.8rem;
+  color: var(--body-fg) !important;
+  text-decoration: none;
+}
+
+.gmi-admin-logo {
+  width: auto;
+  height: 38px;
+  object-fit: contain;
+}
+
+.gmi-admin-brand-copy {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.05;
+}
+
+.gmi-admin-brand-copy strong {
+  font-size: 0.95rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.gmi-admin-brand-copy small {
+  color: var(--body-quiet-color);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+#user-tools,
+#user-tools a,
+#logout-form button {
+  color: var(--body-fg);
+  font-weight: 600;
+}
+
+#user-tools a:hover,
+#logout-form button:hover {
+  color: var(--accent);
+}
+
+.gmi-admin-portal-link {
+  align-self: center;
+  border: 1px solid rgba(212, 175, 55, 0.45);
+  border-radius: 999px;
+  color: var(--body-fg) !important;
+  font-weight: 700;
+  padding: 0.45rem 0.85rem;
+  text-decoration: none;
+}
+
+.gmi-admin-portal-link:hover {
+  background: rgba(212, 175, 55, 0.16);
+}
+
+div.breadcrumbs {
+  background: #67616b;
+  color: #fff;
+}
+
+.module,
+.inline-group,
+#content-related {
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: 0 10px 24px rgba(79, 74, 82, 0.07);
+  overflow: hidden;
+}
+
+.module h2,
+.module caption,
+.inline-group h2 {
+  background: #4f4a52;
+  color: #fff;
+  font-weight: 700;
+}
+
+table thead th,
+.results thead th {
+  background: #faf7ef;
+  color: var(--body-fg);
+}
+
+.button,
+input[type="submit"],
+input[type="button"],
+.submit-row input,
+a.button {
+  border-radius: 8px;
+  font-weight: 700;
+}
+
+.submit-row input.default,
+input[type="submit"].default {
+  background: var(--default-button-bg);
+  color: #2e2a31;
+}
+
+.submit-row input.default:hover,
+input[type="submit"].default:hover {
+  background: var(--default-button-hover-bg);
+}
+
+.gmi-admin-login #container {
+  width: 100%;
+  min-width: 0;
+  background: transparent;
+}
+
+.gmi-admin-login #header {
+  display: none;
+}
+
+.gmi-admin-login #content {
+  padding: 0;
+}
+
+.gmi-admin-login #content-main {
+  float: none;
+}
+
+.gmi-admin-login-shell {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  padding: 2rem;
+}
+
+.gmi-admin-login-panel {
+  width: min(440px, 100%);
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid rgba(103, 97, 107, 0.14);
+  border-radius: 8px;
+  box-shadow: var(--gmi-shadow);
+  padding: 2rem;
+}
+
+.gmi-admin-login-brand {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.6rem;
+}
+
+.gmi-admin-login-logo {
+  width: 128px;
+  height: auto;
+  object-fit: contain;
+}
+
+.gmi-admin-kicker {
+  color: var(--accent);
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.gmi-admin-login-brand h1 {
+  color: var(--body-fg);
+  font-size: 1.55rem;
+  margin: 0.15rem 0 0;
+}
+
+.gmi-admin-login-form .form-row {
+  padding: 0 0 1rem;
+}
+
+.gmi-admin-login-form label {
+  color: var(--body-fg);
+  display: block;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  margin-bottom: 0.45rem;
+  text-transform: uppercase;
+}
+
+.gmi-admin-login-form input[type="text"],
+.gmi-admin-login-form input[type="password"] {
+  border: 1px solid rgba(103, 97, 107, 0.2);
+  border-radius: 8px;
+  box-sizing: border-box;
+  font-size: 1rem;
+  min-height: 44px;
+  padding: 0.7rem 0.85rem;
+  width: 100%;
+}
+
+.gmi-admin-login-form input[type="text"]:focus,
+.gmi-admin-login-form input[type="password"]:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.18);
+  outline: none;
+}
+
+.gmi-admin-login-form .submit-row {
+  background: transparent;
+  border: 0;
+  padding: 0;
+}
+
+.gmi-admin-login-form .submit-row input {
+  background: #4f4a52;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  min-height: 44px;
+  width: 100%;
+}
+
+.gmi-admin-login-form .submit-row input:hover {
+  background: #3f3a43;
+}
+
+.password-reset-link {
+  margin: -0.2rem 0 1rem;
+  text-align: right;
+}
+
+@media (max-width: 640px) {
+  .gmi-admin-login-shell {
+    padding: 1rem;
+  }
+
+  .gmi-admin-login-panel {
+    padding: 1.35rem;
+  }
+
+  .gmi-admin-login-brand {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

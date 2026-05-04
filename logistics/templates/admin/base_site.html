@@ -1,0 +1,25 @@
+{% extends "admin/base.html" %}
+{% load static %}
+
+{% block title %}{% if subtitle %}{{ subtitle }} | {% endif %}{{ title }} | GMI Terralink Admin{% endblock %}
+
+{% block extrastyle %}
+{{ block.super }}
+<link rel="stylesheet" href="{% static 'css/admin_branding.css' %}?v=20260504-admin-brand">
+{% endblock %}
+
+{% block branding %}
+<div class="gmi-admin-brand">
+    <a href="{% url 'admin:index' %}" class="gmi-admin-brand-link" aria-label="GMI Terralink admin home">
+        <img src="{% static 'images/gmi_logo.png' %}" alt="GMI Terralink" class="gmi-admin-logo">
+        <span class="gmi-admin-brand-copy">
+            <strong>GMI Terralink</strong>
+            <small>Administration</small>
+        </span>
+    </a>
+</div>
+{% endblock %}
+
+{% block nav-global %}
+<a class="gmi-admin-portal-link" href="{% url 'dashboard' %}">Open Portal</a>
+{% endblock %}

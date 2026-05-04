@@ -40,6 +40,10 @@ from .services import (
     transition_shipment,
 )
 
+admin.site.site_header = "GMI Terralink Administration"
+admin.site.site_title = "GMI Terralink Admin"
+admin.site.index_title = "Operations Control Center"
+
 
 @admin.register(CustomUser)
 class CustomUserAdmin(UserAdmin):
@@ -504,9 +508,18 @@ class BillingPaymentAdmin(admin.ModelAdmin):
     search_fields = ("invoice__invoice_number", "reference")
     readonly_fields = ("idempotency_key", "paid_at")
 
+
 @admin.register(SupplierPayment)
 class SupplierPaymentAdmin(admin.ModelAdmin):
-    list_display = ("purchase_order", "supplier_name", "amount", "currency", "method", "paid_at", "created_by")
+    list_display = (
+        "purchase_order",
+        "supplier_name",
+        "amount",
+        "currency",
+        "method",
+        "paid_at",
+        "created_by",
+    )
     list_filter = ("currency", "method", "paid_at")
     search_fields = ("purchase_order__po_number", "supplier_name", "reference")
     raw_id_fields = ("purchase_order",)
