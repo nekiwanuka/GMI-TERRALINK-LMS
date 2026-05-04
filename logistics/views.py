@@ -104,6 +104,7 @@ from .forms import (
     TransitForm,
     TransactionPaymentRecordForm,
     UserRegistrationForm,
+    normalize_text_entry,
 )
 from .decorators import (
     director_required,
@@ -284,7 +285,7 @@ def _resolve_lane(request):
 
 def _path_lane(request):
     path = (request.path or "").lower()
-    if path.startswith("/logistics/"):
+    if path.startswith("/logistics/") or path.startswith("/loadings/"):
         return "logistics"
     if path.startswith("/sourcing/"):
         return "sourcing"
@@ -888,7 +889,7 @@ def client_delete(request, pk):
 
 @login_required
 def loading_list(request):
-    lane = _resolve_lane(request)
+    lane = _resolve_lane_with_path(request)
     loadings = _apply_loading_lane(Loading.objects.select_related("client"), lane)
     search = request.GET.get("search", "")
     if search:
@@ -2396,17 +2397,25 @@ def document_edit_pi(request, pk):
         return locked_response
     if request.method == "POST":
         sd = document.structured_data or {}
-        sd["client_name"] = request.POST.get("client_name", "").strip()
-        sd["contact_person"] = request.POST.get("contact_person", "").strip()
+        sd["client_name"] = normalize_text_entry(
+            "client_name", request.POST.get("client_name", "")
+        )
+        sd["contact_person"] = normalize_text_entry(
+            "contact_person", request.POST.get("contact_person", "")
+        )
         sd["phone"] = request.POST.get("phone", "").strip()
-        sd["email"] = request.POST.get("email", "").strip()
-        sd["address"] = request.POST.get("address", "").strip()
-        sd["subject"] = request.POST.get("subject", "").strip()
-        sd["deadline"] = request.POST.get("deadline", "").strip()
+        sd["email"] = normalize_text_entry("email", request.POST.get("email", ""))
+        sd["address"] = normalize_text_entry("address", request.POST.get("address", ""))
+        sd["subject"] = normalize_text_entry("subject", request.POST.get("subject", ""))
+        sd["deadline"] = normalize_text_entry(
+            "deadline", request.POST.get("deadline", "")
+        )
         # Items: one item name per line
         items_text = request.POST.get("items_text", "")
         sd["items"] = [
-            {"name": line.strip()} for line in items_text.splitlines() if line.strip()
+            {"name": normalize_text_entry("name", line)}
+            for line in items_text.splitlines()
+            if line.strip()
         ]
         document.structured_data = sd
         document.save(update_fields=["structured_data"])
@@ -3016,7 +3025,7 @@ def supplier_product_create(request, supplier_pk):
         notes_l = request.POST.getlist("notes[]")
         saved = 0
         for i, name in enumerate(names):
-            name = name.strip()
+            name = normalize_text_entry("product_name", name)
             if not name:
                 continue
 
@@ -3031,11 +3040,19 @@ def supplier_product_create(request, supplier_pk):
                 supplier=supplier,
                 created_by=request.user,
                 product_name=name,
-                specifications=specs[i].strip() if i < len(specs) else "",
+                specifications=(
+                    normalize_text_entry("specifications", specs[i])
+                    if i < len(specs)
+                    else ""
+                ),
                 min_order_quantity=_dec(moqs, i),
                 unit_price=_dec(uprices, i),
                 resale_price=_dec(rprices, i),
-                notes=notes_l[i].strip() if i < len(notes_l) else "",
+                notes=(
+                    normalize_text_entry("notes", notes_l[i])
+                    if i < len(notes_l)
+                    else ""
+                ),
             )
             saved += 1
         if saved:
@@ -3429,7 +3446,7 @@ def proforma_create(request):
         for desc, qty, unit_price_raw, sales_price_raw in zip(
             descs, qtys, unit_prices, sales_prices
         ):
-            desc = desc.strip()
+            desc = normalize_text_entry("description", desc)
             if not desc:
                 continue
             try:
@@ -3620,7 +3637,7 @@ def proforma_update(request, pk):
             units if units else [""] * len(descs),
         )
         for desc, qty, unit_price_raw, sales_price_raw, item_unit in zipped:
-            desc = desc.strip()
+            desc = normalize_text_entry("description", desc)
             if not desc:
                 continue
             try:
@@ -3640,7 +3657,7 @@ def proforma_update(request, pk):
                 "total": float(line_total),
             }
             if item_unit:
-                item_dict["unit"] = item_unit.strip()
+                item_dict["unit"] = normalize_text_entry("unit", item_unit)
             items.append(item_dict)
 
         fee_values, fee_errors = _parse_quote_fees(request.POST)
@@ -3772,7 +3789,7 @@ def _build_final_invoice_items(post_data):
     for index, (desc, qty_raw, unit_price_raw) in enumerate(
         zip(descs, qtys, unit_prices), start=1
     ):
-        desc = (desc or "").strip()
+        desc = normalize_text_entry("description", desc or "")
         qty_raw = (qty_raw or "").strip()
         unit_price_raw = (unit_price_raw or "").strip()
 
@@ -4051,11 +4068,17 @@ def final_invoice_create(request):
         sourcing_fee_raw = (request.POST.get("sourcing_fee") or "0").strip()
         shipping_cost_raw = (request.POST.get("shipping_cost") or "0").strip()
         service_fee_raw = (request.POST.get("service_fee") or "0").strip()
-        currency = (request.POST.get("currency") or "USD").strip() or "USD"
+        currency = (
+            normalize_text_entry("currency", request.POST.get("currency") or "USD")
+            or "USD"
+        )
         shipping_mode = (request.POST.get("shipping_mode") or "SEA").strip() or "SEA"
         route = (
-            request.POST.get("route") or "China-Mombasa-Kampala"
-        ).strip() or "China-Mombasa-Kampala"
+            normalize_text_entry(
+                "route", request.POST.get("route") or "China-Mombasa-Kampala"
+            )
+            or "China-Mombasa-Kampala"
+        )
         is_confirmed = bool(request.POST.get("is_confirmed"))
 
         try:
@@ -4167,13 +4190,19 @@ def final_invoice_update(request, pk):
         sourcing_fee_raw = (request.POST.get("sourcing_fee") or "0").strip()
         shipping_cost_raw = (request.POST.get("shipping_cost") or "0").strip()
         service_fee_raw = (request.POST.get("service_fee") or "0").strip()
-        currency = (request.POST.get("currency") or invoice.currency).strip() or "USD"
+        currency = (
+            normalize_text_entry(
+                "currency", request.POST.get("currency") or invoice.currency
+            )
+            or "USD"
+        )
         shipping_mode = (
             request.POST.get("shipping_mode") or invoice.shipping_mode
         ).strip() or "SEA"
         route = (
-            request.POST.get("route") or invoice.route
-        ).strip() or "China-Mombasa-Kampala"
+            normalize_text_entry("route", request.POST.get("route") or invoice.route)
+            or "China-Mombasa-Kampala"
+        )
         is_confirmed = bool(request.POST.get("is_confirmed"))
 
         try:
@@ -4353,7 +4382,7 @@ def _parse_purchase_order_items(post_data):
     items = []
     subtotal = Decimal("0")
     for desc, qty_raw, unit_price_raw in zip(descs, qtys, unit_prices):
-        description = (desc or "").strip()
+        description = normalize_text_entry("description", desc or "")
         if not description:
             continue
         try:
@@ -4403,8 +4432,12 @@ def purchase_order_split_create(request, pk):
 
     if request.method == "POST":
         supplier_id = (request.POST.get("supplier_id") or "").strip()
-        manual_supplier_name = (request.POST.get("supplier_name") or "").strip()
-        manual_supplier_address = (request.POST.get("supplier_address") or "").strip()
+        manual_supplier_name = normalize_text_entry(
+            "supplier_name", request.POST.get("supplier_name") or ""
+        )
+        manual_supplier_address = normalize_text_entry(
+            "supplier_address", request.POST.get("supplier_address") or ""
+        )
         split_notes = (request.POST.get("notes") or "").strip()
 
         supplier_name = ""
@@ -4501,8 +4534,12 @@ def purchase_order_update(request, pk):
 
     if request.method == "POST":
         supplier_id = (request.POST.get("supplier_id") or "").strip()
-        supplier_name = (request.POST.get("supplier_name") or "").strip()
-        supplier_address = (request.POST.get("supplier_address") or "").strip()
+        supplier_name = normalize_text_entry(
+            "supplier_name", request.POST.get("supplier_name") or ""
+        )
+        supplier_address = normalize_text_entry(
+            "supplier_address", request.POST.get("supplier_address") or ""
+        )
         notes = (request.POST.get("notes") or "").strip()
         status = (request.POST.get("status") or "PENDING").strip().upper()
 

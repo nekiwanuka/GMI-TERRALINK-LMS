@@ -10,6 +10,98 @@ import ast
 import json
 import re
 
+_ACRONYMS = {
+    "bl": "BL",
+    "cbm": "CBM",
+    "fi": "FI",
+    "gmi": "GMI",
+    "gtl": "GTL",
+    "kg": "KG",
+    "lcl": "LCL",
+    "ltd": "LTD",
+    "pi": "PI",
+    "po": "PO",
+    "ug": "UG",
+    "uk": "UK",
+    "usa": "USA",
+    "usd": "USD",
+}
+
+_PRESERVE_TEXT_FIELD_NAMES = {
+    "password",
+    "password1",
+    "password2",
+    "phone",
+    "received_by_phone",
+    "username",
+    "notes",
+    "remarks",
+    "warehouse_notes",
+    "closure_notes",
+    "verification_notes",
+    "reversal_notes",
+    "items",
+    "item_details",
+    "unit_prices",
+}
+
+_UPPERCASE_TEXT_FIELD_NAMES = {
+    "bill_of_lading_number",
+    "container_number",
+    "currency",
+    "groupage_note_number",
+    "item_code",
+    "loading_id",
+    "receipt_number",
+    "reference",
+}
+
+
+def _smart_title_token(match):
+    token = match.group(0)
+    lower_token = token.lower()
+    if lower_token in _ACRONYMS:
+        return _ACRONYMS[lower_token]
+    if len(token) > 1 and token.isupper():
+        return token
+    return token[:1].upper() + token[1:].lower()
+
+
+def _smart_title_text(value):
+    return re.sub(r"[A-Za-z]+(?:'[A-Za-z]+)?", _smart_title_token, value)
+
+
+def normalize_text_entry(field_name, value):
+    """Normalize user-entered text without touching exact identifiers/passwords."""
+    if not isinstance(value, str):
+        return value
+    normalized = value.strip()
+    if not normalized:
+        return normalized
+
+    name = (field_name or "").lower()
+    if name in _PRESERVE_TEXT_FIELD_NAMES:
+        return normalized
+    if name == "email" or name.endswith("_email"):
+        return normalized.lower()
+    if name in _UPPERCASE_TEXT_FIELD_NAMES or name.endswith("_number"):
+        return normalized.upper()
+
+    lines = [_smart_title_text(line.strip()) for line in normalized.splitlines()]
+    return "\n".join(lines)
+
+
+class NormalizedTextMixin:
+    """Normalize CharField values after each form's own validation runs."""
+
+    def clean(self):
+        cleaned_data = super().clean()
+        for field_name, value in list(cleaned_data.items()):
+            field = self.fields.get(field_name)
+            if isinstance(value, str) and isinstance(field, forms.CharField):
+                cleaned_data[field_name] = normalize_text_entry(field_name, value)
+        return cleaned_data
+
 
 def _parse_line_items(raw_value):
     """Parse invoice line items from `description,amount[,quantity]` lines."""
@@ -37,7 +129,9 @@ def _parse_line_items(raw_value):
                 raise forms.ValidationError(
                     f"Line {index}: invalid item format in pasted list."
                 )
-            description = str(item.get("description") or item.get("name") or "").strip()
+            description = normalize_text_entry(
+                "description", str(item.get("description") or item.get("name") or "")
+            )
             if not description:
                 raise forms.ValidationError(f"Line {index}: description is required.")
             amount_value = item.get("amount", item.get("total"))
@@ -62,7 +156,7 @@ def _parse_line_items(raw_value):
             raise forms.ValidationError(
                 f"Line {index}: use `description,amount` format."
             )
-        description = parts[0]
+        description = normalize_text_entry("description", parts[0])
         if not description:
             raise forms.ValidationError(f"Line {index}: description is required.")
         try:
@@ -134,13 +228,13 @@ def _parse_sourcing_items(raw_value):
         parts = [part.strip() for part in line.split("|")]
         if not parts or not parts[0]:
             raise forms.ValidationError(f"Line {index}: item name is required.")
-        item = {"name": parts[0]}
+        item = {"name": normalize_text_entry("name", parts[0])}
         if len(parts) >= 2 and parts[1]:
             item["quantity"] = parts[1]
         if len(parts) >= 3 and parts[2]:
-            item["unit"] = parts[2]
+            item["unit"] = normalize_text_entry("unit", parts[2])
         if len(parts) >= 4 and parts[3]:
-            item["notes"] = parts[3]
+            item["notes"] = normalize_text_entry("notes", parts[3])
         items.append(item)
     return items
 
@@ -330,7 +424,7 @@ from .models import (
 )
 
 
-class UserRegistrationForm(UserCreationForm):
+class UserRegistrationForm(NormalizedTextMixin, UserCreationForm):
     """Form for creating new users"""
 
     username = forms.CharField(
@@ -383,7 +477,7 @@ class UserRegistrationForm(UserCreationForm):
         fields = ("username", "email", "first_name", "last_name", "phone", "role")
 
 
-class SignatureProfileForm(forms.ModelForm):
+class SignatureProfileForm(NormalizedTextMixin, forms.ModelForm):
     """Upload or update a user's official document signature."""
 
     class Meta:
@@ -416,7 +510,7 @@ class SignatureProfileForm(forms.ModelForm):
         return signature_image
 
 
-class ClientForm(forms.ModelForm):
+class ClientForm(NormalizedTextMixin, forms.ModelForm):
     """Form for creating and updating clients"""
 
     @staticmethod
@@ -501,7 +595,7 @@ class ClientForm(forms.ModelForm):
         return cleaned_data
 
 
-class LoadingForm(forms.ModelForm):
+class LoadingForm(NormalizedTextMixin, forms.ModelForm):
     """Form for creating and updating loadings"""
 
     class Meta:
@@ -685,7 +779,7 @@ class LoadingForm(forms.ModelForm):
         return cleaned_data
 
 
-class TransitForm(forms.ModelForm):
+class TransitForm(NormalizedTextMixin, forms.ModelForm):
     """Form for creating and updating transits"""
 
     class Meta:
@@ -724,7 +818,7 @@ class TransitForm(forms.ModelForm):
         self.fields["remarks"].required = False
 
 
-class PaymentForm(forms.ModelForm):
+class PaymentForm(NormalizedTextMixin, forms.ModelForm):
     """Form for creating and updating payments"""
 
     class Meta:
@@ -879,7 +973,7 @@ class PaymentForm(forms.ModelForm):
         return cleaned_data
 
 
-class PaymentTransactionForm(forms.ModelForm):
+class PaymentTransactionForm(NormalizedTextMixin, forms.ModelForm):
     """Form for recording individual payment events"""
 
     class Meta:
@@ -913,7 +1007,7 @@ class PaymentTransactionForm(forms.ModelForm):
         }
 
 
-class ContainerReturnForm(forms.ModelForm):
+class ContainerReturnForm(NormalizedTextMixin, forms.ModelForm):
     """Form for creating and updating container returns"""
 
     class Meta:
@@ -953,7 +1047,7 @@ class ContainerReturnForm(forms.ModelForm):
         self.fields["remarks"].required = False
 
 
-class TransactionForm(forms.ModelForm):
+class TransactionForm(NormalizedTextMixin, forms.ModelForm):
     """Form for creating and updating core transactions."""
 
     class Meta:
@@ -995,7 +1089,7 @@ class DocumentForm(forms.ModelForm):
         }
 
 
-class SourcingForm(forms.ModelForm):
+class SourcingForm(NormalizedTextMixin, forms.ModelForm):
     """Form for overseas sourcing records."""
 
     item_details = forms.CharField(
@@ -1330,7 +1424,7 @@ class SourcingForm(forms.ModelForm):
         return cleaned_data
 
 
-class ProformaInvoiceForm(forms.ModelForm):
+class ProformaInvoiceForm(NormalizedTextMixin, forms.ModelForm):
     """Form for proforma invoice creation."""
 
     items = forms.CharField(
@@ -1379,7 +1473,7 @@ class ProformaInvoiceForm(forms.ModelForm):
         return cleaned_data
 
 
-class FinalInvoiceForm(forms.ModelForm):
+class FinalInvoiceForm(NormalizedTextMixin, forms.ModelForm):
     """Form for final invoice creation and confirmation."""
 
     items = forms.CharField(
@@ -1444,7 +1538,7 @@ class FinalInvoiceForm(forms.ModelForm):
         return cleaned_data
 
 
-class SupplierForm(forms.ModelForm):
+class SupplierForm(NormalizedTextMixin, forms.ModelForm):
     class Meta:
         model = Supplier
         fields = (
@@ -1473,7 +1567,7 @@ class SupplierForm(forms.ModelForm):
         }
 
 
-class SupplierProductForm(forms.ModelForm):
+class SupplierProductForm(NormalizedTextMixin, forms.ModelForm):
     class Meta:
         model = SupplierProduct
         fields = (
@@ -1510,7 +1604,7 @@ class SupplierProductForm(forms.ModelForm):
         }
 
 
-class InventoryItemForm(forms.ModelForm):
+class InventoryItemForm(NormalizedTextMixin, forms.ModelForm):
     transaction = forms.ModelChoiceField(
         queryset=Transaction.objects.select_related("customer").order_by("-created_at"),
         widget=forms.Select(attrs={"class": "form-control"}),
@@ -1552,7 +1646,7 @@ class InventoryItemForm(forms.ModelForm):
         return transaction
 
 
-class FulfillmentOrderForm(forms.ModelForm):
+class FulfillmentOrderForm(NormalizedTextMixin, forms.ModelForm):
     class Meta:
         model = FulfillmentOrder
         fields = (
@@ -1666,7 +1760,7 @@ class FulfillmentOrderForm(forms.ModelForm):
         return invoice
 
 
-class FulfillmentLineForm(forms.ModelForm):
+class FulfillmentLineForm(NormalizedTextMixin, forms.ModelForm):
     class Meta:
         model = FulfillmentLine
         fields = (
@@ -1698,7 +1792,7 @@ class FulfillmentLineForm(forms.ModelForm):
         )
 
 
-class ShipmentLegForm(forms.ModelForm):
+class ShipmentLegForm(NormalizedTextMixin, forms.ModelForm):
     class Meta:
         model = ShipmentLeg
         fields = (
@@ -1735,7 +1829,7 @@ class ShipmentLegForm(forms.ModelForm):
         }
 
 
-class TransactionPaymentRecordForm(forms.ModelForm):
+class TransactionPaymentRecordForm(NormalizedTextMixin, forms.ModelForm):
     """Form for recording payments against a sourcing transaction invoice."""
 
     CURRENCY_CHOICES = (
@@ -1907,7 +2001,7 @@ class TransactionPaymentRecordForm(forms.ModelForm):
         return cleaned_data
 
 
-class CommissionForm(forms.ModelForm):
+class CommissionForm(NormalizedTextMixin, forms.ModelForm):
     """Form for capturing commission earned per client."""
 
     class Meta:
@@ -1950,7 +2044,7 @@ class CommissionForm(forms.ModelForm):
         return amount
 
 
-class ProofOfDeliveryForm(forms.ModelForm):
+class ProofOfDeliveryForm(NormalizedTextMixin, forms.ModelForm):
     """Capture POD details for either a Loading or a FulfillmentOrder.
 
     The two FK fields are hidden from the UI: the view that instantiates the
@@ -2018,7 +2112,7 @@ class ProofOfDeliveryForm(forms.ModelForm):
         ]
 
 
-class SupplierPaymentForm(forms.ModelForm):
+class SupplierPaymentForm(NormalizedTextMixin, forms.ModelForm):
     class Meta:
         from .models import SupplierPayment
 
