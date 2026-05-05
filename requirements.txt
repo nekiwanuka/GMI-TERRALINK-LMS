@@ -6,6 +6,7 @@ pyinstaller==6.1.0
 pypdf>=4.0.0
 python-docx>=1.1.0
 reportlab>=4.0.0
+xhtml2pdf>=0.2.13
 djangorestframework>=3.14.0
 django-apscheduler>=0.6.2
 psycopg2-binary>=2.9.9

@@ -1,0 +1,132 @@
+{% load humanize static %}<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>{% block title %}GMI Terralink Document{% endblock %}</title>
+<style>
+@page {
+    size: A4 portrait;
+    margin: 14mm 12mm 14mm 12mm;
+}
+body {
+    font-family: Helvetica, Arial, sans-serif;
+    font-size: 10px;
+    color: #2b2730;
+    margin: 0;
+    padding: 0;
+}
+h1, h2, h3, h4, h5, h6 { margin: 0; padding: 0; }
+p { margin: 0 0 4px 0; }
+table { border-collapse: collapse; width: 100%; }
+.muted { color: #6c757d; }
+.right { text-align: right; }
+.center { text-align: center; }
+.bold { font-weight: bold; }
+.small { font-size: 9px; }
+.xs { font-size: 8px; }
+hr { border: 0; border-top: 1px solid #e6e2d5; margin: 6px 0; }
+
+/* ---------- Header ---------- */
+.gmi-hero { background: #fbf7eb; border-bottom: 2px solid #d4af37; }
+.gmi-hero td { padding: 8px 14px; vertical-align: middle; }
+.gmi-hero .brand-name { font-size: 14px; font-weight: bold; color: #1f1f1f; }
+.gmi-hero .brand-tag { font-size: 9px; color: #6a727a; }
+.gmi-hero .doc-title {
+    font-size: 16px;
+    font-weight: bold;
+    color: #d4af37;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+.gmi-hero .doc-number { font-size: 11px; color: #1f1f1f; font-weight: bold; }
+.gmi-hero .doc-meta { font-size: 9px; color: #6a727a; }
+.gmi-hero .logo-plate { width: 64px; }
+.gmi-hero .logo-plate img { height: 48px; }
+
+.gmi-addr { background: #f6f3ec; border-bottom: 1px solid #ece5d2; font-size: 9.5px; }
+.gmi-addr td { padding: 8px 14px; vertical-align: top; width: 50%; }
+.gmi-addr .addr-title {
+    font-size: 8.5px;
+    font-weight: bold;
+    color: #8a6d1d;
+    text-transform: uppercase;
+    margin-bottom: 2px;
+}
+.gmi-addr .addr-line { color: #3a3a3a; }
+.gmi-addr td + td { border-left: 1px solid #e3d9c1; }
+
+/* ---------- Footer / terms ---------- */
+.gmi-foot {
+    margin-top: 8px;
+    padding-top: 6px;
+    border-top: 1px solid #e9ecef;
+    font-size: 7.5px;
+    color: #6c757d;
+    line-height: 1.4;
+}
+.gmi-foot .terms div { margin-bottom: 2px; }
+.gmi-services-ribbon {
+    margin-top: 5px;
+    padding: 4px 8px;
+    background: #fbf7e4;
+    border: 1px solid #ece7cd;
+    font-size: 7.5px;
+    color: #4a4a4a;
+    text-align: center;
+}
+.gmi-services-ribbon strong { color: #b89028; }
+
+{% block extra_styles %}{% endblock %}
+</style>
+</head>
+<body>
+
+{# ----- Standard header (logo + title + addresses) ----- #}
+<table class="gmi-hero">
+    <tr>
+        <td class="logo-plate" style="width: 70px;">
+            <img src="{% static 'images/gmi_logo.png' %}" alt="GMI">
+        </td>
+        <td style="width: 200px;">
+            <div class="brand-name">GMI Terralink</div>
+            <div class="brand-tag">Logistics &middot; Sourcing &middot; Trade</div>
+        </td>
+        <td class="right">
+            <div class="doc-title">{{ doc_label }}</div>
+            {% if doc_number %}<div class="doc-number">{{ doc_number }}</div>{% endif %}
+            {% if doc_meta %}<div class="doc-meta">{{ doc_meta }}</div>{% endif %}
+        </td>
+    </tr>
+</table>
+<table class="gmi-addr">
+    <tr>
+        <td>
+            <div class="addr-title">China Branch &middot; Guangzhou</div>
+            <div class="addr-line">B239B (ECAT), Jinsha Block B 2F, Baiyun</div>
+            <div class="addr-line"><b>+86 177 0195 4464</b></div>
+        </td>
+        <td>
+            <div class="addr-title">Uganda Branch &middot; Kampala</div>
+            <div class="addr-line">Plot 10/12, Hamdeen Lwanga Close, Muyenga</div>
+            <div class="addr-line"><b>+256 768 049 940</b></div>
+            <div class="addr-line">gmiterralinkinfo@gmail.com &middot; www.gmi-terralink.com</div>
+        </td>
+    </tr>
+</table>
+
+{% block content %}{% endblock %}
+
+{# ----- Standard footer (terms + service ribbon) ----- #}
+<div class="gmi-foot">
+    <div class="terms">
+        <div><b>International Terms &amp; Conditions:</b> Prices are quoted Ex-Works unless otherwise agreed in writing. Bank charges, customs duties, taxes, demurrage, and destination fees are for the buyer account unless expressly included.</div>
+        <div>Delivery timelines are estimates and may vary due to carrier schedules, port operations, customs controls, force majeure, or regulatory actions. Claims for shortages or damage must be submitted in writing within 3 business days of delivery.</div>
+        <div>Disputes are resolved amicably first, failing which arbitration applies under mutually agreed commercial rules. Email confirmations and signed copies form part of the binding commercial record.</div>
+    </div>
+    <div class="gmi-services-ribbon">
+        <strong>Service Portfolio:</strong> Procurement &middot; Sea &amp; Air Freight Logistics &middot; Mining &amp; Equipment Solutions &middot; Translation Services &middot; Money Transfer
+    </div>
+</div>
+
+</body>
+</html>

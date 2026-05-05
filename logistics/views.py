@@ -150,6 +150,7 @@ from .services import (
     transition_shipment,
 )
 from .services.reporting import DirectorReportingService
+from .services.pdf_render import render_to_pdf
 
 DEFAULT_PAGE_SIZE = 20
 AUDIT_PAGE_SIZE = 40
@@ -3929,7 +3930,19 @@ def proforma_pdf(request, pk):
     )
     if canonical:
         return canonical
-    pdf_data = proforma.generate_pdf()
+    document_signature = _document_signature_for(proforma)
+    pdf_data = render_to_pdf(
+        "logistics/pdf/proforma.html",
+        {
+            "proforma": proforma,
+            "document_signature": document_signature,
+            "doc_label": (
+                "Cargo Proforma" if proforma.loading_id else "Sourcing Proforma"
+            ),
+            "doc_number": f"PI-{proforma.pk}",
+            "doc_meta": proforma.transaction.transaction_id,
+        },
+    )
     response = HttpResponse(pdf_data, content_type="application/pdf")
     department_prefix = "cargo" if proforma.loading_id else "sourcing"
     response["Content-Disposition"] = (
@@ -4288,7 +4301,28 @@ def final_invoice_pdf(request, pk):
     )
     if canonical:
         return canonical
-    pdf_data = invoice.generate_pdf()
+    total_paid = _final_invoice_total_paid(invoice) or 0
+    balance = max((invoice.total_amount or 0) - total_paid, 0)
+    if total_paid > 0 and balance <= 0:
+        payment_status_label = "Paid"
+    elif total_paid > 0:
+        payment_status_label = "Partial Payment"
+    else:
+        payment_status_label = "Unpaid"
+    document_signature = _document_signature_for(invoice)
+    pdf_data = render_to_pdf(
+        "logistics/pdf/final_invoice.html",
+        {
+            "invoice": invoice,
+            "total_paid": total_paid,
+            "balance": balance,
+            "payment_status_label": payment_status_label,
+            "document_signature": document_signature,
+            "doc_label": "Cargo Invoice" if invoice.loading_id else "Sourcing Invoice",
+            "doc_number": f"FI-{invoice.pk}",
+            "doc_meta": invoice.transaction.transaction_id,
+        },
+    )
     response = HttpResponse(pdf_data, content_type="application/pdf")
     department_prefix = "cargo" if invoice.loading_id else "sourcing"
     response["Content-Disposition"] = (
@@ -5822,7 +5856,9 @@ def receipt_detail(request, pk):
                 payment.refresh_totals()
                 amount_charged = payment.amount_charged or 0
                 amount_paid = payment.amount_paid or 0
-                invoice_fully_paid = amount_charged > 0 and amount_paid >= amount_charged
+                invoice_fully_paid = (
+                    amount_charged > 0 and amount_paid >= amount_charged
+                )
     except Exception:
         invoice_fully_paid = False
     return render(
@@ -5838,9 +5874,44 @@ def receipt_detail(request, pk):
 
 @login_required
 def receipt_pdf(request, pk):
-    """Download a receipt as PDF."""
+    """Download a receipt as PDF (rendered from the print-preview template)."""
     receipt = get_object_or_404(Receipt, pk=pk)
-    pdf_bytes = receipt.generate_pdf()
+
+    # Resolve client + payment context (mirror what the HTML detail does).
+    client = None
+    if receipt.logistics_payment and receipt.logistics_payment.payment:
+        loading = receipt.logistics_payment.payment.loading
+        client = getattr(loading, "client", None)
+    elif receipt.sourcing_payment and receipt.sourcing_payment.transaction:
+        client = getattr(receipt.sourcing_payment.transaction, "customer", None)
+
+    invoice_fully_paid = False
+    try:
+        if receipt.sourcing_payment and receipt.sourcing_payment.final_invoice:
+            fi = receipt.sourcing_payment.final_invoice
+            invoice_fully_paid = (
+                fi.total_amount or 0
+            ) > 0 and _final_invoice_total_paid(fi) >= (fi.total_amount or 0)
+        elif receipt.logistics_payment and receipt.logistics_payment.payment:
+            p = receipt.logistics_payment.payment
+            p.refresh_totals()
+            invoice_fully_paid = (p.amount_charged or 0) > 0 and (
+                p.amount_paid or 0
+            ) >= (p.amount_charged or 0)
+    except Exception:
+        invoice_fully_paid = False
+
+    pdf_bytes = render_to_pdf(
+        "logistics/pdf/receipt.html",
+        {
+            "receipt": receipt,
+            "client": client,
+            "invoice_fully_paid": invoice_fully_paid,
+            "doc_label": "Official Receipt",
+            "doc_number": receipt.receipt_number,
+            "doc_meta": receipt.issued_at.strftime("%d %b %Y, %H:%M"),
+        },
+    )
     response = HttpResponse(pdf_bytes, content_type="application/pdf")
     response["Content-Disposition"] = (
         f'attachment; filename="Receipt-{receipt.receipt_number}.pdf"'
