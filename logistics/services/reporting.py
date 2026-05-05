@@ -9,6 +9,7 @@ from django.utils import timezone
 
 from logistics.models import (
     FinalInvoice,
+    Payment,
     ProformaInvoice,
     PurchaseOrder,
     Sourcing,
@@ -43,6 +44,25 @@ class DirectorReportingService:
             ["SHIPPED", "DELIVERED"],
         ),
     )
+
+    @staticmethod
+    def _invoice_paid_total(invoice):
+        invoice_record_total = invoice.payment_records.aggregate(total=Sum("amount"))[
+            "total"
+        ] or Decimal("0")
+        transaction_record_total = Decimal("0")
+        if invoice_record_total <= 0:
+            transaction_record_total = invoice.transaction.payment_records.aggregate(
+                total=Sum("amount")
+            )["total"] or Decimal("0")
+
+        legacy_filter = Q(final_invoice=invoice)
+        if invoice.loading_id:
+            legacy_filter |= Q(loading=invoice.loading)
+        legacy_total = Payment.objects.filter(legacy_filter).aggregate(
+            total=Sum("amount_paid")
+        )["total"] or Decimal("0")
+        return max(invoice_record_total, transaction_record_total, legacy_total)
 
     @staticmethod
     def total_revenue():
@@ -191,15 +211,23 @@ class DirectorReportingService:
 
     @staticmethod
     def financial_totals():
-        """Aggregated financial summary for reports dashboard."""
-        total_revenue = FinalInvoice.objects.filter(
-            is_confirmed=True, transaction__status="PAID"
-        ).aggregate(total=Sum("total_amount")).get("total") or Decimal("0")
-        outstanding = FinalInvoice.objects.filter(is_confirmed=True).exclude(
-            transaction__status="PAID"
-        ).aggregate(total=Sum("total_amount")).get("total") or Decimal("0")
+        """Aggregated invoice statement summary for reports dashboard."""
+        invoices = list(
+            FinalInvoice.objects.filter(is_confirmed=True).select_related(
+                "transaction", "loading"
+            )
+        )
+        total_billed = sum(
+            (invoice.total_amount or Decimal("0")) for invoice in invoices
+        )
+        total_collected = sum(
+            DirectorReportingService._invoice_paid_total(invoice)
+            for invoice in invoices
+        )
+        outstanding = max(total_billed - total_collected, Decimal("0"))
         return {
-            "total_revenue": float(total_revenue),
+            "total_billed": float(total_billed),
+            "total_revenue": float(total_collected),
             "outstanding_balance": float(outstanding),
         }
 

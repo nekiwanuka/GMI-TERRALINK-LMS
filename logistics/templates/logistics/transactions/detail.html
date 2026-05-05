@@ -1,4 +1,5 @@
 {% extends "logistics/base.html" %}
+{% load logistics_docs %}
 
 {% block title %}{{ transaction.transaction_id }} - GMI TERRALINK Logistics Portal{% endblock %}
 
@@ -103,7 +104,7 @@
         <div class="col-lg-6">
             <div class="card h-100">
                 <div class="card-header bg-info text-white d-flex justify-content-between align-items-center">
-                    <strong>Step 2 — Review &amp; Edit PI Content</strong>
+                    <strong>Step 2 — Review PI Content</strong>
                     {% if pi_documents and pi_documents.first.structured_data %}
                     <span class="badge bg-white text-info" style="font-size:0.72rem;">Auto-extracted — edit if needed</span>
                     {% endif %}
@@ -168,13 +169,14 @@
                                     </div>
                                 </div>
                                 <div class="d-flex gap-2">
-                                    <button type="submit" name="next_step" value="sourcing" class="btn btn-sm btn-outline-secondary flex-fill">
-                                        <i class="bi bi-file-earmark-text"></i> Generate Sourcing Document
+                                    <button type="submit" name="next_step" value="proforma" class="btn btn-sm btn-dark flex-fill">
+                                        <i class="bi bi-arrow-right"></i> Skip Worksheet &amp; Create Proforma
                                     </button>
-                                    <button type="submit" name="next_step" value="proforma" class="btn btn-sm btn-success flex-fill">
-                                        <i class="bi bi-arrow-right"></i> Create Proforma Invoice
+                                    <button type="submit" name="next_step" value="sourcing" class="btn btn-sm btn-outline-secondary flex-fill">
+                                        <i class="bi bi-table"></i> Optional Sourcing Worksheet
                                     </button>
                                 </div>
+                                <div class="form-text mt-1">The worksheet is optional. Use it only when supplier quote comparison is needed before the proforma.</div>
                             </form>
                             {% endif %}
 
@@ -197,11 +199,11 @@
                                 <small class="text-muted"><em>{{ latest_pi.original_file.name }}</em></small>
                                 {% if not trade_documents_locked or can_edit_closed_trade_documents %}
                                 <div class="d-flex gap-2 flex-wrap">
-                                    <a href="{% url 'sourcing_create' %}?from_doc={{ latest_pi.pk }}" class="btn btn-sm btn-outline-secondary">
-                                        <i class="bi bi-file-earmark-text"></i> Generate Sourcing Document
-                                    </a>
-                                    <a href="{% if transaction.source_loading %}{% url 'logistics_proforma_create' %}{% else %}{% url 'sourcing_proforma_create' %}{% endif %}?from_doc={{ latest_pi.pk }}" class="btn btn-sm btn-success">
+                                    <a href="{% if transaction.source_loading %}{% url 'logistics_proforma_create' %}{% else %}{% url 'sourcing_proforma_create' %}{% endif %}?from_doc={{ latest_pi.pk }}" class="btn btn-sm btn-dark">
                                         <i class="bi bi-arrow-right"></i> Create Proforma Invoice
+                                    </a>
+                                    <a href="{% url 'sourcing_create' %}?from_doc={{ latest_pi.pk }}" class="btn btn-sm btn-outline-secondary">
+                                        <i class="bi bi-table"></i> Optional Worksheet
                                     </a>
                                 </div>
                                 {% endif %}
@@ -213,11 +215,11 @@
                                 PI uploaded but no text could be extracted (scanned image?).
                                 {% if not trade_documents_locked or can_edit_closed_trade_documents %}
                                 <div class="d-flex gap-2 mt-2">
-                                    <a href="{% url 'sourcing_create' %}?transaction={{ transaction.pk }}" class="btn btn-sm btn-outline-secondary">
-                                        Generate Sourcing Document
-                                    </a>
                                     <a href="{% if transaction.source_loading %}{% url 'logistics_proforma_create' %}{% else %}{% url 'sourcing_proforma_create' %}{% endif %}?transaction={{ transaction.pk }}" class="btn btn-sm btn-outline-primary">
                                         Create Proforma Manually
+                                    </a>
+                                    <a href="{% url 'sourcing_create' %}?transaction={{ transaction.pk }}" class="btn btn-sm btn-outline-secondary">
+                                        Optional Worksheet
                                     </a>
                                 </div>
                                 {% endif %}
@@ -258,7 +260,7 @@
                         {% for pi in proformas %}
                         <li class="list-group-item d-flex justify-content-between align-items-center px-3">
                             <div>
-                                <strong>PI-{{ pi.pk }} — {{ pi.subtotal }}</strong>
+                                <strong>{{ pi|doc_number:"PI" }} — {{ pi.subtotal }}</strong>
                                 <span class="badge {% if pi.status == 'SENT' %}bg-success{% else %}bg-secondary{% endif %} ms-1">{{ pi.status }}</span>
                                 <small class="text-muted d-block">Valid: {{ pi.validity_date }}</small>
                             </div>
@@ -340,11 +342,11 @@
                         {% for fi in final_invoices %}
                         <li class="list-group-item d-flex justify-content-between align-items-center px-3">
                             <div>
-                                <strong>FI-{{ fi.pk }} — {{ fi.subtotal }}</strong>
+                                <strong>{{ fi|doc_number:"FI" }} — {{ fi.subtotal }}</strong>
                                 <span class="badge {% if fi.is_confirmed %}bg-success{% else %}bg-warning text-dark{% endif %} ms-1">
                                     {% if fi.is_confirmed %}Confirmed{% else %}Draft{% endif %}
                                 </span>
-                                <small class="text-muted d-block">Sourcing: {{ fi.sourcing_fee }} | Handling: {{ fi.service_fee }} | Shipping: {{ fi.shipping_cost }} | Total: {{ fi.total_amount }} {{ fi.currency }}</small>
+                                <small class="text-muted d-block">{% if fi.loading %}Port/Clearance{% else %}Sourcing{% endif %}: {{ fi.sourcing_fee }} | Handling: {{ fi.service_fee }} | Shipping: {{ fi.shipping_cost }} | Total: {{ fi.total_amount }} {{ fi.currency }}</small>
                             </div>
                             <div class="btn-group btn-group-sm">
                                 {% if not trade_documents_locked or can_edit_closed_trade_documents %}

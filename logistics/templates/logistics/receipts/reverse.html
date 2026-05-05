@@ -1,5 +1,6 @@
 {% extends "logistics/base.html" %}
-{% block title %}Reverse / Refund Receipt {{ receipt.receipt_number }} — GMI TERRALINK{% endblock %}
+{% load logistics_docs %}
+{% block title %}Reverse / Refund Receipt {{ receipt|doc_number:"RCT" }} — GMI TERRALINK{% endblock %}
 {% block content %}
 <div class="container" style="max-width:600px;">
     <h2 class="mb-4 text-danger"><i class="bi bi-x-circle"></i> Reverse / Refund Receipt</h2>
@@ -7,7 +8,7 @@
     <div class="card border-danger mb-4">
         <div class="card-header bg-danger text-white">Authorisation Warning</div>
         <div class="card-body">
-            <p>You are about to reverse receipt <strong>{{ receipt.receipt_number }}</strong>
+            <p>You are about to reverse receipt <strong>{{ receipt|doc_number:"RCT" }}</strong>
                issued to <strong>{{ receipt.issued_to }}</strong> for
                <strong>{{ receipt.currency }} {{ receipt.amount|floatformat:2 }}</strong>.</p>
             <p class="text-danger"><strong>This action is restricted to the Director or an authorised officer.

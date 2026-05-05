@@ -117,9 +117,7 @@
     .worksheet-table col.col-item { width: 38mm; }
     .worksheet-table col.col-qty { width: 12mm; }
     .worksheet-table col.col-unit { width: 13mm; }
-    .worksheet-table col.col-supplier { width: 24mm; }
-    .worksheet-table col.col-contact { width: 21mm; }
-    .worksheet-table col.col-cost { width: 15mm; }
+    .worksheet-table col.col-quote { width: 45mm; }
     .worksheet-table col.col-preferred { width: 13mm; }
     .worksheet-table col.col-notes { width: 23mm; }
 
@@ -293,7 +291,38 @@
     background: #f8fafc;
 }
 .worksheet-table .capture-input {
-    min-width: 140px;
+    min-width: 190px;
+}
+.worksheet-table .quote-stack {
+    display: grid;
+    gap: 0.35rem;
+}
+.worksheet-table .quote-mini-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    color: #5c6066;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+}
+.worksheet-table .quote-print-line {
+    display: grid;
+    gap: 1px;
+    min-height: 13mm;
+}
+.worksheet-table .quote-print-line span {
+    display: block;
+    overflow-wrap: anywhere;
+}
+.worksheet-table .quote-cost {
+    font-weight: 800;
+    color: #1f1f1f;
+}
+.worksheet-table .quote-meta {
+    color: #6b6b6b;
+    font-size: 0.74rem;
 }
 .worksheet-table .capture-input input {
     border-radius: 2px;
@@ -306,7 +335,7 @@
     font-size: 0.8rem;
 }
 .worksheet-table .quote-cheapest {
-    background: #eaf8ec;
+    background: #eef1f4;
 }
 .worksheet-table .quote-preferred {
     background: #fff3cd;
@@ -368,15 +397,9 @@
                             <col class="col-item">
                             <col class="col-qty">
                             <col class="col-unit">
-                            <col class="col-supplier">
-                            <col class="col-contact">
-                            <col class="col-cost">
-                            <col class="col-supplier">
-                            <col class="col-contact">
-                            <col class="col-cost">
-                            <col class="col-supplier">
-                            <col class="col-contact">
-                            <col class="col-cost">
+                            <col class="col-quote">
+                            <col class="col-quote">
+                            <col class="col-quote">
                             <col class="col-preferred">
                             <col class="col-notes">
                         </colgroup>
@@ -386,15 +409,9 @@
                                 <th>Item</th>
                                 <th>Qty</th>
                                 <th>Unit</th>
-                                <th>Quote A Supplier</th>
-                                <th>A Contact</th>
-                                <th>A Cost</th>
-                                <th>Quote B Supplier</th>
-                                <th>B Contact</th>
-                                <th>B Cost</th>
-                                <th>Quote C Supplier</th>
-                                <th>C Contact</th>
-                                <th>C Cost</th>
+                                <th>Quote A</th>
+                                <th>Quote B</th>
+                                <th>Quote C</th>
                                 <th>Preferred</th>
                                 <th>Notes</th>
                             </tr>
@@ -406,15 +423,9 @@
                                 <td>{{ item.name }}</td>
                                 <td>{{ item.quantity|default:"1" }}</td>
                                 <td>{{ item.unit|default:"-" }}</td>
-                                <td><div class="print-value-line">{{ item.quote_1_supplier_name }}</div></td>
-                                <td><div class="print-value-line">{{ item.quote_1_supplier_contact }}</div></td>
-                                <td><div class="print-value-line">{{ item.quote_1_unit_price }}</div></td>
-                                <td><div class="print-value-line">{{ item.quote_2_supplier_name }}</div></td>
-                                <td><div class="print-value-line">{{ item.quote_2_supplier_contact }}</div></td>
-                                <td><div class="print-value-line">{{ item.quote_2_unit_price }}</div></td>
-                                <td><div class="print-value-line">{{ item.quote_3_supplier_name }}</div></td>
-                                <td><div class="print-value-line">{{ item.quote_3_supplier_contact }}</div></td>
-                                <td><div class="print-value-line">{{ item.quote_3_unit_price }}</div></td>
+                                <td><div class="quote-print-line"><span>{{ item.quote_1_supplier_name }}</span><span class="quote-meta">{{ item.quote_1_supplier_contact }}</span><span class="quote-cost">{{ item.quote_1_unit_price }}</span></div></td>
+                                <td><div class="quote-print-line"><span>{{ item.quote_2_supplier_name }}</span><span class="quote-meta">{{ item.quote_2_supplier_contact }}</span><span class="quote-cost">{{ item.quote_2_unit_price }}</span></div></td>
+                                <td><div class="quote-print-line"><span>{{ item.quote_3_supplier_name }}</span><span class="quote-meta">{{ item.quote_3_supplier_contact }}</span><span class="quote-cost">{{ item.quote_3_unit_price }}</span></div></td>
                                 <td>
                                     {% if item.preferred_quote == '1' %}A{% elif item.preferred_quote == '2' %}B{% elif item.preferred_quote == '3' %}C{% endif %}
                                 </td>
@@ -423,12 +434,6 @@
                             {% empty %}
                             <tr>
                                 <td>1</td>
-                                <td><div class="print-value-line"></div></td>
-                                <td><div class="print-value-line"></div></td>
-                                <td><div class="print-value-line"></div></td>
-                                <td><div class="print-value-line"></div></td>
-                                <td><div class="print-value-line"></div></td>
-                                <td><div class="print-value-line"></div></td>
                                 <td><div class="print-value-line"></div></td>
                                 <td><div class="print-value-line"></div></td>
                                 <td><div class="print-value-line"></div></td>
@@ -590,8 +595,17 @@
         <div class="col-lg-7 no-print">
             <div class="card">
                 <div class="card-header bg-warning d-flex justify-content-between align-items-center">
-                    <strong><i class="bi bi-search"></i> Sourcing Findings Workspace</strong>
+                    <strong><i class="bi bi-table"></i> Optional Sourcing Worksheet</strong>
                     <div class="d-flex gap-2 align-items-center flex-wrap">
+                        {% if pi_document %}
+                        <a href="{% if transaction.source_loading %}{% url 'logistics_proforma_create' %}{% else %}{% url 'sourcing_proforma_create' %}{% endif %}?from_doc={{ pi_document.pk }}" class="btn btn-sm btn-dark">
+                            <i class="bi bi-arrow-right-circle"></i> Skip &amp; Create Proforma
+                        </a>
+                        {% elif transaction %}
+                        <a href="{% if transaction.source_loading %}{% url 'logistics_proforma_create' %}{% else %}{% url 'sourcing_proforma_create' %}{% endif %}?transaction={{ transaction.pk }}" class="btn btn-sm btn-dark">
+                            <i class="bi bi-arrow-right-circle"></i> Skip &amp; Create Proforma
+                        </a>
+                        {% endif %}
                         {% if record %}
                         <a href="{% url 'sourcing_pdf' record.pk %}" class="btn btn-sm btn-dark">
                             <i class="bi bi-file-earmark-pdf"></i> Export PDF
@@ -602,7 +616,7 @@
                         <button type="button" class="btn btn-sm btn-outline-dark" onclick="window.print()">
                             <i class="bi bi-printer"></i> Print Sourcing Sheet
                         </button>
-                        <span class="badge bg-dark" style="font-size:0.72rem;">Save here first, then open proforma when ready</span>
+                        <span class="badge bg-dark" style="font-size:0.72rem;">Optional</span>
                     </div>
                 </div>
                 <div class="card-body">
@@ -641,7 +655,7 @@
                             <div class="d-flex justify-content-between align-items-start mb-3 gap-2 flex-wrap">
                                 <div>
                                     <div class="section-title">Sourcing Worksheet</div>
-                                    <div class="section-sub">Use the same structured row format as the proforma builder. Supplier, contact, and unit cost are optional so the sheet can be saved blank or printed for physical quotation collection.</div>
+                                    <div class="section-sub">Simple spreadsheet-style sheet for supplier quote comparison. It can be filled online, saved blank, or printed. It is not required before creating a proforma.</div>
                                 </div>
                             </div>
 
@@ -654,17 +668,11 @@
                                             <th style="width:14%;">Item</th>
                                             <th style="width:6%;">Qty</th>
                                             <th style="width:6%;">Unit</th>
-                                            <th style="width:9%;">A Supplier</th>
-                                            <th style="width:9%;">A Contact</th>
-                                            <th style="width:7%;">A Unit Cost</th>
-                                            <th style="width:9%;">B Supplier</th>
-                                            <th style="width:9%;">B Contact</th>
-                                            <th style="width:7%;">B Unit Cost</th>
-                                            <th style="width:9%;">C Supplier</th>
-                                            <th style="width:9%;">C Contact</th>
-                                            <th style="width:7%;">C Unit Cost</th>
+                                            <th style="width:19%;">Quote A</th>
+                                            <th style="width:19%;">Quote B</th>
+                                            <th style="width:19%;">Quote C</th>
                                             <th style="width:7%;">Preferred</th>
-                                            <th style="width:8%;">Notes</th>
+                                            <th style="width:12%;">Notes</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -680,15 +688,9 @@
                                             </td>
                                             <td class="readonly-cell">{{ item.quantity|default:"1" }}</td>
                                             <td class="readonly-cell">{{ item.unit|default:"-" }}</td>
-                                            <td class="capture-input"><input type="text" name="item_quote_1_supplier_name[]" value="{{ item.quote_1_supplier_name }}" class="form-control" placeholder="Supplier A"></td>
-                                            <td class="capture-input"><input type="text" name="item_quote_1_supplier_contact[]" value="{{ item.quote_1_supplier_contact }}" class="form-control" placeholder="Contact A"></td>
-                                            <td class="capture-input {% if item.cheapest_quote == '1' %}quote-cheapest{% endif %} {% if item.preferred_quote == '1' %}quote-preferred{% endif %}"><input type="number" step="0.01" min="0" name="item_quote_1_unit_price[]" value="{{ item.quote_1_unit_price }}" class="form-control" placeholder="0.00"></td>
-                                            <td class="capture-input"><input type="text" name="item_quote_2_supplier_name[]" value="{{ item.quote_2_supplier_name }}" class="form-control" placeholder="Supplier B"></td>
-                                            <td class="capture-input"><input type="text" name="item_quote_2_supplier_contact[]" value="{{ item.quote_2_supplier_contact }}" class="form-control" placeholder="Contact B"></td>
-                                            <td class="capture-input {% if item.cheapest_quote == '2' %}quote-cheapest{% endif %} {% if item.preferred_quote == '2' %}quote-preferred{% endif %}"><input type="number" step="0.01" min="0" name="item_quote_2_unit_price[]" value="{{ item.quote_2_unit_price }}" class="form-control" placeholder="0.00"></td>
-                                            <td class="capture-input"><input type="text" name="item_quote_3_supplier_name[]" value="{{ item.quote_3_supplier_name }}" class="form-control" placeholder="Supplier C"></td>
-                                            <td class="capture-input"><input type="text" name="item_quote_3_supplier_contact[]" value="{{ item.quote_3_supplier_contact }}" class="form-control" placeholder="Contact C"></td>
-                                            <td class="capture-input {% if item.cheapest_quote == '3' %}quote-cheapest{% endif %} {% if item.preferred_quote == '3' %}quote-preferred{% endif %}"><input type="number" step="0.01" min="0" name="item_quote_3_unit_price[]" value="{{ item.quote_3_unit_price }}" class="form-control" placeholder="0.00"></td>
+                                            <td class="capture-input {% if item.cheapest_quote == '1' %}quote-cheapest{% endif %} {% if item.preferred_quote == '1' %}quote-preferred{% endif %}"><div class="quote-stack"><span class="quote-mini-label">A</span><input type="text" name="item_quote_1_supplier_name[]" value="{{ item.quote_1_supplier_name }}" class="form-control" placeholder="Supplier"><input type="text" name="item_quote_1_supplier_contact[]" value="{{ item.quote_1_supplier_contact }}" class="form-control" placeholder="Contact"><input type="number" step="0.01" min="0" name="item_quote_1_unit_price[]" value="{{ item.quote_1_unit_price }}" class="form-control" placeholder="Unit cost"></div></td>
+                                            <td class="capture-input {% if item.cheapest_quote == '2' %}quote-cheapest{% endif %} {% if item.preferred_quote == '2' %}quote-preferred{% endif %}"><div class="quote-stack"><span class="quote-mini-label">B</span><input type="text" name="item_quote_2_supplier_name[]" value="{{ item.quote_2_supplier_name }}" class="form-control" placeholder="Supplier"><input type="text" name="item_quote_2_supplier_contact[]" value="{{ item.quote_2_supplier_contact }}" class="form-control" placeholder="Contact"><input type="number" step="0.01" min="0" name="item_quote_2_unit_price[]" value="{{ item.quote_2_unit_price }}" class="form-control" placeholder="Unit cost"></div></td>
+                                            <td class="capture-input {% if item.cheapest_quote == '3' %}quote-cheapest{% endif %} {% if item.preferred_quote == '3' %}quote-preferred{% endif %}"><div class="quote-stack"><span class="quote-mini-label">C</span><input type="text" name="item_quote_3_supplier_name[]" value="{{ item.quote_3_supplier_name }}" class="form-control" placeholder="Supplier"><input type="text" name="item_quote_3_supplier_contact[]" value="{{ item.quote_3_supplier_contact }}" class="form-control" placeholder="Contact"><input type="number" step="0.01" min="0" name="item_quote_3_unit_price[]" value="{{ item.quote_3_unit_price }}" class="form-control" placeholder="Unit cost"></div></td>
                                             <td class="capture-input">
                                                 <select name="item_preferred_quote[]" class="form-select form-select-sm">
                                                     <option value="">Auto</option>
@@ -711,7 +713,7 @@
 
                             <div class="sourcing-items-helper mt-2">
                                 <i class="bi bi-info-circle"></i>
-                                Green cost cells indicate the cheapest quote captured so far. Yellow indicates the preferred quote that will feed the proforma conversion for that item.
+                                Highlighted cost cells indicate the cheapest quote captured so far; preferred selections feed the proforma conversion for that item.
                             </div>
                             {% if form.supplier_name.errors %}<div class="text-danger small mt-2">{{ form.supplier_name.errors.0 }}</div>{% endif %}
                             {% if form.item_details.errors %}<div class="text-danger small mt-2">{{ form.item_details.errors.0 }}</div>{% endif %}
@@ -744,8 +746,8 @@
                                 <button type="submit" name="submit_action" value="save" class="btn btn-outline-dark">
                                     <i class="bi bi-floppy"></i> Save Sourcing Record
                                 </button>
-                                <button type="submit" name="submit_action" value="open_proforma" class="btn btn-success">
-                                    <i class="bi bi-arrow-right-circle"></i> Save &amp; Open Proforma
+                                <button type="submit" name="submit_action" value="open_proforma" class="btn btn-dark">
+                                    <i class="bi bi-arrow-right-circle"></i> Save &amp; Create Proforma
                                 </button>
                             </div>
                         </div>
@@ -755,7 +757,7 @@
 
             <div class="alert alert-info mt-3 small">
                 <i class="bi bi-info-circle"></i>
-                Edit sourcing findings as many times as needed. You can print this sheet before entering prices, save it blank for later, or use <strong>Save &amp; Open Proforma</strong> when pricing is ready.
+                This worksheet is optional. Print it before entering prices, save it blank for later, or skip it and create the proforma directly.
             </div>
         </div>
     </div>

@@ -1,4 +1,5 @@
 {% extends "logistics/base.html" %}
+{% load logistics_docs %}
 
 {% block title %}Payments - GMI TERRALINK Logistics Portal{% endblock %}
 
@@ -106,7 +107,7 @@
                     <tr>
                         <td>
                             {% if payment.final_invoice %}
-                            FI-{{ payment.final_invoice.id }}
+                            {{ payment.final_invoice|doc_number:"FI" }}
                             {% else %}
                             -
                             {% endif %}

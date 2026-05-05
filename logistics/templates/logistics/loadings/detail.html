@@ -1,4 +1,5 @@
 {% extends "logistics/base.html" %}
+{% load logistics_docs %}
 
 {% block title %}{{ loading.loading_id }} - GMI TERRALINK Logistics Portal{% endblock %}
 
@@ -804,13 +805,13 @@
                             <div>
                                 <div class="stat-label">Proforma</div>
                                 <div class="stat-value {% if not proforma %}muted{% endif %}">
-                                    {% if proforma %}PI-{{ proforma.id }}{% else %}Pending{% endif %}
+                                    {% if proforma %}{{ proforma|doc_number:"PI" }}{% else %}Pending{% endif %}
                                 </div>
                             </div>
                             <div>
                                 <div class="stat-label">Final Invoice</div>
                                 <div class="stat-value {% if not final_invoice %}muted{% endif %}">
-                                    {% if final_invoice %}FI-{{ final_invoice.id }}{% else %}Pending{% endif %}
+                                    {% if final_invoice %}{{ final_invoice|doc_number:"FI" }}{% else %}Pending{% endif %}
                                 </div>
                             </div>
                             <div>

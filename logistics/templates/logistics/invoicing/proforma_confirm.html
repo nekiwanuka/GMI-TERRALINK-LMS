@@ -1,4 +1,5 @@
 {% extends "logistics/base.html" %}
+{% load logistics_docs %}
 
 {% block title %}Client PO Received - GMI TERRALINK{% endblock %}
 
@@ -9,7 +10,7 @@
             <h4 class="mb-0"><i class="bi bi-check2-circle"></i> Confirm Client PO & Convert to Final Invoice</h4>
         </div>
         <div class="card-body">
-            <p class="mb-3">You are about to mark that the client purchase order has been received for <strong>PI-{{ proforma.pk }}</strong> (transaction <strong>{{ proforma.transaction.transaction_id }}</strong>).</p>
+            <p class="mb-3">You are about to mark that the client purchase order has been received for <strong>{{ proforma|doc_number:"PI" }}</strong> (transaction <strong>{{ proforma.transaction.transaction_id }}</strong>).</p>
             <p class="text-muted">This converts the approved quotation/proforma into a final invoice for client payment.</p>
 
             <div class="border rounded p-3 bg-light mb-3">

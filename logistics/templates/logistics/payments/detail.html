@@ -1,5 +1,5 @@
 {% extends 'logistics/base.html' %}
-{% load humanize %}
+{% load humanize logistics_docs %}
 
 {% block content %}
 <div class="container-fluid">
@@ -10,7 +10,7 @@
                 <span class="badge bg-info align-middle ms-2" style="font-size:0.55em;"><i class="bi bi-truck"></i> Logistics</span>
             </h2>
             <small class="text-muted">
-                Invoice: {% if payment.final_invoice %}FI-{{ payment.final_invoice.id }}{% else %}-{% endif %}
+                Invoice: {% if payment.final_invoice %}{{ payment.final_invoice|doc_number:"FI" }}{% else %}-{% endif %}
                 &middot; Loading ID: {{ payment.loading.loading_id }}
                 &middot; Client: {{ payment.loading.client.name }}
             </small>
@@ -42,7 +42,7 @@
                         <dt class="col-6">Payment Method</dt>
                         <dd class="col-6 text-end">{{ payment.get_payment_method_display|default:'—' }}</dd>
                         <dt class="col-6">Attached Invoice</dt>
-                        <dd class="col-6 text-end">{% if payment.final_invoice %}FI-{{ payment.final_invoice.id }}{% else %}—{% endif %}</dd>
+                        <dd class="col-6 text-end">{% if payment.final_invoice %}{{ payment.final_invoice|doc_number:"FI" }}{% else %}—{% endif %}</dd>
                         <dt class="col-6">Billing Basis</dt>
                         <dd class="col-6 text-end">{{ payment.get_billing_basis_display }}</dd>
                         <dt class="col-6">Billing Rate</dt>

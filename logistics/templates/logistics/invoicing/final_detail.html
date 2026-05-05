@@ -1,7 +1,7 @@
 {% extends "logistics/base.html" %}
-{% load humanize static %}
+{% load humanize static logistics_docs %}
 
-{% block title %}{% if invoice.loading %}Cargo Final Invoice{% else %}Sourcing Final Invoice{% endif %} FI-{{ invoice.pk }} | GMI TERRALINK{% endblock %}
+{% block title %}{% if invoice.loading %}Cargo Final Invoice{% else %}Sourcing Final Invoice{% endif %} {{ invoice|doc_number:"FI" }} | GMI TERRALINK{% endblock %}
 
 {% block extra_css %}
 {% include "logistics/components/document_print_styles.html" %}
@@ -53,7 +53,7 @@
                 <i class="bi bi-pen"></i> {% if document_signature %}Signed{% else %}Sign{% endif %}
             </a>
             {% if balance > 0 %}
-            <a href="{% url 'sourcing_payment_create_for' invoice.transaction.pk %}" class="btn btn-sm btn-success me-1">
+            <a href="{% if invoice.loading %}{% url 'payment_create_with_loading' invoice.loading.pk %}{% else %}{% url 'sourcing_payment_create_for' invoice.transaction.pk %}{% endif %}" class="btn btn-sm btn-success me-1">
                 <i class="bi bi-cash-coin"></i> Record Payment
             </a>
             {% else %}
@@ -74,7 +74,7 @@
 </div>
 
 <div class="container no-print mb-3 invoice-summary">
-    <div class="row g-2 row-cols-2 row-cols-md-5">
+    <div class="row g-2 row-cols-2 {% if invoice.loading %}row-cols-md-4{% else %}row-cols-md-5{% endif %}">
         <div class="col">
             <div class="card border-0 bg-light h-100">
                 <div class="card-body py-2 px-3">
@@ -83,6 +83,7 @@
                 </div>
             </div>
         </div>
+        {% if not invoice.loading %}
         <div class="col">
             <div class="card border-0 bg-light h-100">
                 <div class="card-body py-2 px-3">
@@ -91,6 +92,7 @@
                 </div>
             </div>
         </div>
+        {% endif %}
         <div class="col">
             <div class="card border-0 bg-light h-100">
                 <div class="card-body py-2 px-3">
@@ -118,21 +120,18 @@
     </div>
 </div>
 
-{% if purchase_order %}
+{% if purchase_order and not invoice.loading %}
 <div class="no-print" style="margin:16px 28px 0;">
     <div class="alert alert-success d-flex justify-content-between align-items-center mb-0">
         <div>
             <strong>Purchase Order Ready:</strong> {{ purchase_order.po_number }}
-            <div class="small mt-1">Linked to FI-{{ invoice.pk }} ({{ split_purchase_orders|length }} supplier split{{ split_purchase_orders|length|pluralize }}).</div>
+            <div class="small mt-1">
+                Linked to {{ invoice|doc_number:"FI" }} ({{ split_purchase_orders|length }} supplier split{{ split_purchase_orders|length|pluralize }}).
+                <span class="badge {{ purchase_order.invoice_payment_status_class|default:'bg-secondary' }} ms-1">{{ purchase_order.invoice_payment_status_label|default:payment_status_label }}</span>
+                <span class="badge {{ purchase_order.fee_payment_status_class|default:'bg-secondary' }} ms-1">{{ purchase_order.fee_payment_status_label|default:'Fees Status Pending' }}</span>
+            </div>
         </div>
         <div class="d-flex gap-2">
-            {% if invoice.transaction.fulfillment_order %}
-            <a href="{% url 'fulfillment_order_update' invoice.transaction.fulfillment_order.pk %}" class="btn btn-sm btn-outline-secondary">Open Fulfillment</a>
-            {% elif balance <= 0 %}
-            <a href="{% url 'fulfillment_order_create' invoice.transaction.pk %}?final_invoice={{ invoice.pk }}" class="btn btn-sm btn-outline-secondary">Start Fulfillment</a>
-            {% else %}
-            <span class="btn btn-sm btn-outline-secondary disabled">Awaiting Full Payment</span>
-            {% endif %}
             <a href="{% url 'purchase_order_split_create' purchase_order.pk %}" class="btn btn-sm btn-outline-dark">Split to Supplier</a>
             <a href="{% url 'purchase_order_detail' purchase_order.pk %}" class="btn btn-sm btn-dark">Open PO</a>
         </div>
@@ -141,16 +140,20 @@
 {% elif can_generate_po %}
 <div class="no-print" style="margin:16px 28px 0;">
     <div class="alert alert-info d-flex justify-content-between align-items-center mb-0">
-        <div><strong>Invoice fully paid.</strong> Convert this invoice into a purchase order now.</div>
+        <div>
+            <strong>Item funds are covered.</strong> Convert this invoice into a purchase order for procurement.
+            {% if payment_snapshot.fee_balance > 0 %}
+            <div class="small mt-1">Fees are still outstanding: {{ payment_snapshot.fee_balance|floatformat:2|intcomma }} {{ invoice.currency }}.</div>
+            {% endif %}
+        </div>
         <div class="d-flex gap-2">
-            <a href="{% url 'fulfillment_order_create' invoice.transaction.pk %}?final_invoice={{ invoice.pk }}" class="btn btn-sm btn-outline-secondary">Start Fulfillment</a>
             <a href="{% if invoice.loading %}{% url 'logistics_final_invoice_generate_po' invoice.pk %}{% else %}{% url 'sourcing_final_invoice_generate_po' invoice.pk %}{% endif %}" class="btn btn-sm btn-dark">Generate Purchase Order</a>
         </div>
     </div>
 </div>
 {% endif %}
 
-{% if split_purchase_orders %}
+{% if split_purchase_orders and not invoice.loading %}
 <div class="no-print" style="margin:12px 28px 0;">
     <div class="card border-0" style="background:#fafafa;border:1px solid #eee !important;">
         <div class="card-body py-2 px-3">
@@ -172,7 +175,7 @@
         id="final-invoice-preview-frame"
         class="document-preview-frame"
         src="{% if invoice.loading %}{% url 'logistics_final_invoice_html_preview' invoice.pk %}{% else %}{% url 'sourcing_final_invoice_html_preview' invoice.pk %}{% endif %}?v={% now 'U' %}"
-        title="Final invoice preview FI-{{ invoice.pk }}">
+        title="Final invoice preview {{ invoice|doc_number:"FI" }}">
     </iframe>
 </div>
 

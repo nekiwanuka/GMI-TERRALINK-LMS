@@ -39,7 +39,7 @@
                     {% if m.state == 'late' %}<span class="badge bg-danger ms-1">Overdue</span>{% endif %}
                   </div>
                   <small class="text-muted">
-                    {% if m.timestamp %}{{ m.timestamp|date:"d M Y H:i" }}{% else %}&mdash;{% endif %}
+                    {{ m.timestamp_display|default:"&mdash;" }}
                   </small>
                 </div>
                 {% if m.detail %}<div class="text-muted small mt-1">{{ m.detail }}</div>{% endif %}

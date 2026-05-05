@@ -45,7 +45,7 @@
                     {% if m.state == 'late' %}<span class="badge bg-danger ms-1">Overdue</span>{% endif %}
                   </div>
                   <small class="text-muted">
-                    {% if m.timestamp %}{{ m.timestamp|date:"d M Y H:i" }}{% else %}&mdash;{% endif %}
+                    {{ m.timestamp_display|default:"&mdash;" }}
                   </small>
                 </div>
                 {% if m.detail %}<div class="text-muted small mt-1">{{ m.detail }}</div>{% endif %}
@@ -63,8 +63,8 @@
       <div class="card-header bg-light"><strong>Transit Details</strong></div>
       <div class="card-body small">
         <div><span class="text-muted">Vessel:</span> <strong>{{ transit.vessel_name|default:"&mdash;" }}</strong></div>
-        <div><span class="text-muted">Boarding:</span> {{ transit.boarding_date|date:"d M Y H:i"|default:"&mdash;" }}</div>
-        <div><span class="text-muted">ETA Kampala:</span> {{ transit.eta_kampala|date:"d M Y H:i"|default:"&mdash;" }}</div>
+        <div><span class="text-muted">Boarding:</span> {{ transit.boarding_date|date:"d M Y"|default:"&mdash;" }}</div>
+        <div><span class="text-muted">ETA Kampala:</span> {{ transit.eta_kampala|date:"d M Y"|default:"&mdash;" }}</div>
         <div><span class="text-muted">Status:</span> {{ transit.get_status_display }}</div>
         {% if transit.remarks %}<hr><div class="text-muted">Remarks</div><div>{{ transit.remarks|linebreaksbr }}</div>{% endif %}
       </div>

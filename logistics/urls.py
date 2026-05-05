@@ -32,6 +32,11 @@ urlpatterns = [
         views.notifications_mark_all_read,
         name="notifications_mark_all_read",
     ),
+    path(
+        "notifications/<int:pk>/open/",
+        views.notification_open,
+        name="notification_open",
+    ),
     path("register/", views.register_view, name="register"),
     path("signatures/profile/", views.signature_profile, name="signature_profile"),
     path("protected-media/<path:path>", views.protected_media, name="protected_media"),

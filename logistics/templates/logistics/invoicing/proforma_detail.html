@@ -1,7 +1,7 @@
 ﻿{% extends "logistics/base.html" %}
-{% load humanize static %}
+{% load humanize static logistics_docs %}
 
-{% block title %}{% if proforma.loading %}Cargo Proforma{% else %}Sourcing Proforma{% endif %} PI-{{ proforma.pk }} | GMI TERRALINK{% endblock %}
+{% block title %}{% if proforma.loading %}Cargo Proforma{% else %}Sourcing Proforma{% endif %} {{ proforma|doc_number:"PI" }} | GMI TERRALINK{% endblock %}
 
 {% block extra_css %}
 {% include "logistics/components/document_print_styles.html" %}
@@ -158,7 +158,7 @@
             {% endif %}
         </div>
         <div class="d-flex gap-2">
-            <button class="btn btn-sm btn-outline-secondary" type="button" onclick="openPrintPreview('proforma-print-target', '{% if proforma.loading %}Cargo Proforma{% else %}Sourcing Proforma{% endif %} PI-{{ proforma.pk }}')">
+            <button class="btn btn-sm btn-outline-secondary" type="button" onclick="openPrintPreview('proforma-print-target', '{% if proforma.loading %}Cargo Proforma{% else %}Sourcing Proforma{% endif %} {{ proforma|doc_number:"PI" }}')">
                 <i class="bi bi-eye"></i> Print Preview
             </button>
             <button class="btn btn-sm btn-dark" type="button" onclick="printDocument()">

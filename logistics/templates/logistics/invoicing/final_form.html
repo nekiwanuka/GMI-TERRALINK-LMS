@@ -179,9 +179,9 @@
                             <div class="form-text">Calculated from all line items.</div>
                         </div>
                         <div class="col-md-4">
-                            <label class="form-label fw-semibold">Sourcing Fee</label>
+                            <label class="form-label fw-semibold">{% if is_freight_invoice %}Port / Clearance Fee{% else %}Sourcing Fee{% endif %}</label>
                             <input type="number" step="0.01" min="0" name="sourcing_fee" class="form-control total-input" value="{{ form_values.sourcing_fee }}">
-                            <div class="form-text">Optional sourcing charge billed on this invoice.</div>
+                            <div class="form-text">{% if is_freight_invoice %}Port handling or clearance charge billed on this logistics invoice.{% else %}Optional sourcing charge billed on this invoice.{% endif %}</div>
                         </div>
                         <div class="col-md-4">
                             <label class="form-label fw-semibold">Shipping Cost</label>

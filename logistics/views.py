@@ -4,7 +4,7 @@ import csv
 import json
 import mimetypes
 import os
-from datetime import timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from io import BytesIO
 from urllib.parse import quote
@@ -112,6 +112,11 @@ from .decorators import (
     finance_required,
     procurement_required,
     role_required,
+)
+from .document_numbers import (
+    display_document_number,
+    display_document_slug,
+    document_department_code,
 )
 from .models import (
     _draw_international_terms_footer,
@@ -528,6 +533,98 @@ def _final_invoice_total_paid(invoice):
     )["total"] or Decimal("0.00")
 
     return max(invoice_record_total, transaction_record_total, legacy_total)
+
+
+def _final_invoice_payment_snapshot(invoice, total_paid=None):
+    """Summarize client payment coverage for PO/fulfillment decisions."""
+    total_paid = (
+        total_paid if total_paid is not None else _final_invoice_total_paid(invoice)
+    )
+    total_paid = Decimal(str(total_paid or "0.00"))
+    item_total = Decimal(str(invoice.subtotal or "0.00"))
+    fee_total = (
+        Decimal(str(invoice.sourcing_fee or "0.00"))
+        + Decimal(str(invoice.shipping_cost or "0.00"))
+        + Decimal(str(invoice.service_fee or "0.00"))
+    )
+    invoice_total = Decimal(str(invoice.total_amount or "0.00"))
+    invoice_balance = max(invoice_total - total_paid, Decimal("0.00"))
+    item_balance = max(item_total - total_paid, Decimal("0.00"))
+    fee_paid = min(max(total_paid - item_total, Decimal("0.00")), fee_total)
+    fee_balance = max(fee_total - fee_paid, Decimal("0.00"))
+
+    if total_paid > 0 and invoice_balance <= 0:
+        invoice_label = "Paid"
+        invoice_class = "bg-dark"
+    elif total_paid > 0:
+        invoice_label = "Partial Payment"
+        invoice_class = "bg-warning text-dark"
+    else:
+        invoice_label = "Unpaid"
+        invoice_class = "bg-secondary"
+
+    if item_total > 0 and total_paid >= item_total:
+        item_label = "Item Funds Paid"
+        item_class = "bg-dark"
+    elif total_paid > 0:
+        item_label = "Item Funds Partial"
+        item_class = "bg-warning text-dark"
+    else:
+        item_label = "Item Funds Unpaid"
+        item_class = "bg-secondary"
+
+    if fee_total <= 0:
+        fee_label = "No Fees Due"
+        fee_class = "bg-secondary"
+    elif fee_balance <= 0:
+        fee_label = "Fees Paid"
+        fee_class = "bg-dark"
+    elif fee_paid > 0:
+        fee_label = "Fees Partially Paid"
+        fee_class = "bg-warning text-dark"
+    else:
+        fee_label = "Fees Not Paid"
+        fee_class = "bg-secondary"
+
+    return {
+        "total_paid": total_paid,
+        "invoice_total": invoice_total,
+        "invoice_balance": invoice_balance,
+        "invoice_label": invoice_label,
+        "invoice_class": invoice_class,
+        "item_total": item_total,
+        "item_balance": item_balance,
+        "item_label": item_label,
+        "item_class": item_class,
+        "fee_total": fee_total,
+        "fee_paid": fee_paid,
+        "fee_balance": fee_balance,
+        "fee_label": fee_label,
+        "fee_class": fee_class,
+        "item_funds_ready": item_total <= 0 or total_paid >= item_total,
+        "fully_paid": invoice_balance <= 0 and total_paid > 0,
+    }
+
+
+def _decorate_purchase_order_invoice_payment(purchase_order):
+    if not purchase_order.final_invoice_id:
+        purchase_order.invoice_payment_snapshot = None
+        return purchase_order
+
+    snapshot = _final_invoice_payment_snapshot(purchase_order.final_invoice)
+    purchase_order.invoice_payment_snapshot = snapshot
+    purchase_order.invoice_payment_status_label = snapshot["invoice_label"]
+    purchase_order.invoice_payment_status_class = snapshot["invoice_class"]
+    purchase_order.item_funds_status_label = snapshot["item_label"]
+    purchase_order.item_funds_status_class = snapshot["item_class"]
+    purchase_order.fee_payment_status_label = snapshot["fee_label"]
+    purchase_order.fee_payment_status_class = snapshot["fee_class"]
+    purchase_order.client_total_paid = snapshot["total_paid"]
+    purchase_order.client_invoice_balance = snapshot["invoice_balance"]
+    purchase_order.client_item_balance = snapshot["item_balance"]
+    purchase_order.client_fee_balance = snapshot["fee_balance"]
+    purchase_order.can_start_invoice_fulfillment = snapshot["fully_paid"]
+    return purchase_order
 
 
 def _build_loading_proforma_items(loading):
@@ -1016,7 +1113,7 @@ def loading_create(request):
             if proforma_created:
                 messages.success(
                     request,
-                    f"Quotation / Proforma draft PI-{proforma.pk} was generated automatically.",
+                    f"Quotation / Proforma draft {display_document_number(proforma, 'PI')} was generated automatically.",
                 )
             log_audit("loading", "create", loading.id, str(loading), request.user)
             _notify_roles(
@@ -1162,7 +1259,7 @@ def loading_start_flow(request, pk):
     if created:
         messages.success(
             request,
-            f"Quotation / Proforma draft PI-{proforma.pk} was generated for cargo {loading.loading_id}.",
+            f"Quotation / Proforma draft {display_document_number(proforma, 'PI')} was generated for cargo {loading.loading_id}.",
         )
     can_manage_commercial_flow = request.user.is_superuser or request.user.role in {
         "ADMIN",
@@ -1898,7 +1995,11 @@ def payment_invoice(request, pk):
     )
 
     info_top = height - 115
-    invoice_ref = f"FI-{payment.final_invoice_id}" if payment.final_invoice_id else "-"
+    invoice_ref = (
+        display_document_number(payment.final_invoice, "FI")
+        if payment.final_invoice_id
+        else "-"
+    )
     details_y = _draw_pdf_card(
         pdf,
         margin,
@@ -2455,14 +2556,14 @@ def transaction_document_upload(request, pk):
                 title="Client PI uploaded",
                 message=(
                     f"A client PI document was uploaded for transaction "
-                    f"{transaction.transaction_id}. Review the extracted PI to open a proforma invoice or generate a sourcing document."
+                    f"{transaction.transaction_id}. Review the extracted PI to open a proforma invoice or optional sourcing worksheet."
                 ),
                 link=reverse("transaction_detail", kwargs={"pk": transaction.pk}),
                 category="document",
             )
             messages.success(
                 request,
-                "Client PI uploaded and text extracted. Review the extracted PI below, then choose either Proforma Invoice or Generate Sourcing Document.",
+                "Client PI uploaded and text extracted. Review the extracted PI below, then create a proforma or open the optional sourcing worksheet.",
             )
         else:
             _notify_roles(
@@ -2523,9 +2624,9 @@ def document_edit_pi(request, pk):
                     status="SENT_TO_SOURCING"
                 )
             _notify_roles(
-                title="Sourcing document generated",
+                title="Sourcing worksheet opened",
                 message=(
-                    f"A sourcing document was generated for transaction "
+                    f"An optional sourcing worksheet was opened for transaction "
                     f"{document.transaction.transaction_id}."
                 ),
                 link=reverse(
@@ -2535,7 +2636,7 @@ def document_edit_pi(request, pk):
             )
             messages.success(
                 request,
-                "PI data updated. Sourcing document generated and ready for printing or quotation capture.",
+                "PI data updated. Optional sourcing worksheet is ready for online capture or printing.",
             )
             if existing_sourcing:
                 return redirect("sourcing_update", pk=existing_sourcing.pk)
@@ -2593,7 +2694,7 @@ def _parse_quote_fees(
     errors = []
     fee_values = {}
     labels = {
-        "sourcing_fee": "Sourcing fee",
+        "sourcing_fee": "Additional charge",
         handling_key: "Handling fee",
         shipping_key: "Shipping fee",
     }
@@ -3265,15 +3366,9 @@ def sourcing_pdf(request, pk):
             "Item",
             "Qty",
             "Unit",
-            "A Supplier",
-            "A Contact",
-            "A Cost",
-            "B Supplier",
-            "B Contact",
-            "B Cost",
-            "C Supplier",
-            "C Contact",
-            "C Cost",
+            "Quote A",
+            "Quote B",
+            "Quote C",
             "Preferred",
             "Notes",
         ]
@@ -3295,21 +3390,28 @@ def sourcing_pdf(request, pk):
                 marker += "P"
             return f"{value} {marker}".strip()
 
+        def _quote_cell(quote_key):
+            supplier = row.get(f"quote_{quote_key}_supplier_name") or ""
+            contact = row.get(f"quote_{quote_key}_supplier_contact") or ""
+            cost = _cost_with_marker(quote_key)
+            parts = []
+            if supplier:
+                parts.append(f"<b>{supplier}</b>")
+            if contact:
+                parts.append(contact)
+            if cost:
+                parts.append(f"Cost: {cost}")
+            return Paragraph("<br/>".join(parts) or "", body_style)
+
         table_data.append(
             [
                 str(row.get("index") or ""),
                 Paragraph(row.get("name") or "", body_style),
                 row.get("quantity") or "",
                 row.get("unit") or "",
-                Paragraph(row.get("quote_1_supplier_name") or "", body_style),
-                Paragraph(row.get("quote_1_supplier_contact") or "", body_style),
-                _cost_with_marker("1"),
-                Paragraph(row.get("quote_2_supplier_name") or "", body_style),
-                Paragraph(row.get("quote_2_supplier_contact") or "", body_style),
-                _cost_with_marker("2"),
-                Paragraph(row.get("quote_3_supplier_name") or "", body_style),
-                Paragraph(row.get("quote_3_supplier_contact") or "", body_style),
-                _cost_with_marker("3"),
+                _quote_cell("1"),
+                _quote_cell("2"),
+                _quote_cell("3"),
                 (
                     "A"
                     if preferred_quote == "1"
@@ -3326,7 +3428,7 @@ def sourcing_pdf(request, pk):
     quote_table = Table(
         table_data,
         repeatRows=1,
-        colWidths=[20, 90, 30, 30, 58, 58, 34, 58, 58, 34, 58, 58, 34, 40, 70],
+        colWidths=[22, 120, 34, 34, 120, 120, 120, 46, 96],
     )
     quote_table.setStyle(
         TableStyle(
@@ -3606,7 +3708,7 @@ def proforma_create(request):
             _notify_roles(
                 title="Proforma invoice created",
                 message=(
-                    f"Proforma invoice PI-{proforma.pk} was created for transaction "
+                    f"Proforma invoice {display_document_number(proforma, 'PI')} was created for transaction "
                     f"{txn.transaction_id}."
                 ),
                 link=reverse(
@@ -3682,7 +3784,7 @@ def proforma_sign(request, pk):
         request,
         document=proforma,
         detail_route=_proforma_route_name(proforma, "detail"),
-        document_label=f"Proforma PI-{proforma.pk}",
+        document_label=f"Proforma {display_document_number(proforma, 'PI')}",
     )
 
 
@@ -3849,8 +3951,8 @@ def proforma_confirm(request, pk):
         _notify_roles(
             title="Final invoice generated",
             message=(
-                f"Final invoice FI-{invoice.pk} was generated from proforma "
-                f"PI-{proforma.pk} for transaction {proforma.transaction.transaction_id}."
+                f"Final invoice {display_document_number(invoice, 'FI')} was generated from proforma "
+                f"{display_document_number(proforma, 'PI')} for transaction {proforma.transaction.transaction_id}."
             ),
             link=reverse(
                 _final_invoice_route_name(invoice, "detail"), kwargs={"pk": invoice.pk}
@@ -3984,12 +4086,26 @@ def _build_final_invoice_form_context(
             "is_confirmed": False,
         }
 
+    selected_transaction_id = form_values.get("transaction_id")
+    selected_transaction = None
+    if selected_transaction_id:
+        selected_transaction = (
+            Transaction.objects.filter(pk=selected_transaction_id)
+            .select_related("source_loading")
+            .first()
+        )
+    is_freight_invoice = bool(
+        (invoice and invoice.loading_id)
+        or (selected_transaction and selected_transaction.source_loading_id)
+    )
+
     return {
         "invoice": invoice,
         "title": title,
         "transactions": transactions,
         "line_items": line_items,
         "form_values": form_values,
+        "is_freight_invoice": is_freight_invoice,
         "shipping_mode_choices": FinalInvoice.SHIPPING_MODE_CHOICES,
     }
 
@@ -4009,23 +4125,25 @@ def proforma_pdf(request, pk):
     if canonical:
         return canonical
     document_signature = _document_signature_for(proforma)
+    document_number = display_document_number(proforma, "PI")
     pdf_data = render_to_browser_pdf(
         "logistics/pdf/proforma_standalone.html",
         {
             "proforma": proforma,
             "document_signature": document_signature,
+            "document_number": document_number,
         },
     )
     response = HttpResponse(pdf_data, content_type="application/pdf")
     _prevent_stale_pdf_cache(response)
-    department_prefix = "cargo" if proforma.loading_id else "sourcing"
+    document_slug = display_document_slug(proforma, "PI")
     response["Content-Disposition"] = (
-        f'attachment; filename="{department_prefix}_proforma_{proforma.transaction.transaction_id}.pdf"'
+        f'attachment; filename="{document_slug}_proforma_{proforma.transaction.transaction_id}.pdf"'
     )
     _notify_roles(
         title="Proforma PDF generated",
         message=(
-            f"A PDF was generated for proforma PI-{proforma.pk} on transaction "
+            f"A PDF was generated for proforma {document_number} on transaction "
             f"{proforma.transaction.transaction_id}."
         ),
         link=reverse(
@@ -4048,12 +4166,14 @@ def proforma_html_preview(request, pk):
         pk=pk,
     )
     document_signature = _document_signature_for(proforma)
+    document_number = display_document_number(proforma, "PI")
     response = render(
         request,
         "logistics/pdf/proforma_standalone.html",
         {
             "proforma": proforma,
             "document_signature": document_signature,
+            "document_number": document_number,
         },
     )
     return _prevent_stale_pdf_cache(response)
@@ -4117,9 +4237,10 @@ def final_invoice_detail(request, pk):
     if canonical:
         return canonical
     total_paid = _final_invoice_total_paid(invoice)
+    payment_snapshot = _final_invoice_payment_snapshot(invoice, total_paid)
     purchase_orders_qs = invoice.transaction.purchase_orders.filter(
         Q(final_invoice=invoice) | Q(final_invoice__isnull=True)
-    ).select_related("parent_po")
+    ).select_related("parent_po", "final_invoice")
     purchase_order = (
         purchase_orders_qs.filter(parent_po__isnull=True)
         .order_by("-created_at")
@@ -4129,6 +4250,10 @@ def final_invoice_detail(request, pk):
     split_purchase_orders = purchase_orders_qs.filter(parent_po__isnull=False).order_by(
         "-created_at"
     )
+    if purchase_order:
+        _decorate_purchase_order_invoice_payment(purchase_order)
+    for split_purchase_order in split_purchase_orders:
+        _decorate_purchase_order_invoice_payment(split_purchase_order)
 
     total_paid_decimal = total_paid or 0
     balance = max((invoice.total_amount or 0) - total_paid, 0)
@@ -4143,8 +4268,14 @@ def final_invoice_detail(request, pk):
         payment_status_class = "bg-secondary"
     can_edit_invoice = total_paid_decimal <= 0
 
+    is_logistics_invoice = bool(invoice.loading_id)
+    if is_logistics_invoice:
+        purchase_order = None
+        split_purchase_orders = []
     can_generate_po = (
-        total_paid_decimal >= (invoice.total_amount or 0) and purchase_order is None
+        not is_logistics_invoice
+        and payment_snapshot["item_funds_ready"]
+        and purchase_order is None
     )
     document_signature = _document_signature_for(invoice)
     return render(
@@ -4160,7 +4291,9 @@ def final_invoice_detail(request, pk):
             "purchase_order": purchase_order,
             "split_purchase_orders": split_purchase_orders,
             "can_generate_po": can_generate_po,
+            "payment_snapshot": payment_snapshot,
             "document_signature": document_signature,
+            "is_logistics_invoice": is_logistics_invoice,
         },
     )
 
@@ -4176,7 +4309,7 @@ def final_invoice_sign(request, pk):
         request,
         document=invoice,
         detail_route=_final_invoice_route_name(invoice, "detail"),
-        document_label=f"Final Invoice FI-{invoice.pk}",
+        document_label=f"Final Invoice {display_document_number(invoice, 'FI')}",
     )
 
 
@@ -4211,9 +4344,7 @@ def final_invoice_create(request):
             if sourcing_fee < 0 or shipping_cost < 0 or service_fee < 0:
                 raise InvalidOperation
         except InvalidOperation:
-            errors.append(
-                "Sourcing fee, shipping fee, and handling fee must be valid non-negative numbers."
-            )
+            errors.append("Additional charges must be valid non-negative numbers.")
 
         txn = None
         if not transaction_id:
@@ -4250,7 +4381,7 @@ def final_invoice_create(request):
             _notify_roles(
                 title="Final invoice created",
                 message=(
-                    f"Final invoice FI-{invoice.pk} was created for transaction "
+                    f"Final invoice {display_document_number(invoice, 'FI')} was created for transaction "
                     f"{invoice.transaction.transaction_id}."
                 ),
                 link=reverse(
@@ -4335,9 +4466,7 @@ def final_invoice_update(request, pk):
             if sourcing_fee < 0 or shipping_cost < 0 or service_fee < 0:
                 raise InvalidOperation
         except InvalidOperation:
-            errors.append(
-                "Sourcing fee, shipping fee, and handling fee must be valid non-negative numbers."
-            )
+            errors.append("Additional charges must be valid non-negative numbers.")
 
         txn = None
         if not transaction_id:
@@ -4417,6 +4546,7 @@ def final_invoice_html_preview(request, pk):
         "logistics/pdf/final_invoice_standalone.html",
         {
             "invoice": invoice,
+            "document_number": display_document_number(invoice, "FI"),
             "total_paid": total_paid,
             "balance": balance,
             "payment_status_label": payment_status_label,
@@ -4452,10 +4582,12 @@ def final_invoice_pdf(request, pk):
         payment_status_label = "Unpaid"
         payment_status_class = "bg-secondary"
     document_signature = _document_signature_for(invoice)
+    document_number = display_document_number(invoice, "FI")
     pdf_data = render_to_browser_pdf(
         "logistics/pdf/final_invoice_standalone.html",
         {
             "invoice": invoice,
+            "document_number": document_number,
             "total_paid": total_paid,
             "balance": balance,
             "payment_status_label": payment_status_label,
@@ -4465,14 +4597,14 @@ def final_invoice_pdf(request, pk):
     )
     response = HttpResponse(pdf_data, content_type="application/pdf")
     _prevent_stale_pdf_cache(response)
-    department_prefix = "cargo" if invoice.loading_id else "sourcing"
+    document_slug = display_document_slug(invoice, "FI")
     response["Content-Disposition"] = (
-        f'attachment; filename="{department_prefix}_final_invoice_{invoice.transaction.transaction_id}.pdf"'
+        f'attachment; filename="{document_slug}_final_invoice_{invoice.transaction.transaction_id}.pdf"'
     )
     _notify_roles(
         title="Final invoice PDF generated",
         message=(
-            f"A PDF was generated for final invoice FI-{invoice.pk} on transaction "
+            f"A PDF was generated for final invoice {document_number} on transaction "
             f"{invoice.transaction.transaction_id}."
         ),
         link=reverse(
@@ -4484,7 +4616,7 @@ def final_invoice_pdf(request, pk):
 
 
 def _ensure_purchase_order_for_transaction(transaction, user, invoice=None):
-    """Create a base purchase order for a fully paid invoice/transaction."""
+    """Create a base purchase order from an invoice whose item funds are covered."""
     if invoice is None:
         invoice = transaction.final_invoices.order_by(
             "-is_confirmed", "-created_at"
@@ -4512,7 +4644,7 @@ def _ensure_purchase_order_for_transaction(transaction, user, invoice=None):
         supplier_address=(proforma.supplier_address if proforma else ""),
         items=invoice.items,
         subtotal=invoice.subtotal,
-        notes="Base purchase order generated from fully paid final invoice.",
+        notes="Base purchase order generated from final invoice with item funds covered.",
         created_by=user,
     )
     return purchase_order, True
@@ -4521,9 +4653,11 @@ def _ensure_purchase_order_for_transaction(transaction, user, invoice=None):
 @login_required
 @role_required("PROCUREMENT", "FINANCE", "DIRECTOR", "ADMIN")
 def final_invoice_generate_purchase_order(request, pk):
-    """Generate a base purchase order from a fully paid final invoice."""
+    """Generate a base purchase order once invoice item funds are covered."""
     invoice = get_object_or_404(
-        FinalInvoice.objects.select_related("transaction", "transaction__customer"),
+        FinalInvoice.objects.select_related(
+            "transaction", "transaction__customer", "loading"
+        ),
         pk=pk,
     )
     canonical = _canonical_route_redirect(
@@ -4531,11 +4665,17 @@ def final_invoice_generate_purchase_order(request, pk):
     )
     if canonical and request.method != "POST":
         return canonical
-    total_paid = _final_invoice_total_paid(invoice)
-    if total_paid < (invoice.total_amount or 0):
+    if invoice.loading_id:
         messages.error(
             request,
-            "Invoice is not fully paid yet. Complete payment before generating a purchase order.",
+            "Purchase orders are only available in the sourcing / trade flow. Logistics invoices stay in the freight billing flow.",
+        )
+        return redirect(_final_invoice_route_name(invoice, "detail"), pk=invoice.pk)
+    payment_snapshot = _final_invoice_payment_snapshot(invoice)
+    if not payment_snapshot["item_funds_ready"]:
+        messages.error(
+            request,
+            "Item funds are not covered yet. Record enough client payment for the invoice subtotal before generating a purchase order.",
         )
         return redirect(_final_invoice_route_name(invoice, "detail"), pk=invoice.pk)
 
@@ -4547,12 +4687,12 @@ def final_invoice_generate_purchase_order(request, pk):
     if purchase_order and created:
         messages.success(
             request,
-            f"Purchase Order {purchase_order.po_number} generated from FI-{invoice.pk}.",
+            f"Purchase Order {purchase_order.po_number} generated from {display_document_number(invoice, 'FI')}.",
         )
     elif purchase_order:
         messages.info(
             request,
-            f"Purchase Order {purchase_order.po_number} already exists for FI-{invoice.pk}.",
+            f"Purchase Order {purchase_order.po_number} already exists for {display_document_number(invoice, 'FI')}.",
         )
     else:
         messages.error(request, "Unable to generate purchase order for this invoice.")
@@ -4610,6 +4750,7 @@ def purchase_order_split_create(request, pk):
         pk=pk,
     )
     base_po = purchase_order.root_po
+    _decorate_purchase_order_invoice_payment(base_po)
     invoice = (
         base_po.final_invoice
         or purchase_order.transaction.final_invoices.order_by(
@@ -4692,6 +4833,7 @@ def purchase_order_list(request):
     page_obj, query_string, page_range = paginate_queryset(request, purchase_orders)
     for purchase_order in page_obj:
         _decorate_purchase_order_status(purchase_order)
+        _decorate_purchase_order_invoice_payment(purchase_order)
     return render(
         request,
         "logistics/invoicing/purchase_order_list.html",
@@ -4811,21 +4953,17 @@ def purchase_order_detail(request, pk):
         pk=pk,
     )
     _decorate_purchase_order_status(purchase_order)
+    _decorate_purchase_order_invoice_payment(purchase_order)
     base_po = purchase_order.root_po
     sibling_splits = base_po.split_purchase_orders.select_related(
-        "created_by"
+        "created_by", "final_invoice"
     ).order_by("-created_at")
-    can_start_invoice_fulfillment = False
-    if purchase_order.final_invoice_id:
-        total_paid = (
-            purchase_order.final_invoice.transaction.payment_records.aggregate(
-                total=Sum("amount")
-            )["total"]
-            or 0
-        )
-        can_start_invoice_fulfillment = total_paid >= (
-            purchase_order.final_invoice.total_amount or 0
-        )
+    for split_purchase_order in sibling_splits:
+        _decorate_purchase_order_status(split_purchase_order)
+        _decorate_purchase_order_invoice_payment(split_purchase_order)
+    can_start_invoice_fulfillment = getattr(
+        purchase_order, "can_start_invoice_fulfillment", False
+    )
     return render(
         request,
         "logistics/invoicing/purchase_order_detail.html",
@@ -5281,6 +5419,27 @@ def export_containers_pdf(request):
 @login_required
 def notifications_mark_all_read(request):
     request.user.notifications.filter(is_read=False).update(is_read=True)
+    next_url = _safe_next_url(request)
+    if next_url:
+        return redirect(next_url)
+    return _redirect_back(request, default="dashboard")
+
+
+@login_required
+def notification_open(request, pk):
+    notification = get_object_or_404(request.user.notifications, pk=pk)
+    if not notification.is_read:
+        notification.is_read = True
+        notification.save(update_fields=["is_read"])
+    target = notification.link or _safe_next_url(request)
+    if target and url_has_allowed_host_and_scheme(
+        target,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        return redirect(target)
+    if target.startswith("/") and not target.startswith("//"):
+        return redirect(target)
     return _redirect_back(request, default="dashboard")
 
 
@@ -5461,7 +5620,7 @@ def export_proformas_csv(request):
     for proforma in queryset:
         writer.writerow(
             [
-                f"PI-{proforma.pk}",
+                display_document_number(proforma, "PI"),
                 proforma.transaction.transaction_id,
                 proforma.transaction.customer.name,
                 proforma.get_status_display(),
@@ -5494,7 +5653,7 @@ def export_proformas_pdf(request):
     ]
     rows = [
         [
-            f"PI-{proforma.pk}",
+            display_document_number(proforma, "PI"),
             proforma.transaction.transaction_id,
             proforma.transaction.customer.name,
             proforma.get_status_display(),
@@ -5540,7 +5699,7 @@ def export_final_invoices_csv(request):
     for invoice in queryset:
         writer.writerow(
             [
-                f"FI-{invoice.pk}",
+                display_document_number(invoice, "FI"),
                 invoice.transaction.transaction_id,
                 invoice.transaction.customer.name,
                 "Yes" if invoice.is_confirmed else "No",
@@ -5573,7 +5732,7 @@ def export_final_invoices_pdf(request):
     ]
     rows = [
         [
-            f"FI-{invoice.pk}",
+            display_document_number(invoice, "FI"),
             invoice.transaction.transaction_id,
             invoice.transaction.customer.name,
             "Yes" if invoice.is_confirmed else "No",
@@ -5629,7 +5788,7 @@ def export_purchase_orders_csv(request):
                 _count_collection(purchase_order.items),
                 purchase_order.subtotal,
                 (
-                    f"FI-{purchase_order.final_invoice_id}"
+                    display_document_number(purchase_order.final_invoice, "FI")
                     if purchase_order.final_invoice_id
                     else ""
                 ),
@@ -5666,7 +5825,7 @@ def export_purchase_orders_pdf(request):
             _count_collection(purchase_order.items),
             f"{purchase_order.subtotal:,.2f}",
             (
-                f"FI-{purchase_order.final_invoice_id}"
+                display_document_number(purchase_order.final_invoice, "FI")
                 if purchase_order.final_invoice_id
                 else ""
             ),
@@ -5714,7 +5873,11 @@ def export_trade_payments_csv(request):
             [
                 record.transaction.transaction_id,
                 record.transaction.customer.name,
-                f"FI-{record.final_invoice_id}" if record.final_invoice_id else "",
+                (
+                    display_document_number(record.final_invoice, "FI")
+                    if record.final_invoice_id
+                    else ""
+                ),
                 record.amount_due_snapshot,
                 record.amount,
                 record.currency,
@@ -5751,7 +5914,11 @@ def export_trade_payments_pdf(request):
         [
             record.transaction.transaction_id,
             record.transaction.customer.name,
-            f"FI-{record.final_invoice_id}" if record.final_invoice_id else "",
+            (
+                display_document_number(record.final_invoice, "FI")
+                if record.final_invoice_id
+                else ""
+            ),
             f"{record.amount_due_snapshot:,.2f}",
             f"{record.amount:,.2f}",
             record.currency,
@@ -5932,13 +6099,23 @@ def receipt_list(request):
     receipts = Receipt.objects.select_related(
         "logistics_payment__payment__loading__client",
         "sourcing_payment__transaction__customer",
+        "sourcing_payment__transaction__source_loading",
+        "sourcing_payment__final_invoice__loading",
     ).all()
+
+    freight_receipt_filter = (
+        Q(logistics_payment__isnull=False)
+        | Q(sourcing_payment__final_invoice__loading__isnull=False)
+        | Q(sourcing_payment__transaction__source_loading__isnull=False)
+    )
 
     source_filter = (request.GET.get("source") or "all").strip().lower()
     if source_filter == "logistics":
-        receipts = receipts.filter(logistics_payment__isnull=False)
+        receipts = receipts.filter(freight_receipt_filter)
     elif source_filter == "sourcing":
-        receipts = receipts.filter(sourcing_payment__isnull=False)
+        receipts = receipts.filter(sourcing_payment__isnull=False).exclude(
+            freight_receipt_filter
+        )
 
     payment_filter = (request.GET.get("payment_filter") or "all").strip().lower()
     if payment_filter == "full":
@@ -5958,6 +6135,23 @@ def receipt_list(request):
             Q(receipt_number__icontains=search) | Q(issued_to__icontains=search)
         )
     page_obj, query_string, page_range = paginate_queryset(request, receipts)
+    for receipt in page_obj:
+        department_code = document_department_code(receipt)
+        if department_code == "LOG":
+            receipt.department_label = "Logistics"
+            receipt.department_short_label = "LOG"
+            receipt.department_icon = "bi-truck"
+            receipt.department_badge_class = "receipt-source-logistics"
+        elif department_code == "SRC" and receipt.sourcing_payment_id:
+            receipt.department_label = "Sourcing"
+            receipt.department_short_label = "SRC"
+            receipt.department_icon = "bi-globe2"
+            receipt.department_badge_class = "receipt-source-sourcing"
+        else:
+            receipt.department_label = "Unlinked"
+            receipt.department_short_label = "--"
+            receipt.department_icon = "bi-question-circle"
+            receipt.department_badge_class = "receipt-source-unlinked"
     return render(
         request,
         "logistics/receipts/list.html",
@@ -6056,6 +6250,7 @@ def receipt_html_preview(request, pk):
         "logistics/pdf/receipt_standalone.html",
         {
             "receipt": receipt,
+            "receipt_display_number": display_document_number(receipt, "RCT"),
             "client": client,
             "invoice_fully_paid": invoice_fully_paid,
         },
@@ -6097,6 +6292,7 @@ def receipt_pdf(request, pk):
         "logistics/pdf/receipt_standalone.html",
         {
             "receipt": receipt,
+            "receipt_display_number": display_document_number(receipt, "RCT"),
             "client": client,
             "invoice_fully_paid": invoice_fully_paid,
         },
@@ -6104,7 +6300,7 @@ def receipt_pdf(request, pk):
     response = HttpResponse(pdf_bytes, content_type="application/pdf")
     _prevent_stale_pdf_cache(response)
     response["Content-Disposition"] = (
-        f'attachment; filename="Receipt-{receipt.receipt_number}.pdf"'
+        f'attachment; filename="{display_document_slug(receipt, "RCT")}_receipt.pdf"'
     )
     return response
 
@@ -6680,6 +6876,24 @@ def pod_delivery_note_pdf(request, pk):
 # ---------------------------------------------------------------------------
 
 
+def _timeline_timestamp_display(value):
+    if not value:
+        return ""
+    if isinstance(value, datetime):
+        return timezone.localtime(value).strftime("%d %b %Y %H:%M")
+    if isinstance(value, date):
+        return value.strftime("%d %b %Y")
+    return str(value)
+
+
+def _prepare_timeline_milestones(milestones):
+    for milestone in milestones:
+        milestone["timestamp_display"] = _timeline_timestamp_display(
+            milestone.get("timestamp")
+        )
+    return milestones
+
+
 def _build_transit_milestones(transit):
     """Return a list of milestone dicts for the logistics transit timeline."""
     loading = transit.loading
@@ -6768,7 +6982,7 @@ def _build_transit_milestones(transit):
         }
     )
 
-    return milestones
+    return _prepare_timeline_milestones(milestones)
 
 
 @login_required
@@ -6854,7 +7068,7 @@ def _build_fulfillment_milestones(fulfillment):
         }
     )
 
-    return milestones
+    return _prepare_timeline_milestones(milestones)
 
 
 @login_required

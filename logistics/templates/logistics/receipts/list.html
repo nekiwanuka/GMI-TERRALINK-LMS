@@ -1,6 +1,43 @@
 {% extends "logistics/base.html" %}
+{% load logistics_docs %}
 
 {% block title %}Receipts — GMI TERRALINK{% endblock %}
+
+{% block extra_css %}
+<style>
+.receipt-source-badge {
+    align-items: center;
+    border: 1px solid #d8d8d8;
+    border-left: 4px solid #d4af37;
+    border-radius: 6px;
+    display: inline-flex;
+    gap: .38rem;
+    min-width: 112px;
+    padding: .32rem .5rem;
+    font-size: .76rem;
+    font-weight: 800;
+    letter-spacing: 0;
+}
+.receipt-source-badge .source-code {
+    color: #6d5b1f;
+    font-size: .68rem;
+    font-weight: 800;
+}
+.receipt-source-logistics {
+    background: #f5f5f5;
+    color: #202020;
+}
+.receipt-source-sourcing {
+    background: #fffdf7;
+    color: #202020;
+}
+.receipt-source-unlinked {
+    background: #f1f1f1;
+    border-left-color: #888;
+    color: #555;
+}
+</style>
+{% endblock %}
 
 {% block content %}
 <div class="container-fluid">
@@ -19,15 +56,15 @@
                class="btn {% if source_filter == 'sourcing' %}btn-success{% else %}btn-outline-success{% endif %}">
                 <i class="bi bi-globe2"></i> Sourcing Trade
             </a>
-            <a href="{% url 'receipt_list' %}?payment_filter=all{% if search %}&search={{ search|urlencode }}{% endif %}"
+            <a href="{% url 'receipt_list' %}?source={{ source_filter|default:'all' }}&payment_filter=all{% if search %}&search={{ search|urlencode }}{% endif %}"
                class="btn {% if payment_filter == 'all' %}btn-secondary{% else %}btn-outline-secondary{% endif %}">
                 <i class="bi bi-list"></i> All
             </a>
-            <a href="{% url 'receipt_list' %}?payment_filter=full{% if search %}&search={{ search|urlencode }}{% endif %}"
+            <a href="{% url 'receipt_list' %}?source={{ source_filter|default:'all' }}&payment_filter=full{% if search %}&search={{ search|urlencode }}{% endif %}"
                class="btn {% if payment_filter == 'full' %}btn-dark{% else %}btn-outline-dark{% endif %}">
                 <i class="bi bi-cash-stack"></i> Full Payment
             </a>
-            <a href="{% url 'receipt_list' %}?payment_filter=partial{% if search %}&search={{ search|urlencode }}{% endif %}"
+            <a href="{% url 'receipt_list' %}?source={{ source_filter|default:'all' }}&payment_filter=partial{% if search %}&search={{ search|urlencode }}{% endif %}"
                class="btn {% if payment_filter == 'partial' %}btn-dark{% else %}btn-outline-dark{% endif %}">
                 <i class="bi bi-wallet2"></i> Partial Payment
             </a>
@@ -67,7 +104,7 @@
                             <th>Amount</th>
                             <th>Balance</th>
                             <th>Currency</th>
-                            <th>Type</th>
+                            <th>Department</th>
                             <th>Date</th>
                             <th>Status</th>
                             <th>Actions</th>
@@ -76,7 +113,7 @@
                     <tbody>
                         {% for receipt in receipts %}
                         <tr>
-                            <td><strong>{{ receipt.receipt_number }}</strong></td>
+                            <td><strong>{{ receipt|doc_number:"RCT" }}</strong></td>
                             <td>{{ receipt.issued_to }}</td>
                             <td>{{ receipt.amount|floatformat:2 }}</td>
                             <td>
@@ -88,11 +125,11 @@
                             </td>
                             <td>{{ receipt.currency }}</td>
                             <td>
-                                {% if receipt.logistics_payment %}
-                                    <span class="badge bg-info">Logistics</span>
-                                {% else %}
-                                    <span class="badge bg-success">Sourcing</span>
-                                {% endif %}
+                                <span class="receipt-source-badge {{ receipt.department_badge_class }}">
+                                    <i class="bi {{ receipt.department_icon }}"></i>
+                                    <span>{{ receipt.department_label }}</span>
+                                    <span class="source-code">{{ receipt.department_short_label }}</span>
+                                </span>
                             </td>
                             <td>{{ receipt.issued_at|date:"d M Y H:i" }}</td>
                             <td>

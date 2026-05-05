@@ -1,4 +1,5 @@
 {% extends "logistics/base.html" %}
+{% load logistics_docs %}
 {% block title %}Payments for {{ transaction.transaction_id }} — GMI TERRALINK{% endblock %}
 {% block content %}
 <div class="container-fluid">
@@ -43,7 +44,7 @@
                             <td>
                                 {% if record.receipt %}
                                 <a href="{% url 'receipt_detail' record.receipt.pk %}">
-                                    {{ record.receipt.receipt_number }}
+                                    {{ record.receipt|doc_number:"RCT" }}
                                 </a>
                                 {% else %}—{% endif %}
                             </td>
@@ -59,7 +60,7 @@
                             <td>{{ record.payment_date|date:"d M Y" }}</td>
                             <td>
                                 {% if record.final_invoice %}
-                                    FI-{{ record.final_invoice.pk }}
+                                    {{ record.final_invoice|doc_number:"FI" }}
                                 {% else %}—{% endif %}
                             </td>
                         </tr>

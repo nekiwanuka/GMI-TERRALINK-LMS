@@ -25,7 +25,9 @@ def logistics_shell_context(request):
 
     notification_qs = request.user.notifications.all()
     notifications = list(
-        notification_qs.only("title", "message", "link", "is_read", "created_at")[:6]
+        notification_qs.only(
+            "title", "message", "category", "link", "is_read", "created_at"
+        ).order_by("is_read", "-created_at")[:8]
     )
     unread_qs = notification_qs.filter(is_read=False)
     unread_count = unread_qs.count()

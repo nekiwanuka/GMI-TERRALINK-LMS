@@ -1,7 +1,8 @@
 ﻿{% extends "logistics/base.html" %}
 {% load static %}
 
-{% block title %}Receipt {{ receipt.receipt_number }} - GMI TERRALINK{% endblock %}
+{% load logistics_docs %}
+{% block title %}Receipt {{ receipt|doc_number:"RCT" }} - GMI TERRALINK{% endblock %}
 
 {% block extra_css %}
 {% include "logistics/components/document_print_styles.html" %}
@@ -74,7 +75,7 @@
             id="receipt-preview-frame"
             class="document-preview-frame"
             src="{% url 'receipt_html_preview' receipt.pk %}?v={% now 'U' %}"
-            title="Receipt preview {{ receipt.receipt_number }}">
+            title="Receipt preview {{ receipt|doc_number:"RCT" }}">
         </iframe>
     </section>
 </div>

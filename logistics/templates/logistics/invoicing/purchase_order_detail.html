@@ -1,4 +1,5 @@
 {% extends "logistics/base.html" %}
+{% load logistics_docs %}
 
 {% block title %}Purchase Order {{ purchase_order.po_number }} - GMI TERRALINK{% endblock %}
 
@@ -76,6 +77,32 @@
     background: #d4af37;
     margin: 0 0 1rem 0;
 }
+.po-payment-cards {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+}
+.po-payment-card {
+    border: 1px solid #ece7cd;
+    border-radius: 10px;
+    background: #fffdf8;
+    padding: 0.75rem;
+}
+.po-payment-card small {
+    color: #6b6b6b;
+    display: block;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+.po-payment-card strong {
+    color: #1a1a1a;
+    display: block;
+    font-size: 1rem;
+    margin-top: 0.2rem;
+}
 .po-shell .table thead th {
     background: #f6f2e6;
     color: #67616b;
@@ -124,6 +151,13 @@
     .po-divider {
         margin-bottom: .65rem !important;
     }
+    .po-payment-cards {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: .45rem;
+    }
+    .po-payment-card {
+        padding: .45rem !important;
+    }
     .po-shell .table th,
     .po-shell .table td {
         font-size: .76rem;
@@ -171,7 +205,7 @@
                 <div class="po-meta-item"><span class="po-meta-label">Base PO</span><span class="po-meta-value">Yes</span></div>
                 {% endif %}
                 {% if purchase_order.final_invoice %}
-                <div class="po-meta-item"><span class="po-meta-label">Invoice Link</span><span class="po-meta-value">FI-{{ purchase_order.final_invoice.pk }}</span></div>
+                <div class="po-meta-item"><span class="po-meta-label">Invoice Link</span><span class="po-meta-value">{{ purchase_order.final_invoice|doc_number:"FI" }}</span></div>
                 {% endif %}
                 {% if purchase_order.supplier_name %}
                 <div class="po-meta-item"><span class="po-meta-label">Supplier</span><span class="po-meta-value">{{ purchase_order.supplier_name }}</span></div>
@@ -180,6 +214,26 @@
                 <div class="po-meta-item"><span class="po-meta-label">Transaction</span><span class="po-meta-value">{{ purchase_order.transaction.transaction_id }}</span></div>
                 <div class="po-meta-item"><span class="po-meta-label">Subtotal</span><span class="po-meta-value">{{ purchase_order.subtotal }} USD</span></div>
             </div>
+
+            {% if purchase_order.final_invoice %}
+            <div class="po-payment-cards">
+                <div class="po-payment-card">
+                    <small>Client Invoice</small>
+                    <strong>{{ purchase_order.final_invoice|doc_number:"FI" }}</strong>
+                    <span class="badge {{ purchase_order.invoice_payment_status_class|default:'bg-secondary' }} mt-2">{{ purchase_order.invoice_payment_status_label|default:'Unpaid' }}</span>
+                </div>
+                <div class="po-payment-card">
+                    <small>Item Funds</small>
+                    <strong>{{ purchase_order.client_total_paid|default:'0.00' }} {{ purchase_order.final_invoice.currency }}</strong>
+                    <span class="badge {{ purchase_order.item_funds_status_class|default:'bg-secondary' }} mt-2">{{ purchase_order.item_funds_status_label|default:'Item Funds Pending' }}</span>
+                </div>
+                <div class="po-payment-card">
+                    <small>Fees Balance</small>
+                    <strong>{{ purchase_order.client_fee_balance|default:'0.00' }} {{ purchase_order.final_invoice.currency }}</strong>
+                    <span class="badge {{ purchase_order.fee_payment_status_class|default:'bg-secondary' }} mt-2">{{ purchase_order.fee_payment_status_label|default:'Fees Status Pending' }}</span>
+                </div>
+            </div>
+            {% endif %}
 
             <div class="po-divider"></div>
 
@@ -219,6 +273,7 @@
                     {% for split in sibling_splits %}
                     <a href="{% url 'purchase_order_detail' split.pk %}" class="btn btn-sm {% if split.pk == purchase_order.pk %}btn-dark{% else %}btn-outline-secondary{% endif %}">
                         {{ split.po_number }} - {{ split.supplier_name }}
+                        {% if split.fee_payment_status_label %}<span class="badge {{ split.fee_payment_status_class }} ms-1">{{ split.fee_payment_status_label }}</span>{% endif %}
                     </a>
                     {% endfor %}
                 </div>

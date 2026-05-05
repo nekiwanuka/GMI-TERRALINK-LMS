@@ -1,5 +1,5 @@
 {% extends "logistics/base.html" %}
-{% load humanize %}
+{% load humanize logistics_docs %}
 
 {% block title %}Finance Summary - GMI TERRALINK Logistics Portal{% endblock %}
 
@@ -60,13 +60,17 @@
                 </div>
             </div>
             <div class="row g-3 mt-2">
-                <div class="col-md-6">
-                    <small class="text-muted d-block">Confirmed revenue marker</small>
-                    <strong>${{ confirmed_revenue|floatformat:2|intcomma }}</strong>
+                <div class="col-md-4">
+                    <small class="text-muted d-block">Statement billed</small>
+                    <strong>${{ total_billed|floatformat:2|intcomma }}</strong>
                 </div>
-                <div class="col-md-6">
-                    <small class="text-muted d-block">Workflow outstanding marker</small>
-                    <strong>${{ legacy_outstanding_estimate|floatformat:2|intcomma }}</strong>
+                <div class="col-md-4">
+                    <small class="text-muted d-block">Statement collected</small>
+                    <strong>${{ total_collected|floatformat:2|intcomma }}</strong>
+                </div>
+                <div class="col-md-4">
+                    <small class="text-muted d-block">Statement balance</small>
+                    <strong>${{ outstanding_balance|floatformat:2|intcomma }}</strong>
                 </div>
             </div>
         </div>
@@ -140,7 +144,7 @@
                         {% for invoice in recent_invoices %}
                         <tr>
                             <td class="fw-semibold">
-                                <a href="{% if invoice.loading %}{% url 'logistics_final_invoice_detail' invoice.pk %}{% else %}{% url 'sourcing_final_invoice_detail' invoice.pk %}{% endif %}" class="text-decoration-none">FI-{{ invoice.pk }}</a>
+                                <a href="{% if invoice.loading %}{% url 'logistics_final_invoice_detail' invoice.pk %}{% else %}{% url 'sourcing_final_invoice_detail' invoice.pk %}{% endif %}" class="text-decoration-none">{{ invoice|doc_number:"FI" }}</a>
                             </td>
                             <td>{{ invoice.transaction.customer.name }}</td>
                             <td class="text-end">{{ invoice.total_amount|floatformat:2|intcomma }} {{ invoice.currency }}</td>
