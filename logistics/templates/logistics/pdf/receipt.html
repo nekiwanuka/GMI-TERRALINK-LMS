@@ -5,18 +5,18 @@
 
 {% block extra_styles %}
 .r-hero {
-    margin-top: 8px;
+    margin-top: 9px;
     background: #fbf7e4;
     border: 1px solid #ece7cd;
     border-left: 4px solid #d4af37;
 }
-.r-hero td { padding: 10px 14px; vertical-align: top; }
+.r-hero td { padding: 10px 14px; vertical-align: middle; }
 .r-hero .eyebrow {
-    font-size: 8px;
+    font-size: 8.5px;
     font-weight: bold;
-    color: #5c4915;
+    color: #6f642c;
     text-transform: uppercase;
-    letter-spacing: 1px;
+    letter-spacing: 1.6px;
     margin-bottom: 4px;
 }
 .r-amount-pill { border-collapse: separate; margin-top: 2px; }
@@ -40,18 +40,18 @@
 }
 .r-meta { width: 100%; }
 .r-meta td { padding: 3px 0; border-bottom: 1px solid #e0d7b0; font-size: 9.5px; }
-.r-meta td.lbl { color: #7a6f4f; font-weight: bold; font-size: 7.5px; text-transform: uppercase; width: 35%; }
+.r-meta td.lbl { color: #7a6f4f; font-weight: bold; font-size: 8px; text-transform: uppercase; letter-spacing: 1px; width: 35%; }
 .r-meta td.val { color: #1a1a1a; font-weight: bold; text-align: right; }
 
 .r-grid { margin-top: 10px; }
 .r-grid td { padding: 0; vertical-align: top; }
 .r-panel {
-    background: #fafafa;
-    border: 1px solid #eae7e0;
+    background: #ffffff;
+    border: 1px solid #d9d9d9;
     padding: 10px 12px;
 }
 .r-panel .ptitle {
-    font-size: 8px;
+    font-size: 9px;
     font-weight: bold;
     color: #6c6772;
     text-transform: uppercase;
@@ -67,7 +67,7 @@
 
 .r-banner {
     margin-top: 8px;
-    padding: 8px 12px;
+    padding: 7px 12px;
     background: #fbe9e9;
     border: 1px solid #e5b9b9;
     color: #9c2f2f;
@@ -75,16 +75,26 @@
     font-weight: bold;
 }
 .r-status-strip {
-    margin-top: 6px;
-    padding: 4px 10px;
-    font-size: 9px;
+    margin-top: 8px;
+    padding: 7px 12px;
+    font-size: 10px;
     font-weight: bold;
     text-align: center;
     text-transform: uppercase;
-    letter-spacing: 2px;
+    letter-spacing: 1px;
 }
 .r-status-strip.paid { background: #e7f3ec; color: #0f6d49; border: 1px solid #b8d8c5; }
 .r-status-strip.reversed { background: #fbe9e9; color: #9c2f2f; border: 1px solid #e5b9b9; }
+
+.r-watermark {
+    margin: 8px 0 -2px 0;
+    text-align: center;
+    font-size: 28px;
+    font-weight: bold;
+    letter-spacing: 8px;
+    color: #d7eadf;
+}
+.r-watermark.reversed { color: #efd8d8; }
 
 .r-signoff { margin-top: 10px; }
 .r-signoff td { padding: 6px 4px; vertical-align: bottom; }
@@ -108,11 +118,13 @@
 {% block content %}
 
 {% if receipt.is_reversed %}
+<div class="r-watermark reversed">REVERSED</div>
 <div class="r-banner">
     Reversed on {{ receipt.reversed_at|date:"d M Y H:i" }}{% if receipt.reversed_by %} by {{ receipt.reversed_by.username }}{% endif %}{% if receipt.reversal_notes %} &mdash; {{ receipt.reversal_notes }}{% endif %}
 </div>
 {% elif invoice_fully_paid %}
-<div class="r-status-strip paid">PAID IN FULL</div>
+<div class="r-watermark">PAID</div>
+<div class="r-status-strip paid">Payment received in full</div>
 {% endif %}
 
 {# ---------- Hero: amount + meta ---------- #}

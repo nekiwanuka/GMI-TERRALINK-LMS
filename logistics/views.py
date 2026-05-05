@@ -4305,10 +4305,13 @@ def final_invoice_pdf(request, pk):
     balance = max((invoice.total_amount or 0) - total_paid, 0)
     if total_paid > 0 and balance <= 0:
         payment_status_label = "Paid"
+        payment_status_class = "bg-success"
     elif total_paid > 0:
         payment_status_label = "Partial Payment"
+        payment_status_class = "bg-warning text-dark"
     else:
         payment_status_label = "Unpaid"
+        payment_status_class = "bg-secondary"
     document_signature = _document_signature_for(invoice)
     pdf_data = render_to_pdf(
         "logistics/pdf/final_invoice.html",
@@ -4317,10 +4320,13 @@ def final_invoice_pdf(request, pk):
             "total_paid": total_paid,
             "balance": balance,
             "payment_status_label": payment_status_label,
+            "payment_status_class": payment_status_class,
             "document_signature": document_signature,
             "doc_label": "Cargo Invoice" if invoice.loading_id else "Sourcing Invoice",
             "doc_number": f"FI-{invoice.pk}",
             "doc_meta": invoice.transaction.transaction_id,
+            "doc_status": payment_status_label,
+            "doc_status_class": payment_status_class,
         },
     )
     response = HttpResponse(pdf_data, content_type="application/pdf")
@@ -5910,6 +5916,8 @@ def receipt_pdf(request, pk):
             "doc_label": "Official Receipt",
             "doc_number": receipt.receipt_number,
             "doc_meta": receipt.issued_at.strftime("%d %b %Y, %H:%M"),
+            "doc_status": "Reversed" if receipt.is_reversed else "Paid",
+            "doc_status_class": "is-reversed" if receipt.is_reversed else "is-paid",
         },
     )
     response = HttpResponse(pdf_bytes, content_type="application/pdf")
