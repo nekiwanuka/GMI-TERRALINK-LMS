@@ -1,9 +1,8 @@
 """HTML-to-PDF rendering helper.
 
-Renders Django templates straight to PDF using xhtml2pdf so that downloadable
-PDFs match the on-screen print previews. xhtml2pdf has limited CSS support
-(no flexbox/grid), so the templates under ``logistics/templates/logistics/pdf/``
-are written with table-based layouts.
+Browser rendering is preferred so downloads match print previews. Some shared
+hosts cannot build optional HTML-to-PDF packages such as xhtml2pdf/pycairo, so
+this module must not require them just to import the Django app.
 """
 
 from __future__ import annotations
@@ -17,7 +16,11 @@ import tempfile
 
 from django.conf import settings
 from django.template.loader import render_to_string
-from xhtml2pdf import pisa
+
+try:  # pragma: no cover - depends on optional deployment package
+    from xhtml2pdf import pisa
+except ImportError:  # pragma: no cover - production fallback path
+    pisa = None
 
 
 def _link_callback(uri: str, rel: str) -> str:  # pragma: no cover - thin
@@ -111,6 +114,9 @@ def _chromium_executable() -> str | None:
 def render_to_pdf(template_name: str, context: dict) -> bytes:
     """Render the given Django template to a PDF byte string."""
     html = render_to_string(template_name, context)
+    if pisa is None:
+        return _render_minimal_pdf(html)
+
     buffer = BytesIO()
     pisa_status = pisa.CreatePDF(
         src=html,
@@ -126,6 +132,41 @@ def render_to_pdf(template_name: str, context: dict) -> bytes:
             dest=buffer,
             encoding="utf-8",
         )
+    return buffer.getvalue()
+
+
+def _render_minimal_pdf(html: str) -> bytes:
+    """Return a simple PDF when optional HTML renderers are unavailable."""
+    from html import unescape
+
+    from reportlab.lib.pagesizes import A4
+    from reportlab.pdfgen import canvas
+
+    text = re.sub(r"<br\s*/?>", "\n", html, flags=re.IGNORECASE)
+    text = re.sub(r"</(p|tr|div|h[1-6]|li|table)>", "\n", text, flags=re.IGNORECASE)
+    text = re.sub(r"<[^>]+>", " ", text)
+    text = re.sub(r"[ \t]+", " ", unescape(text))
+
+    buffer = BytesIO()
+    pdf = canvas.Canvas(buffer, pagesize=A4)
+    width, height = A4
+    x = 40
+    y = height - 44
+    pdf.setFont("Helvetica", 9)
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        while line:
+            chunk = line[:115]
+            pdf.drawString(x, y, chunk)
+            line = line[115:]
+            y -= 12
+            if y < 44:
+                pdf.showPage()
+                pdf.setFont("Helvetica", 9)
+                y = height - 44
+    pdf.save()
     return buffer.getvalue()
 
 
