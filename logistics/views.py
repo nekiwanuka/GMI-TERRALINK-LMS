@@ -388,12 +388,19 @@ def _apply_loading_lane(queryset, lane):
 
 
 def _apply_client_lane(queryset, lane):
+    # Clients with no loadings AND no transactions are "new" and should be
+    # visible in every lane so they can be found right after creation.
+    unassigned = Q(loadings__isnull=True) & Q(transactions__isnull=True)
     if lane == "logistics":
         return queryset.filter(
-            Q(loadings__isnull=False) | Q(transactions__source_loading__isnull=False)
+            Q(loadings__isnull=False)
+            | Q(transactions__source_loading__isnull=False)
+            | unassigned
         ).distinct()
     if lane == "sourcing":
-        return queryset.filter(transactions__source_loading__isnull=True).distinct()
+        return queryset.filter(
+            Q(transactions__source_loading__isnull=True) | unassigned
+        ).distinct()
     return queryset
 
 
