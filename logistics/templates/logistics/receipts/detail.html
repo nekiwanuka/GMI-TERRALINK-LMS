@@ -765,9 +765,11 @@
 
     <section class="receipt-print-area">
         <article class="receipt-document">
-            <div class="receipt-watermark {% if receipt.is_reversed %}is-reversed{% endif %}">
-                {% if receipt.is_reversed %}REVERSED{% else %}PAID{% endif %}
-            </div>
+            {% if receipt.is_reversed %}
+            <div class="receipt-watermark is-reversed">REVERSED</div>
+            {% elif invoice_fully_paid %}
+            <div class="receipt-watermark">PAID</div>
+            {% endif %}
 
             {% include 'logistics/components/document_header.html' with doc_label="Official Receipt" doc_number=receipt.receipt_number doc_meta=receipt.issued_at|date:"d F Y H:i" doc_status=receipt.is_reversed|yesno:"Reversed,Paid" doc_status_class=receipt.is_reversed|yesno:"is-reversed,is-paid" %}
 
