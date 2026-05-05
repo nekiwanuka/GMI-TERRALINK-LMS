@@ -157,6 +157,13 @@ AUDIT_PAGE_SIZE = 40
 MIN_CONTAINS_SEARCH_LENGTH = 3
 
 
+def _prevent_stale_pdf_cache(response):
+    response["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    response["Pragma"] = "no-cache"
+    response["Expires"] = "0"
+    return response
+
+
 def _text_search_q(field_name, value):
     lookup = "icontains" if len(value) >= MIN_CONTAINS_SEARCH_LENGTH else "istartswith"
     return Q(**{f"{field_name}__{lookup}": value})
@@ -3944,6 +3951,7 @@ def proforma_pdf(request, pk):
         },
     )
     response = HttpResponse(pdf_data, content_type="application/pdf")
+    _prevent_stale_pdf_cache(response)
     department_prefix = "cargo" if proforma.loading_id else "sourcing"
     response["Content-Disposition"] = (
         f'attachment; filename="{department_prefix}_proforma_{proforma.transaction.transaction_id}.pdf"'
@@ -4330,6 +4338,7 @@ def final_invoice_pdf(request, pk):
         },
     )
     response = HttpResponse(pdf_data, content_type="application/pdf")
+    _prevent_stale_pdf_cache(response)
     department_prefix = "cargo" if invoice.loading_id else "sourcing"
     response["Content-Disposition"] = (
         f'attachment; filename="{department_prefix}_final_invoice_{invoice.transaction.transaction_id}.pdf"'
@@ -5921,6 +5930,7 @@ def receipt_pdf(request, pk):
         },
     )
     response = HttpResponse(pdf_bytes, content_type="application/pdf")
+    _prevent_stale_pdf_cache(response)
     response["Content-Disposition"] = (
         f'attachment; filename="Receipt-{receipt.receipt_number}.pdf"'
     )
