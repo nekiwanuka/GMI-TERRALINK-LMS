@@ -3,386 +3,30 @@
 
 {% block title %}{% if invoice.loading %}Cargo Final Invoice{% else %}Sourcing Final Invoice{% endif %} FI-{{ invoice.pk }} | GMI TERRALINK{% endblock %}
 
-{% block content %}
+{% block extra_css %}
 {% include "logistics/components/document_print_styles.html" %}
 <style>
-@page {
-    size: A4 portrait;
-    margin: 10mm;
+.invoice-preview-shell {
+    max-width: 920px;
 }
-@media print {
-    html, body {
-        margin: 0 !important;
-        padding: 0 !important;
-        background: white !important;
-        -webkit-print-color-adjust: exact;
-        print-color-adjust: exact;
-    }
-    body * {
-        visibility: hidden !important;
-    }
-    .print-root,
-    .print-root *,
-    #final-invoice-print-target,
-    #final-invoice-print-target * {
-        visibility: visible !important;
-    }
-    .print-root,
-    #final-invoice-print-target {
-        position: absolute !important;
-        left: 0 !important;
-        top: 0 !important;
-        width: 100% !important;
-        margin: 0 !important;
-        padding: 0 !important;
-    }
-    .no-print { display: none !important; }
-    .container {
-        width: 100% !important;
-        max-width: 100% !important;
-        padding: 0 !important;
-        margin: 0 !important;
-    }
-    .inv-page {
-        box-shadow: none !important;
-        border: 1px solid #ccc !important;
-        max-width: 100% !important;
-        width: 100% !important;
-        page-break-inside: avoid;
-    }
-    .inv-band,
-    .inv-tbl th,
-    .badge,
-    .inv-card {
-        -webkit-print-color-adjust: exact;
-        print-color-adjust: exact;
-    }
-    .inv-meta-row,
-    .inv-card,
-    .inv-tbl,
-    .inv-tbl tr,
-    .inv-total-row {
-        break-inside: avoid;
-        page-break-inside: avoid;
-    }
-    .navbar, footer { display: none !important; }
+.invoice-toolbar .btn {
+    border-radius: 8px;
 }
-.inv-page {
-    max-width: 780px;
-    margin: 0 auto;
+.invoice-summary .card {
+    border-radius: 12px;
+}
+.document-preview-frame {
+    width: 100%;
+    min-height: 1180px;
+    border: 1px solid #d7d7d7;
     background: #fff;
-    border: 1px solid #ccc;
-    padding: 0;
-    font-family: 'Segoe UI', Arial, sans-serif;
-    font-size: 13px;
-    color: #4f4a52;
-    display: flex;
-    flex-direction: column;
-    min-height: 1050px;
+    box-shadow: 0 12px 34px rgba(0, 0, 0, 0.08);
 }
-.inv-band {
-    background: #67616b;
-    color: #d4af37;
-    padding: 10px 28px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    font-weight: 800;
-    letter-spacing: .06em;
-    text-transform: uppercase;
-    font-size: 14px;
-}
-.inv-contacts {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    padding: 14px 28px 10px;
-}
-.inv-contacts-left {
-    font-size: 12px;
-    color: #333;
-    line-height: 1.6;
-}
-.inv-office-title {
-    font-size: 10px;
-    letter-spacing: .04em;
-    font-weight: 700;
-    color: #67616b;
-    text-transform: uppercase;
-}
-.inv-services {
-    margin: 0 28px 14px;
-    padding: 10px 12px;
-    border: 1px solid #ececec;
-    border-radius: 6px;
-    background: #fafafa;
-    font-size: 11px;
-    color: #4f4a52;
-}
-.inv-logo-plate {
-    background: #fff;
-    border: 1px solid #ececec;
-    border-radius: 6px;
-    padding: 4px 8px;
-    display: inline-flex;
-}
-.inv-logo { height: 68px; }
-.inv-meta-row {
-    display: flex;
-    gap: 20px;
-    padding: 18px 28px 12px;
-    margin-bottom: 10px;
-}
-.inv-card {
-    flex: 1;
-    border: 1px solid #e6e2d5;
-    border-radius: 6px;
-    padding: 14px 16px;
-    background: #fbf7e4;
-}
-.inv-card-title {
-    font-size: 10.5px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: .08em;
-    color: #8a8a8a;
-    margin-bottom: 10px;
-    padding-bottom: 6px;
-    border-bottom: 1px solid #ece7cd;
-}
-.inv-card p {
-    margin: 0 0 3px;
-    font-size: 13px;
-    line-height: 1.55;
-    color: #222;
-}
-.inv-card p strong {
-    font-weight: 700;
-    color: #4f4a52;
-}
-/* Bill To card refinements */
-.inv-billto-name {
-    font-size: 14.5px;
-    font-weight: 700;
-    color: #1a1a1a;
-    margin: 0 0 2px;
-    line-height: 1.25;
-}
-.inv-billto-company {
-    font-size: 12px;
-    color: #6b6b6b;
-    margin: 0 0 10px;
-}
-.inv-billto-meta {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 4px;
-    margin: 0 0 10px;
-    font-size: 12.5px;
-    color: #2a2a2a;
-}
-.inv-billto-meta div { display: flex; align-items: flex-start; gap: 8px; line-height: 1.35; }
-.inv-billto-meta i { color: #b08a1f; width: 14px; flex-shrink: 0; margin-top: 2px; }
-.inv-billto-divider {
-    border: none;
-    border-top: 1px dashed #d8d2bb;
-    margin: 10px 0;
-}
-.inv-billto-refs {
-    display: grid;
-    grid-template-columns: max-content 1fr;
-    column-gap: 10px;
-    row-gap: 4px;
-    font-size: 12.5px;
-}
-.inv-billto-refs dt {
-    font-weight: 700;
-    color: #6b6b6b;
-    text-transform: uppercase;
-    font-size: 10.5px;
-    letter-spacing: .06em;
-    padding-top: 2px;
-}
-.inv-billto-refs dd { margin: 0; color: #1a1a1a; }
-.inv-details-grid {
-    display: grid;
-    grid-template-columns: max-content 1fr;
-    column-gap: 14px;
-    row-gap: 6px;
-    margin: 0;
-    font-size: 13px;
-    align-items: baseline;
-}
-.inv-details-grid dt {
-    font-weight: 700;
-    color: #4f4a52;
-    font-size: 12.5px;
-    white-space: nowrap;
-}
-.inv-details-grid dt::after {
-    content: ":";
-    margin-left: 8px;
-    color: #b0a98e;
-    font-weight: 400;
-}
-.inv-details-grid dd { margin: 0; color: #1a1a1a; }
-.inv-tbl {
-    width: calc(100% - 56px);
-    margin: 0 28px;
-    border-collapse: collapse;
-    border: 1px solid #999;
-}
-.inv-tbl th {
-    background: #d4af37;
-    color: #4f4a52;
-    font-weight: 700;
-    font-size: 12px;
-    text-transform: uppercase;
-    padding: 8px 10px;
-    border: 1px solid #999;
-    text-align: center;
-}
-.inv-tbl th.desc-col { text-align: left; }
-.inv-tbl td {
-    padding: 8px 10px;
-    border-left: 1px solid #999;
-    border-right: 1px solid #999;
-    border-top: none;
-    border-bottom: none;
-    vertical-align: top;
-    font-size: 13px;
-}
-.inv-tbl td.text-center { text-align: center; }
-.inv-tbl td.text-end { text-align: right; }
-.inv-tbl td.qty-cell,
-.inv-tbl td.money-cell {
-    vertical-align: middle;
-}
-.inv-tbl td.desc-cell {
-    white-space: normal;
-    overflow-wrap: anywhere;
-    word-break: break-word;
-    line-height: 1.45;
-    vertical-align: top;
-}
-.inv-tbl tbody tr:last-child td {
-    border-bottom: 1px solid #999;
-}
-.inv-total-row td {
-    border: 1px solid #999;
-    border-top: 2px solid #67616b;
-    border-bottom: 2px solid #67616b;
-    font-weight: 700;
-    font-size: 16px;
-    padding: 10px 12px;
-    background: #fff8db;
-    color: #1a1a1a;
-    white-space: nowrap;
-}
-.inv-total-row td:nth-child(3) {
-    background: #fff1b8;
-    color: #1a1a1a;
-}
-.inv-total-row td:last-child {
-    background: #d4af37;
-    color: #1a1a1a;
-    font-size: 17px;
-    white-space: nowrap;
-}
-.inv-total-row .amount-due-label {
-    font-size: 11px;
-    color: #4f4a52 !important;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: .06em;
-}
-
-.inv-footer-ref {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 8px 28px 14px;
-    font-size: 11px;
-    color: #888;
-    border-top: 1px solid #ececec;
-    margin-top: 18px;
-}
-.inv-pay-grid {
-    display: grid;
-    grid-template-columns: 1.1fr 1fr;
-    gap: 14px;
-    margin: 18px 28px 0;
-}
-.inv-pay-card {
-    border: 1px solid #ddd;
-    border-radius: 4px;
-    padding: 12px 14px;
-    background: #fafafa;
-    font-size: 12px;
-    line-height: 1.55;
-    color: #333;
-}
-.inv-pay-card .inv-card-title {
-    font-size: 11px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: .04em;
-    color: #888;
-    margin-bottom: 8px;
-    padding-bottom: 6px;
-    border-bottom: 1px solid #eee;
-}
-.inv-pay-card .row-line {
-    display: flex;
-    justify-content: space-between;
-    gap: 10px;
-    padding: 2px 0;
-}
-.inv-pay-card .row-line span:first-child { color: #777; }
-.inv-sign-row {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 30px;
-    margin: 26px 28px 6px;
-    padding-top: 14px;
-    font-size: 12px;
-    color: #555;
-}
-.inv-sign-block .sign-line {
-    border-top: 1px solid #888;
-    margin-top: 38px;
-    padding-top: 4px;
-    font-weight: 600;
-    color: #333;
-}
-.inv-sign-block .sign-meta { color: #888; font-size: 11px; }
-.inv-signature-image {
-    display: block;
-    max-width: 160px;
-    max-height: 62px;
-    object-fit: contain;
-    margin-bottom: 4px;
-}
-.inv-sign-block .sign-line.signed {
-    margin-top: 0;
-}
-.inv-signed-meta {
-    display: block;
-    margin-top: 2px;
-    font-size: 10px;
-    color: #777;
-}
-.inv-customer-meta { font-size: 12px; color: #555; line-height: 1.55; }
-.inv-customer-meta i { color: #b89028; margin-right: 4px; }
-.inv-tbl tfoot td { font-size: 12.5px; }
-.inv-tbl tfoot tr.fee-row td { background: #fcfaf3; }
-.inv-tbl tfoot tr.subtotal-row td { background: #f5f1e1; font-weight: 700; }
-{% include "logistics/pdf/_base_styles.html" %}
-{% include "logistics/pdf/_final_invoice_styles.html" %}
 </style>
+{% endblock %}
 
-<!-- Action bar -->
-<div class="container no-print mt-3 mb-3">
+{% block content %}
+<div class="container no-print mt-3 mb-3 invoice-toolbar">
     <div class="d-flex justify-content-between align-items-center">
         <div>
             <a href="{% if invoice.loading %}{% url 'logistics_final_invoice_list' %}{% else %}{% url 'sourcing_final_invoice_list' %}{% endif %}" class="btn btn-sm btn-outline-secondary me-1">
@@ -402,7 +46,7 @@
                 <i class="bi bi-lock"></i> Locked
             </button>
             {% endif %}
-            <a href="{% if invoice.loading %}{% url 'logistics_final_invoice_pdf' invoice.pk %}{% else %}{% url 'sourcing_final_invoice_pdf' invoice.pk %}{% endif %}" class="btn btn-sm btn-outline-danger me-1" target="_blank">
+            <a href="{% if invoice.loading %}{% url 'logistics_final_invoice_pdf' invoice.pk %}{% else %}{% url 'sourcing_final_invoice_pdf' invoice.pk %}{% endif %}?v={% now 'U' %}" class="btn btn-sm btn-outline-danger me-1" target="_blank">
                 <i class="bi bi-file-pdf"></i> Download PDF
             </a>
             <a href="{% url 'final_invoice_sign' invoice.pk %}" class="btn btn-sm {% if document_signature %}btn-outline-success{% else %}btn-outline-dark{% endif %} me-1">
@@ -419,9 +63,9 @@
             {% endif %}
         </div>
         <div class="d-flex gap-2">
-            <button class="btn btn-sm btn-outline-secondary" type="button" onclick="openPrintPreview('final-invoice-print-target', '{% if invoice.loading %}Cargo Final Invoice{% else %}Sourcing Final Invoice{% endif %} FI-{{ invoice.pk }}')">
+            <a class="btn btn-sm btn-outline-secondary" href="{% if invoice.loading %}{% url 'logistics_final_invoice_html_preview' invoice.pk %}{% else %}{% url 'sourcing_final_invoice_html_preview' invoice.pk %}{% endif %}?v={% now 'U' %}" target="_blank">
                 <i class="bi bi-eye"></i> Print Preview
-            </button>
+            </a>
             <button class="btn btn-sm btn-dark" type="button" onclick="printDocument()">
                 <i class="bi bi-printer"></i> Print Document
             </button>
@@ -429,8 +73,7 @@
     </div>
 </div>
 
-<!-- Payment summary strip -->
-<div class="container no-print mb-3">
+<div class="container no-print mb-3 invoice-summary">
     <div class="row g-2 row-cols-2 row-cols-md-5">
         <div class="col">
             <div class="card border-0 bg-light h-100">
@@ -475,132 +118,71 @@
     </div>
 </div>
 
-<!-- Purchase order alert -->
-    {% if purchase_order %}
-    <div class="no-print" style="margin:16px 28px 0;">
-        <div class="alert alert-success d-flex justify-content-between align-items-center mb-0">
-            <div>
-                <strong>Purchase Order Ready:</strong> {{ purchase_order.po_number }}
-                <div class="small mt-1">Linked to FI-{{ invoice.pk }} ({{ split_purchase_orders|length }} supplier split{{ split_purchase_orders|length|pluralize }}).</div>
-            </div>
-            <div class="d-flex gap-2">
-                {% if invoice.transaction.fulfillment_order %}
-                <a href="{% url 'fulfillment_order_update' invoice.transaction.fulfillment_order.pk %}" class="btn btn-sm btn-outline-secondary">Open Fulfillment</a>
-                {% elif balance <= 0 %}
-                <a href="{% url 'fulfillment_order_create' invoice.transaction.pk %}?final_invoice={{ invoice.pk }}" class="btn btn-sm btn-outline-secondary">Start Fulfillment</a>
-                {% else %}
-                <span class="btn btn-sm btn-outline-secondary disabled">Awaiting Full Payment</span>
-                {% endif %}
-                <a href="{% url 'purchase_order_split_create' purchase_order.pk %}" class="btn btn-sm btn-outline-dark">Split to Supplier</a>
-                <a href="{% url 'purchase_order_detail' purchase_order.pk %}" class="btn btn-sm btn-dark">Open PO</a>
-            </div>
+{% if purchase_order %}
+<div class="no-print" style="margin:16px 28px 0;">
+    <div class="alert alert-success d-flex justify-content-between align-items-center mb-0">
+        <div>
+            <strong>Purchase Order Ready:</strong> {{ purchase_order.po_number }}
+            <div class="small mt-1">Linked to FI-{{ invoice.pk }} ({{ split_purchase_orders|length }} supplier split{{ split_purchase_orders|length|pluralize }}).</div>
+        </div>
+        <div class="d-flex gap-2">
+            {% if invoice.transaction.fulfillment_order %}
+            <a href="{% url 'fulfillment_order_update' invoice.transaction.fulfillment_order.pk %}" class="btn btn-sm btn-outline-secondary">Open Fulfillment</a>
+            {% elif balance <= 0 %}
+            <a href="{% url 'fulfillment_order_create' invoice.transaction.pk %}?final_invoice={{ invoice.pk }}" class="btn btn-sm btn-outline-secondary">Start Fulfillment</a>
+            {% else %}
+            <span class="btn btn-sm btn-outline-secondary disabled">Awaiting Full Payment</span>
+            {% endif %}
+            <a href="{% url 'purchase_order_split_create' purchase_order.pk %}" class="btn btn-sm btn-outline-dark">Split to Supplier</a>
+            <a href="{% url 'purchase_order_detail' purchase_order.pk %}" class="btn btn-sm btn-dark">Open PO</a>
         </div>
     </div>
-    {% elif can_generate_po %}
-    <div class="no-print" style="margin:16px 28px 0;">
-        <div class="alert alert-info d-flex justify-content-between align-items-center mb-0">
-            <div><strong>Invoice fully paid.</strong> Convert this invoice into a purchase order now.</div>
-            <div class="d-flex gap-2">
-                <a href="{% url 'fulfillment_order_create' invoice.transaction.pk %}?final_invoice={{ invoice.pk }}" class="btn btn-sm btn-outline-secondary">Start Fulfillment</a>
-                <a href="{% if invoice.loading %}{% url 'logistics_final_invoice_generate_po' invoice.pk %}{% else %}{% url 'sourcing_final_invoice_generate_po' invoice.pk %}{% endif %}" class="btn btn-sm btn-dark">Generate Purchase Order</a>
-            </div>
-        </div>
-    </div>
-    {% endif %}
-
-    {% if split_purchase_orders %}
-    <div class="no-print" style="margin:12px 28px 0;">
-        <div class="card border-0" style="background:#fafafa;border:1px solid #eee !important;">
-            <div class="card-body py-2 px-3">
-                <strong class="d-block mb-2">Supplier Split Orders (Same Invoice)</strong>
-                <div class="d-flex flex-wrap gap-2">
-                    {% for split_po in split_purchase_orders %}
-                    <a href="{% url 'purchase_order_detail' split_po.pk %}" class="btn btn-sm btn-outline-secondary">
-                        {{ split_po.po_number }} - {{ split_po.supplier_name }}
-                    </a>
-                    {% endfor %}
-                </div>
-            </div>
-        </div>
-    </div>
-    {% endif %}
-
-<!-- Invoice Document -->
-<div class="container pb-4 print-root">
-<div class="pdf-page" id="final-invoice-print-target">
-    {% include "logistics/pdf/_document_header.html" with doc_label=invoice.loading|yesno:"Cargo Invoice,Sourcing Invoice" doc_number="FI-"|add:invoice.pk|stringformat:"s" doc_meta=invoice.transaction.transaction_id doc_status=payment_status_label doc_status_class=payment_status_class %}
-    {% include "logistics/pdf/_final_invoice_body.html" %}
-    {% include "logistics/pdf/_document_footer.html" %}
 </div>
+{% elif can_generate_po %}
+<div class="no-print" style="margin:16px 28px 0;">
+    <div class="alert alert-info d-flex justify-content-between align-items-center mb-0">
+        <div><strong>Invoice fully paid.</strong> Convert this invoice into a purchase order now.</div>
+        <div class="d-flex gap-2">
+            <a href="{% url 'fulfillment_order_create' invoice.transaction.pk %}?final_invoice={{ invoice.pk }}" class="btn btn-sm btn-outline-secondary">Start Fulfillment</a>
+            <a href="{% if invoice.loading %}{% url 'logistics_final_invoice_generate_po' invoice.pk %}{% else %}{% url 'sourcing_final_invoice_generate_po' invoice.pk %}{% endif %}" class="btn btn-sm btn-dark">Generate Purchase Order</a>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{% if split_purchase_orders %}
+<div class="no-print" style="margin:12px 28px 0;">
+    <div class="card border-0" style="background:#fafafa;border:1px solid #eee !important;">
+        <div class="card-body py-2 px-3">
+            <strong class="d-block mb-2">Supplier Split Orders (Same Invoice)</strong>
+            <div class="d-flex flex-wrap gap-2">
+                {% for split_po in split_purchase_orders %}
+                <a href="{% url 'purchase_order_detail' split_po.pk %}" class="btn btn-sm btn-outline-secondary">
+                    {{ split_po.po_number }} - {{ split_po.supplier_name }}
+                </a>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<div class="container pb-4 invoice-preview-shell">
+    <iframe
+        id="final-invoice-preview-frame"
+        class="document-preview-frame"
+        src="{% if invoice.loading %}{% url 'logistics_final_invoice_html_preview' invoice.pk %}{% else %}{% url 'sourcing_final_invoice_html_preview' invoice.pk %}{% endif %}?v={% now 'U' %}"
+        title="Final invoice preview FI-{{ invoice.pk }}">
+    </iframe>
 </div>
 
 <script>
 function printDocument() {
-    const previewWindow = openPrintPreview(
-        'final-invoice-print-target',
-        '{% if invoice.loading %}Cargo Final Invoice{% else %}Sourcing Final Invoice{% endif %} FI-{{ invoice.pk }}',
-        true
-    );
-    if (!previewWindow) {
-        window.print();
+    const frame = document.getElementById('final-invoice-preview-frame');
+    if (frame && frame.contentWindow) {
+        frame.contentWindow.focus();
+        frame.contentWindow.print();
     }
-}
-
-function openPrintPreview(targetId, previewTitle, autoPrint) {
-    const source = document.getElementById(targetId);
-    if (!source) return;
-
-    const previewWindow = window.open('', '_blank', 'width=980,height=900,scrollbars=yes,resizable=yes');
-    if (!previewWindow) return;
-
-    // Copy ALL inline <style> blocks AND every external stylesheet <link> from the parent
-    // so the preview window renders identically to the live document (and print-preview / PDF).
-    const styleContent = Array.from(document.querySelectorAll('style'))
-        .map(s => s.innerHTML)
-        .join('\n');
-    const linkTags = Array.from(document.querySelectorAll('link[rel="stylesheet"]'))
-        .map(l => l.outerHTML)
-        .join('\n');
-
-    previewWindow.document.open();
-    previewWindow.document.write(`<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>${previewTitle}</title>
-    ${linkTags}
-    <style>${styleContent}</style>
-    <style>
-        body { background: #f4f4f1; padding: 14px; }
-        .preview-toolbar {
-            display: flex;
-            justify-content: flex-end;
-            gap: 8px;
-            margin-bottom: 10px;
-        }
-        @media print {
-            .preview-toolbar { display: none !important; }
-            body { padding: 0 !important; background: #fff !important; }
-        }
-    </style>
-</head>
-<body>
-    <div class="preview-toolbar no-print">
-        <button class="btn btn-sm btn-dark" onclick="window.print()"><i class="bi bi-printer"></i> Print</button>
-        <button class="btn btn-sm btn-outline-secondary" onclick="window.close()">Close</button>
-    </div>
-    ${source.outerHTML}
-</body>
-</html>`);
-    previewWindow.document.close();
-    if (autoPrint) {
-        previewWindow.onload = () => {
-            previewWindow.focus();
-            previewWindow.print();
-        };
-    }
-    return previewWindow;
 }
 </script>
 {% endblock %}

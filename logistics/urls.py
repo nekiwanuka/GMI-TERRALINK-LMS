@@ -256,6 +256,11 @@ urlpatterns = [
         name="logistics_proforma_pdf",
     ),
     path(
+        "logistics/invoicing/proformas/<int:pk>/html-preview/",
+        views.proforma_html_preview,
+        name="logistics_proforma_html_preview",
+    ),
+    path(
         "logistics/invoicing/final/",
         views.final_invoice_list,
         name="logistics_final_invoice_list",
@@ -279,6 +284,11 @@ urlpatterns = [
         "logistics/invoicing/final/<int:pk>/pdf/",
         views.final_invoice_pdf,
         name="logistics_final_invoice_pdf",
+    ),
+    path(
+        "logistics/invoicing/final/<int:pk>/html-preview/",
+        views.final_invoice_html_preview,
+        name="logistics_final_invoice_html_preview",
     ),
     path(
         "logistics/invoicing/final/<int:pk>/generate-po/",
@@ -316,6 +326,11 @@ urlpatterns = [
         name="sourcing_proforma_pdf",
     ),
     path(
+        "sourcing/invoicing/proformas/<int:pk>/html-preview/",
+        views.proforma_html_preview,
+        name="sourcing_proforma_html_preview",
+    ),
+    path(
         "sourcing/invoicing/final/",
         views.final_invoice_list,
         name="sourcing_final_invoice_list",
@@ -341,6 +356,11 @@ urlpatterns = [
         name="sourcing_final_invoice_pdf",
     ),
     path(
+        "sourcing/invoicing/final/<int:pk>/html-preview/",
+        views.final_invoice_html_preview,
+        name="sourcing_final_invoice_html_preview",
+    ),
+    path(
         "sourcing/invoicing/final/<int:pk>/generate-po/",
         views.final_invoice_generate_purchase_order,
         name="sourcing_final_invoice_generate_po",
@@ -364,6 +384,11 @@ urlpatterns = [
         name="proforma_confirm",
     ),
     path("invoicing/proformas/<int:pk>/pdf/", views.proforma_pdf, name="proforma_pdf"),
+    path(
+        "invoicing/proformas/<int:pk>/html-preview/",
+        views.proforma_html_preview,
+        name="proforma_html_preview",
+    ),
     path("invoicing/final/", views.final_invoice_list, name="final_invoice_list"),
     path(
         "invoicing/final/create/",
@@ -389,6 +414,11 @@ urlpatterns = [
         "invoicing/final/<int:pk>/pdf/",
         views.final_invoice_pdf,
         name="final_invoice_pdf",
+    ),
+    path(
+        "invoicing/final/<int:pk>/html-preview/",
+        views.final_invoice_html_preview,
+        name="final_invoice_html_preview",
     ),
     path(
         "invoicing/final/<int:pk>/generate-po/",
@@ -519,6 +549,11 @@ urlpatterns = [
     # Receipts
     path("receipts/", views.receipt_list, name="receipt_list"),
     path("receipts/<int:pk>/", views.receipt_detail, name="receipt_detail"),
+    path(
+        "receipts/<int:pk>/preview/",
+        views.receipt_html_preview,
+        name="receipt_html_preview",
+    ),
     path("receipts/<int:pk>/pdf/", views.receipt_pdf, name="receipt_pdf"),
     path("receipts/<int:pk>/reverse/", views.receipt_reverse, name="receipt_reverse"),
     # Sourcing Payments

@@ -113,14 +113,28 @@ def _draw_standard_doc_header(pdf, width, height, title, reference=""):
     from pathlib import Path
 
     margin = 40
-    primary = colors.HexColor("#1E1A23")
-    accent = colors.HexColor("#F4C21F")
+    primary = colors.HexColor("#1A1A1A")
+    accent = colors.HexColor("#D4AF37")
+    grey = colors.HexColor("#666666")
+    soft = colors.HexColor("#F7F4EA")
+    border = colors.HexColor("#D8D8D8")
+
+    pdf.setStrokeColor(border)
+    pdf.setLineWidth(0.8)
+    pdf.roundRect(24, 24, width - 48, height - 48, 10, fill=0, stroke=1)
+
+    pdf.setFillColor(soft)
+    pdf.setStrokeColor(colors.HexColor("#E5D8AC"))
+    pdf.roundRect(margin, height - 98, width - (2 * margin), 66, 8, fill=1, stroke=1)
+    pdf.setFillColor(accent)
+    pdf.roundRect(margin, height - 98, width - (2 * margin), 5, 2, fill=1, stroke=0)
 
     y_top = height - 34
-    pdf.setFillColor(colors.black)
+    pdf.setFillColor(primary)
     pdf.setFont("Helvetica-Bold", 8)
     pdf.drawString(margin, y_top, "CHINA BRANCH OFFICE")
     pdf.setFont("Helvetica", 7)
+    pdf.setFillColor(grey)
     pdf.drawString(margin, y_top - 12, "B239B (ECAT): +86 177 0195 4464")
     pdf.drawString(
         margin,
@@ -141,8 +155,8 @@ def _draw_standard_doc_header(pdf, width, height, title, reference=""):
         logo_plate_x = (width / 2) - 48
         logo_plate_y = y_top - 31
         pdf.setFillColor(colors.white)
-        pdf.setStrokeColor(colors.HexColor("#E6E6E6"))
-        pdf.roundRect(logo_plate_x, logo_plate_y, 96, 36, 4, fill=1, stroke=1)
+        pdf.setStrokeColor(accent)
+        pdf.roundRect(logo_plate_x, logo_plate_y, 96, 36, 7, fill=1, stroke=1)
         pdf.drawImage(
             str(logo_path),
             (width / 2) - 44,
@@ -157,13 +171,14 @@ def _draw_standard_doc_header(pdf, width, height, title, reference=""):
     pdf.drawCentredString(width / 2, y_top - 32, title)
     if reference:
         pdf.setFont("Helvetica", 8)
-        pdf.setFillColor(colors.grey)
+        pdf.setFillColor(grey)
         pdf.drawCentredString(width / 2, y_top - 44, str(reference))
 
-    pdf.setFillColor(colors.black)
+    pdf.setFillColor(primary)
     pdf.setFont("Helvetica-Bold", 8)
     pdf.drawRightString(width - margin, y_top, "UGANDA BRANCH OFFICE")
     pdf.setFont("Helvetica", 7)
+    pdf.setFillColor(grey)
     pdf.drawRightString(width - margin, y_top - 12, "+256 768 049 940")
     pdf.drawRightString(
         width - margin,
@@ -172,38 +187,39 @@ def _draw_standard_doc_header(pdf, width, height, title, reference=""):
     )
     pdf.drawRightString(width - margin, y_top - 32, "www.gmi-terralink.com")
 
-    pdf.setFillColor(accent)
-    pdf.rect(margin, height - 94, width - (2 * margin), 2, fill=1, stroke=0)
-
 
 def _draw_international_terms_footer(pdf, margin, y_top=60):
     """Draw a compact international terms block used on generated PDFs."""
     from reportlab.lib import colors
 
-    pdf.setFillColor(colors.grey)
+    pdf.setFillColor(colors.HexColor("#F7F4EA"))
+    pdf.setStrokeColor(colors.HexColor("#E5D8AC"))
+    pdf.roundRect(margin, y_top - 56, 515, 66, 7, fill=1, stroke=1)
+    pdf.setFillColor(colors.HexColor("#666666"))
     pdf.setFont("Helvetica", 8)
     pdf.drawString(
-        margin,
+        margin + 10,
         y_top,
         "International Terms: Ex-Works unless agreed in writing. Duties, taxes, and bank charges are for buyer account.",
     )
     pdf.drawString(
-        margin,
+        margin + 10,
         y_top - 12,
         "Delivery dates are estimates subject to carrier schedules, customs, force majeure, and regulatory controls.",
     )
     pdf.drawString(
-        margin,
+        margin + 10,
         y_top - 24,
         "Claims for shortages or damage must be submitted in writing within 3 business days of delivery.",
     )
     pdf.drawString(
-        margin,
+        margin + 10,
         y_top - 36,
         "gmiterralinkinfo@gmail.com | +256 768 049 940 | +86 177 0195 4464 | www.gmi-terralink.com",
     )
+    pdf.setFillColor(colors.HexColor("#D4AF37"))
     pdf.drawString(
-        margin,
+        margin + 10,
         y_top - 48,
         "Services: Procurement | Sea & Air Logistics | Mining & Equipment | Translation | Money Transfer",
     )
@@ -2355,8 +2371,8 @@ class Receipt(models.Model):
         pdf = rcanvas.Canvas(buffer, pagesize=A4)
         width, height = A4
         margin = 40
-        primary = rcolors.HexColor("#1E1A23")
-        accent = rcolors.HexColor("#F4C21F")
+        primary = rcolors.HexColor("#1A1A1A")
+        accent = rcolors.HexColor("#D4AF37")
         border = rcolors.HexColor("#E6E2D5")
         muted = rcolors.HexColor("#6C6772")
         soft_fill = rcolors.HexColor("#FBF7E4")
@@ -2365,7 +2381,7 @@ class Receipt(models.Model):
         gold_dark = rcolors.HexColor("#8A6D1D")
         ink = rcolors.HexColor("#1A1A1A")
         danger = rcolors.HexColor("#9C2F2F")
-        green_paid = rcolors.HexColor("#0F6D49")
+        paid_accent = rcolors.HexColor("#D4AF37")
 
         def wrap_text(text, max_width, font_name, font_size):
             words = str(text or "").split()
@@ -2749,7 +2765,7 @@ class Receipt(models.Model):
             pdf.translate(width / 2, height / 2)
             pdf.rotate(22)
             label = "REVERSED" if self.is_reversed else "PAID"
-            color = rcolors.HexColor("#B32B2B") if self.is_reversed else green_paid
+            color = rcolors.HexColor("#B32B2B") if self.is_reversed else paid_accent
             pdf.setFillColor(color)
             try:
                 pdf.setFillAlpha(0.08)

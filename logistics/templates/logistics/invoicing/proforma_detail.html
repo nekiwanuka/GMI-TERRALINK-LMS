@@ -1,550 +1,131 @@
-{% extends "logistics/base.html" %}
+﻿{% extends "logistics/base.html" %}
 {% load humanize static %}
 
 {% block title %}{% if proforma.loading %}Cargo Proforma{% else %}Sourcing Proforma{% endif %} PI-{{ proforma.pk }} | GMI TERRALINK{% endblock %}
 
-{% block content %}
+{% block extra_css %}
 {% include "logistics/components/document_print_styles.html" %}
 <style>
-@page {
-    size: A4 portrait;
-    margin: 10mm;
+.proforma-preview-shell {
+    max-width: 230mm;
+    overflow-x: auto;
 }
-@media print {
-    html, body {
-        margin: 0 !important;
-        padding: 0 !important;
-        background: white !important;
-        -webkit-print-color-adjust: exact;
-        print-color-adjust: exact;
-    }
-    body * {
-        visibility: hidden !important;
-    }
-    .print-root,
-    .print-root *,
-    #proforma-print-target,
-    #proforma-print-target * {
-        visibility: visible !important;
-    }
-    .print-root,
-    #proforma-print-target {
-        position: absolute !important;
-        left: 0 !important;
-        top: 0 !important;
-        width: 100% !important;
-        margin: 0 !important;
-        padding: 0 !important;
-    }
-    .no-print { display: none !important; }
-    .container {
-        width: 100% !important;
-        max-width: 100% !important;
-        padding: 0 !important;
-        margin: 0 !important;
-    }
-    .pf-page {
-        box-shadow: none !important;
-        border: 1px solid #d4d4d4 !important;
-        max-width: 100% !important;
-        width: 100% !important;
-        page-break-inside: avoid;
-    }
-    .pf-ribbon-bar,
-    .pf-table thead th,
-    .pf-total-pill,
-    .pf-bottom-strip,
-    .pf-international-box,
-    .pf-international-ribbon {
-        -webkit-print-color-adjust: exact;
-        print-color-adjust: exact;
-    }
-    .pf-table,
-    .pf-table tr,
-    .pf-signature,
-    .pf-summary {
-        break-inside: avoid;
-        page-break-inside: avoid;
-    }
-    .navbar, footer { display: none !important; }
-}
-
-.pf-page {
-    max-width: 780px;
+.proforma-toolbar .btn { border-radius: 8px; }
+.a4-preview-frame {
+    width: 210mm;
+    max-width: 100%;
+    min-height: 297mm;
     margin: 0 auto;
-    background: #ffffff;
-    border: 1px solid #d4d4d4;
-    padding: 0;
-    font-family: 'Trebuchet MS', 'Segoe UI', Arial, sans-serif;
-    font-size: 12px;
-    color: #222;
-    position: relative;
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-    min-height: 1050px;
-}
-
-.pf-top {
-    position: relative;
-    padding: 16px 24px 8px;
-    min-height: 98px;
-}
-
-.pf-brand {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    background: #fff;
-    border: 1px solid #ececec;
-    border-radius: 6px;
-    padding: 4px 8px;
-    width: fit-content;
-}
-
-.pf-logo {
-    height: 52px;
-}
-
-.pf-ribbon {
-    position: absolute;
-    right: 24px;
-    top: 0;
-    width: 300px;
-    height: 82px;
-    pointer-events: none;
-}
-
-.pf-ribbon-bar {
-    position: absolute;
-    right: 6px;
-    top: 0;
-    width: 240px;
-    height: 12px;
-    background: #d4af37;
-    border-radius: 0 0 4px 4px;
-}
-
-.pf-ribbon-title {
-    position: absolute;
-    right: 0;
-    top: 20px;
-    color: #d4af37;
-    font-size: 36px;
-    font-weight: 700;
-    letter-spacing: .02em;
-    line-height: 1;
-    text-transform: uppercase;
-}
-
-.pf-ribbon-subtitle {
-    position: absolute;
-    right: 2px;
-    top: 58px;
-    font-size: 10px;
-    font-weight: 700;
-    color: #4e5563;
-    letter-spacing: .05em;
-}
-
-.pf-info {
-    display: flex;
-    justify-content: space-between;
-    gap: 16px;
-    padding: 10px 24px 6px;
-}
-
-.pf-bill {
-    flex: 1;
-}
-
-.pf-bill-title,
-.pf-meta-title {
-    font-size: 10px;
-    text-transform: uppercase;
-    color: #6a727a;
-    font-weight: 700;
-    margin-bottom: 4px;
-}
-
-.pf-bill-name {
-    font-size: 16px;
-    font-weight: 700;
-    color: #4f4a52;
-    margin: 0 0 3px;
-}
-
-.pf-bill p,
-.pf-meta p {
-    margin: 0;
-    color: #4d5563;
-    line-height: 1.45;
-}
-
-.pf-meta {
-    width: 260px;
-    text-align: right;
-}
-
-.pf-table-wrap {
-    padding: 0 24px 0;
-}
-
-.pf-table {
-    width: 100%;
-    border-collapse: collapse;
-    border-top: 1px solid #bcbcbc;
-    border-bottom: 1px solid #bcbcbc;
-}
-
-.pf-table thead th {
-    background: #67616b;
-    color: #fff;
-    font-size: 10px;
-    font-weight: 700;
-    text-transform: uppercase;
-    padding: 5px 8px;
-    border-right: 1px solid #e2e2e2;
-}
-
-.pf-table thead th.pf-col-sl,
-.pf-table thead th.pf-col-desc {
-    background: #d4af37;
-}
-
-.pf-table thead th:last-child {
-    border-right: none;
-}
-
-.pf-table td {
-    padding: 6px 8px;
-    border-bottom: 1px solid #cfd3d6;
-    border-right: 1px solid #dfe2e4;
-    color: #2f3440;
-    line-height: 1.35;
-}
-
-.pf-table td:last-child {
-    border-right: none;
-}
-
-.pf-table tbody tr:last-child td {
-    border-bottom: 1px solid #bcbcbc;
-}
-
-.pf-col-sl,
-.pf-col-qty {
-    text-align: center;
-    width: 58px;
-}
-
-.pf-col-price,
-.pf-col-amt {
-    text-align: right;
-    width: 120px;
-}
-
-.pf-col-desc {
-    width: auto;
-}
-
-.pf-lower {
-    display: flex;
-    justify-content: flex-end;
-    gap: 18px;
-    padding: 10px 24px 10px;
-}
-
-.pf-footer-notes {
-    margin-top: auto;
-    padding: 12px 24px 8px;
-    border-top: 1px solid #e6e8ea;
-}
-
-.pf-footer-notes h6 {
-    margin: 0 0 4px;
-    font-size: 11px;
-    font-weight: 700;
-    color: #4f4a52;
-}
-
-.pf-footer-notes p {
-    margin: 0;
-    font-size: 10px;
-    line-height: 1.5;
-    color: #4e5563;
-}
-
-.pf-notes {
-    flex: 1;
-}
-
-.pf-notes h6,
-.pf-summary h6 {
-    margin: 0 0 5px;
-    font-size: 12px;
-    font-weight: 700;
-    color: #222;
-}
-
-.pf-notes p {
-    margin: 0;
-    font-size: 11px;
-    line-height: 1.45;
-    color: #555;
-}
-
-.pf-summary {
-    width: 280px;
-}
-
-.pf-sum-row {
-    display: flex;
-    justify-content: space-between;
-    font-size: 12px;
-    margin-bottom: 0;
-    padding: 4px 0;
-    border-bottom: 1px solid #d8dcde;
-}
-
-.pf-sum-row strong {
-    font-weight: 700;
-    color: #4f4a52;
-}
-
-.pf-total-pill {
-    margin-top: 3px;
-    display: flex;
-    border-radius: 0;
-    overflow: hidden;
-    color: #fff;
-    font-weight: 700;
-    font-size: 12px;
-}
-
-.pf-total-pill span {
-    display: inline-block;
-    padding: 5px 10px;
-}
-
-.pf-total-pill span:first-child {
-    background: #d4af37;
-    text-transform: uppercase;
-}
-
-.pf-total-pill span:last-child {
-    flex: 1;
-    text-align: right;
-    background: #67616b;
-}
-
-.pf-signature {
-    text-align: right;
-    padding: 6px 24px 8px;
-}
-
-.pf-sign-line {
-    display: inline-block;
-    min-width: 120px;
-    border-bottom: 1px solid #7e858f;
-    margin-bottom: 3px;
-    color: #7e858f;
-    font-style: italic;
-}
-
-.pf-signature small {
-    display: block;
-    color: #7e858f;
-}
-
-.pf-signature-image {
-    display: block;
-    max-width: 150px;
-    max-height: 58px;
-    object-fit: contain;
-    margin: 0 0 4px auto;
-}
-
-.pf-signed-meta {
-    display: block;
-    font-size: 8.5px;
-    color: #6f7680;
-    line-height: 1.25;
-}
-
-.pf-international-footer {
-    margin: auto 24px 14px;
-    border-top: 1px solid #d7dcdf;
-    padding-top: 8px;
-    color: #4e5563;
-    font-size: 9.5px;
-    line-height: 1.35;
-}
-
-.pf-international-grid {
-    display: grid;
-    grid-template-columns: 1.1fr 0.95fr 1fr;
-    gap: 8px;
-}
-
-.pf-international-box {
-    border: 1px solid #e4e7ea;
-    background: #fbfcfd;
-    padding: 7px 8px;
-    min-height: 74px;
-}
-
-.pf-international-box h6 {
-    margin: 0 0 4px;
-    font-size: 9px;
-    font-weight: 800;
-    text-transform: uppercase;
-    letter-spacing: .05em;
-    color: #4f4a52;
-}
-
-.pf-international-box p {
-    margin: 0 0 3px;
-}
-
-.pf-international-ribbon {
-    margin-top: 6px;
-    padding: 5px 8px;
-    background: #fbf7e4;
-    border: 1px solid #ece7cd;
-    color: #4f4a52;
-    text-align: center;
-    font-size: 9px;
-}
-
-.pf-international-ribbon strong {
-    color: #9b7622;
-}
-
-.pf-bottom-strip {
-    margin-top: 8px;
-    background: #ffffff;
-    border-top: 1px solid #d7dcdf;
-    height: 50px;
-    position: relative;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    color: #4e5563;
-    font-size: 10px;
-    padding: 0 16px;
-    gap: 8px;
-}
-
-.pf-bottom-strip::before {
-    content: "";
-    position: absolute;
-    left: 50%;
-    transform: translateX(-50%);
-    bottom: -6px;
-    width: 230px;
-    height: 10px;
-    background: #d4af37;
-    border-radius: 7px;
-}
-
-.pf-bottom-strip::after {
-    content: none;
-}
-
-.pf-contact {
-    position: relative;
-    z-index: 2;
-}
-
-.pf-muted {
-    color: #5f6775;
-}
-
-.pf-bill-name,
-.pf-table td strong,
-.pf-total-pill span:last-child,
-.pf-ribbon-title,
-.pf-ribbon-subtitle {
-    font-weight: 700;
-}
-
-.no-print .btn {
+    border: 1px solid #cfcfcf;
     border-radius: 4px;
-    font-weight: 600;
-    transition: all .18s ease;
+    display: block;
+    background: #fff;
 }
 
-.no-print .btn-outline-secondary {
-    color: #4e5563;
-    border-color: #b9bfc6;
-    background: #ffffff;
+/* ── document card ── */
+.pi-card {
+    background: #fff;
+    border: 1px solid #ccc;
+    padding: 0;
+    font-family: Arial, sans-serif;
+    font-size: 10px;
+    color: #333;
 }
 
-.no-print .btn-outline-secondary:hover,
-.no-print .btn-outline-secondary:focus {
-    color: #4f4a52;
-    border-color: #67616b;
-    background: #f4f5f6;
-}
+/* ── HEADER ── */
+.hdr-table { width: 100%; background: #fbf7eb; border-bottom: 2px solid #d4af37; border-collapse: collapse; }
+.hdr-logo-cell { width: 100px; padding: 10px 8px 10px 14px; vertical-align: middle; }
+.hdr-logo { width: 90px; }
+.hdr-brand-cell { width: 220px; padding: 10px 8px; vertical-align: middle; }
+.hdr-brand-name { font-size: 16px; font-weight: bold; color: #1f1f1f; }
+.hdr-brand-tag { font-size: 8px; color: #b89028; text-transform: uppercase; letter-spacing: 1.4px; font-weight: bold; margin-top: 2px; }
+.hdr-doc-cell { padding: 10px 14px 10px 8px; vertical-align: middle; text-align: right; }
+.hdr-doc-title { font-size: 18px; font-weight: bold; color: #555055; text-transform: uppercase; letter-spacing: 1px; }
+.hdr-doc-number { font-size: 13px; color: #c0322b; font-weight: bold; letter-spacing: 1px; margin-top: 3px; }
+.hdr-doc-meta { font-size: 9px; color: #6c6772; text-transform: uppercase; letter-spacing: 0.8px; margin-top: 2px; }
 
-.no-print .btn-outline-primary {
-    color: #4f4a52;
-    border-color: #67616b;
-    background: #ffffff;
-}
+/* ── ADDRESS BAR ── */
+.addr-table { width: 100%; background: #f6f3ec; border-bottom: 1px solid #ddd5be; border-collapse: collapse; }
+.addr-cell { width: 50%; padding: 8px 14px; vertical-align: top; }
+.addr-cell-right { border-left: 1px solid #e3d9c1; }
+.addr-branch { font-size: 8px; font-weight: bold; color: #8a6d1d; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 3px; }
+.addr-line { font-size: 9px; color: #3a3a3a; margin-bottom: 2px; }
+.addr-phone { font-size: 9px; font-weight: bold; color: #1f1f1f; margin-top: 3px; }
+.addr-email { font-size: 8.5px; color: #4a4a4a; margin-top: 2px; }
 
-.no-print .btn-outline-primary:hover,
-.no-print .btn-outline-primary:focus {
-    color: #ffffff;
-    border-color: #67616b;
-    background: #67616b;
-}
+/* ── BILL TO / AMOUNT DUE ── */
+.pi-body { padding: 12px 14px; }
+.meta-table { width: 100%; border-collapse: collapse; }
+.meta-bill-cell { width: 58%; padding: 0 10px 0 0; vertical-align: top; }
+.meta-amt-cell { width: 42%; padding: 0 0 0 10px; vertical-align: top; border-left: 1px solid #e0e0e0; }
+.meta-section-title { font-size: 9px; font-weight: bold; color: #6a727a; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 5px; }
+.meta-doc-type { font-size: 9px; color: #555; margin-bottom: 3px; font-weight: bold; }
+.meta-client-name { font-size: 15px; font-weight: bold; color: #2d2d2d; margin-bottom: 4px; margin-top: 2px; }
+.meta-detail { font-size: 9px; color: #4d5563; margin-bottom: 2px; }
+.meta-total-row { font-size: 10px; color: #4d5563; margin-bottom: 3px; text-align: right; }
+.meta-total-row b { color: #1f1f1f; }
 
-.no-print .btn-outline-danger {
-    color: #d4af37;
-    border-color: #d4af37;
-    background: #ffffff;
-}
+/* ── LINE ITEMS ── */
+.items-table { width: 100%; margin-top: 12px; border-top: 1px solid #aaa; border-bottom: 1px solid #aaa; border-collapse: collapse; }
+.items-table thead th { background: #d4af37; color: #fff; padding: 6px 8px; font-size: 9px; font-weight: bold; text-transform: uppercase; text-align: left; }
+.items-table thead th.right { text-align: right; }
+.items-table thead th.center { text-align: center; }
+.items-table tbody td { padding: 7px 8px; font-size: 9.5px; color: #2f3440; border-bottom: 1px solid #d9dee1; }
+.items-table tbody td.right { text-align: right; }
+.items-table tbody td.center { text-align: center; }
+.items-table tbody tr.alt td { background: #f9f9f9; }
 
-.no-print .btn-outline-danger:hover,
-.no-print .btn-outline-danger:focus {
-    color: #4f4a52;
-    border-color: #d4af37;
-    background: #d4af37;
-}
+/* ── TOTALS ── */
+.totals-outer { width: 100%; border-collapse: collapse; margin-top: 10px; }
+.totals-spacer { width: 50%; }
+.totals-inner { width: 100%; border: 1px solid #d8dcde; border-collapse: collapse; }
+.totals-inner td { padding: 5px 9px; font-size: 9.5px; border-bottom: 1px solid #d8dcde; }
+.totals-inner td.k { width: 60%; color: #4f4a52; }
+.totals-inner td.v { width: 40%; text-align: right; font-weight: bold; color: #1a1a1a; }
+.totals-grand td { font-weight: bold; font-size: 11px; padding: 7px 9px; border: 0; }
+.totals-grand td.k { background: #d4af37; color: #fff; }
+.totals-grand td.v { background: #67616b; color: #fff; text-align: right; }
 
-.no-print .btn-success {
-    color: #4f4a52;
-    background: #d4af37;
-    border-color: #d4af37;
-}
+/* ── SIGNATURE ── */
+.sign-table { width: 100%; border-collapse: collapse; margin-top: 16px; border-top: 1px dashed #c8c4b5; }
+.sign-left { width: 60%; padding: 8px 10px 0 0; vertical-align: top; }
+.sign-right { width: 40%; padding: 8px 0 0 10px; vertical-align: top; text-align: right; }
+.sign-label { font-size: 8px; color: #6c6772; text-transform: uppercase; letter-spacing: 0.8px; }
+.sign-name { font-size: 9.5px; font-weight: bold; color: #1a1a1a; border-top: 1px solid #7e858f; padding-top: 3px; display: inline-block; margin-top: 28px; }
+.sign-img { height: 36px; margin-top: 4px; }
+.sign-ref-label { font-size: 8px; color: #6c757d; text-transform: uppercase; letter-spacing: 0.8px; }
+.sign-ref-id { font-size: 11px; font-weight: bold; color: #1a1a1a; margin-top: 3px; }
+.sign-ref-tx { font-size: 8.5px; color: #6c757d; margin-top: 2px; }
 
-.no-print .btn-success:hover,
-.no-print .btn-success:focus {
-    color: #ffffff;
-    background: #67616b;
-    border-color: #67616b;
-}
+/* ── TERMS GRID ── */
+.terms-table { width: 100%; margin-top: 12px; border: 1px solid #ece5d2; border-collapse: collapse; }
+.terms-table td { width: 33.33%; padding: 8px; vertical-align: top; background: #fbf7eb; border-right: 1px solid #ece5d2; font-size: 8px; color: #4d5563; line-height: 1.45; }
+.terms-table td:last-child { border-right: 0; }
+.terms-td-title { font-size: 8px; font-weight: bold; color: #8a6d1d; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 4px; }
 
-.no-print .btn-dark {
-    color: #ffffff;
-    background: #67616b;
-    border-color: #67616b;
-}
+/* ── FOOTER ── */
+.foot-outer { padding: 8px 14px 12px; }
+.foot-table { width: 100%; border-collapse: collapse; margin-top: 8px; border-top: 1px solid #e9ecef; }
+.foot-cell { padding: 5px 0; font-size: 7.5px; color: #6c757d; line-height: 1.4; }
+.services-table { width: 100%; margin-top: 5px; border: 1px solid #ece7cd; border-collapse: collapse; background: #fbf7e4; }
+.services-table td { padding: 4px 8px; font-size: 7.5px; color: #4a4a4a; text-align: center; }
+.services-table b { color: #b89028; }
+.validation-table { width: 100%; margin-top: 4px; border-collapse: collapse; border-top: 1px dashed #d0cbb8; }
+.validation-table td { padding: 4px 0; font-size: 7px; color: #8a8a8a; text-transform: uppercase; letter-spacing: 0.5px; text-align: center; }
 
-.no-print .btn-dark:hover,
-.no-print .btn-dark:focus {
-    color: #4f4a52;
-    background: #d4af37;
-    border-color: #d4af37;
+@media print {
+    .pi-card { border: none !important; }
+    .hdr-table thead th, .items-table thead th,
+    .totals-grand td, .terms-table td, .services-table td {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
 }
-{% include "logistics/pdf/_base_styles.html" %}
-{% include "logistics/pdf/_proforma_styles.html" %}
 </style>
+{% endblock %}
 
-<!-- Action bar (no print) -->
-<div class="container no-print mt-3 mb-3">
+{% block content %}
+<div class="container no-print mt-3 mb-3 proforma-toolbar">
     <div class="d-flex justify-content-between align-items-center">
         <div>
             <a href="{% if proforma.loading %}{% url 'logistics_proforma_list' %}{% else %}{% url 'sourcing_proforma_list' %}{% endif %}" class="btn btn-sm btn-outline-secondary me-1">
@@ -560,7 +141,7 @@
                 <i class="bi bi-pencil"></i> Edit
             </a>
             {% endif %}
-            <a href="{% if proforma.loading %}{% url 'logistics_proforma_pdf' proforma.pk %}{% else %}{% url 'sourcing_proforma_pdf' proforma.pk %}{% endif %}" class="btn btn-sm btn-outline-danger me-1" target="_blank">
+            <a href="{% if proforma.loading %}{% url 'logistics_proforma_pdf' proforma.pk %}{% else %}{% url 'sourcing_proforma_pdf' proforma.pk %}{% endif %}?v={% now 'U' %}" class="btn btn-sm btn-outline-danger me-1" target="_blank">
                 <i class="bi bi-file-pdf"></i> Download PDF
             </a>
             <a href="{% url 'proforma_sign' proforma.pk %}" class="btn btn-sm {% if document_signature %}btn-outline-success{% else %}btn-outline-dark{% endif %} me-1">
@@ -587,81 +168,37 @@
     </div>
 </div>
 
-<!-- Proforma Invoice Document -->
-<div class="container pb-4 print-root">
-<div class="pdf-page" id="proforma-print-target">
-    {% include "logistics/pdf/_document_header.html" with doc_label=proforma.loading|yesno:"Cargo Proforma,Sourcing Proforma" doc_number="PI-"|add:proforma.pk|stringformat:"s" doc_meta=proforma.transaction.transaction_id %}
-    {% include "logistics/pdf/_proforma_body.html" %}
-    {% include "logistics/pdf/_document_footer.html" %}
-</div>
+<div class="container pb-4 proforma-preview-shell">
+
+<!-- iframe: renders proforma_standalone.html directly — zero Bootstrap interference -->
+<iframe
+    id="proforma-print-iframe"
+    src="{% if proforma.loading %}{% url 'logistics_proforma_html_preview' proforma.pk %}{% else %}{% url 'sourcing_proforma_html_preview' proforma.pk %}{% endif %}?v={% now 'U' %}"
+    class="a4-preview-frame"
+    scrolling="no"
+    onload="autoSizeIframe(this)">
+</iframe>
+
 </div>
 
 <script>
+function autoSizeIframe(iframe) {
+    try {
+        iframe.style.height = iframe.contentWindow.document.body.scrollHeight + 40 + 'px';
+    } catch(e) {}
+}
+
 function printDocument() {
-    const previewWindow = openPrintPreview(
-        'proforma-print-target',
-        '{% if proforma.loading %}Cargo Proforma{% else %}Sourcing Proforma{% endif %} PI-{{ proforma.pk }}',
-        true
-    );
-    if (!previewWindow) {
-        window.print();
+    const iframeUrl = document.getElementById('proforma-print-iframe').src;
+    const w = window.open(iframeUrl, '_blank', 'width=980,height=900,scrollbars=yes,resizable=yes');
+    if (w) {
+        w.onload = function() { w.focus(); w.print(); };
     }
 }
 
-function openPrintPreview(targetId, previewTitle, autoPrint) {
-    const source = document.getElementById(targetId);
-    if (!source) return;
-
-    const previewWindow = window.open('', '_blank', 'width=980,height=900,scrollbars=yes,resizable=yes');
-    if (!previewWindow) return;
-
-    const styleContent = Array.from(document.querySelectorAll('style'))
-        .map(s => s.innerHTML)
-        .join('\n');
-    const linkTags = Array.from(document.querySelectorAll('link[rel="stylesheet"]'))
-        .map(l => l.outerHTML)
-        .join('\n');
-
-    previewWindow.document.open();
-    previewWindow.document.write(`<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>${previewTitle}</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    ${linkTags}
-    <style>${styleContent}</style>
-    <style>
-        body { background: #f4f4f1; padding: 14px; }
-        .preview-toolbar {
-            display: flex;
-            justify-content: flex-end;
-            gap: 8px;
-            margin-bottom: 10px;
-        }
-        @media print {
-            .preview-toolbar { display: none !important; }
-            body { padding: 0 !important; background: #fff !important; }
-        }
-    </style>
-</head>
-<body>
-    <div class="preview-toolbar no-print">
-        <button class="btn btn-sm btn-dark" onclick="window.print()"><i class="bi bi-printer"></i> Print</button>
-        <button class="btn btn-sm btn-outline-secondary" onclick="window.close()">Close</button>
-    </div>
-    ${source.outerHTML}
-</body>
-</html>`);
-    previewWindow.document.close();
-    if (autoPrint) {
-        previewWindow.onload = () => {
-            previewWindow.focus();
-            previewWindow.print();
-        };
-    }
-    return previewWindow;
+function openPrintPreview(targetId, previewTitle) {
+    const iframeUrl = document.getElementById('proforma-print-iframe').src;
+    window.open(iframeUrl, '_blank', 'width=980,height=900,scrollbars=yes,resizable=yes');
 }
 </script>
 {% endblock %}

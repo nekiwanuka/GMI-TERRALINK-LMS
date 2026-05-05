@@ -23,6 +23,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils._os import safe_join
+from django.views.decorators.clickjacking import xframe_options_sameorigin
 
 from .pi_parser import (
     parse_purchase_inquiry,
@@ -150,7 +151,7 @@ from .services import (
     transition_shipment,
 )
 from .services.reporting import DirectorReportingService
-from .services.pdf_render import render_to_pdf
+from .services.pdf_render import render_to_browser_pdf
 
 DEFAULT_PAGE_SIZE = 20
 AUDIT_PAGE_SIZE = 40
@@ -162,6 +163,49 @@ def _prevent_stale_pdf_cache(response):
     response["Pragma"] = "no-cache"
     response["Expires"] = "0"
     return response
+
+
+PDF_BRAND_BLACK = colors.HexColor("#1A1A1A")
+PDF_BRAND_GOLD = colors.HexColor("#D4AF37")
+PDF_BRAND_GREY = colors.HexColor("#666666")
+PDF_SOFT_GREY = colors.HexColor("#F6F6F6")
+PDF_SOFT_GOLD = colors.HexColor("#F7F4EA")
+PDF_BORDER = colors.HexColor("#D8D8D8")
+
+
+def _pdf_value_present(value):
+    return value not in (None, "", "-", "N/A")
+
+
+def _draw_pdf_card(pdf, x, top, width, height, title, fill=None):
+    fill = fill or PDF_SOFT_GREY
+    pdf.setFillColor(fill)
+    pdf.setStrokeColor(PDF_BORDER)
+    pdf.setLineWidth(0.7)
+    pdf.roundRect(x, top - height, width, height, 8, fill=1, stroke=1)
+    pdf.setFillColor(PDF_BRAND_GOLD)
+    pdf.roundRect(x + 8, top - 14, 34, 4, 2, fill=1, stroke=0)
+    pdf.setFillColor(PDF_BRAND_BLACK)
+    pdf.setFont("Helvetica-Bold", 10)
+    pdf.drawString(x + 12, top - 28, title)
+    return top - 45
+
+
+def _draw_pdf_key_values(pdf, x, y, rows, label_width=86, line_height=14, max_chars=58):
+    pdf.setFont("Helvetica", 9)
+    cursor = y
+    for label, value in rows:
+        if not _pdf_value_present(value):
+            continue
+        text = str(value)
+        pdf.setFillColor(PDF_BRAND_GREY)
+        pdf.setFont("Helvetica-Bold", 8.5)
+        pdf.drawString(x, cursor, f"{label}:")
+        pdf.setFillColor(PDF_BRAND_BLACK)
+        pdf.setFont("Helvetica", 9)
+        pdf.drawString(x + label_width, cursor, text[:max_chars])
+        cursor -= line_height
+    return cursor
 
 
 def _text_search_q(field_name, value):
@@ -1154,74 +1198,67 @@ def loading_document(request, pk):
 
     _draw_standard_doc_header(pdf, width, height, title, reference)
 
-    pdf.setFillColor(colors.black)
-    top = height - 126
-    pdf.setFont("Helvetica-Bold", 12)
-    pdf.drawString(margin, top, "Shipment Reference")
-    pdf.setFont("Helvetica", 9)
-    pdf.drawString(margin, top - 16, f"Entry Number: {loading.loading_id}")
-    pdf.drawString(margin, top - 30, f"Client: {loading.client.name}")
-    pdf.drawString(margin, top - 44, f"Entry Type: {loading.get_entry_type_display()}")
-    pdf.drawString(
-        margin,
-        top - 58,
-        f"Warehouse: {loading.warehouse_location or '-'}",
+    top = height - 120
+    card_gap = 12
+    card_width = ((width - (2 * margin)) - card_gap) / 2
+    info_y = _draw_pdf_card(
+        pdf, margin, top, card_width, 94, "Shipment Reference", PDF_SOFT_GOLD
+    )
+    _draw_pdf_key_values(
+        pdf,
+        margin + 12,
+        info_y,
+        [
+            ("Entry Number", loading.loading_id),
+            ("Client", loading.client.name),
+            ("Entry Type", loading.get_entry_type_display()),
+            ("Warehouse", loading.warehouse_location),
+        ],
+        label_width=78,
+        max_chars=35,
     )
 
-    route_top = top - 80
-    pdf.setFont("Helvetica-Bold", 12)
-    pdf.drawString(margin, route_top, "Route & Cargo")
-    pdf.setFont("Helvetica", 9)
-    pdf.drawString(margin, route_top - 16, f"Origin: {loading.origin}")
-    pdf.drawString(margin, route_top - 30, f"Destination: {loading.destination}")
-    pdf.drawString(
-        margin,
-        route_top - 44,
-        f"Loading Date: {loading.loading_date.strftime('%Y-%m-%d %H:%M')}",
+    route_x = margin + card_width + card_gap
+    route_y = _draw_pdf_card(
+        pdf, route_x, top, card_width, 150, "Route & Cargo", colors.white
     )
-    pdf.drawString(
-        margin,
-        route_top - 58,
-        f"Weight: {loading.weight} KG" if loading.weight else "Weight: -",
-    )
-    pdf.drawString(
-        margin,
-        route_top - 72,
-        f"CBM: {loading.cbm}" if loading.cbm else "CBM: -",
-    )
-    pdf.drawString(
-        margin,
-        route_top - 86,
-        f"Packages: {loading.packages}" if loading.packages else "Packages: -",
-    )
-    if loading.entry_type == "GROUPAGE":
-        chargeable_wm = loading.chargeable_wm
-        pdf.drawString(
-            margin,
-            route_top - 100,
+    chargeable_wm = loading.chargeable_wm if loading.entry_type == "GROUPAGE" else None
+    _draw_pdf_key_values(
+        pdf,
+        route_x + 12,
+        route_y,
+        [
+            ("Origin", loading.origin),
+            ("Destination", loading.destination),
+            ("Loading Date", loading.loading_date.strftime("%Y-%m-%d %H:%M")),
+            ("Weight", f"{loading.weight} KG" if loading.weight else None),
+            ("CBM", loading.cbm),
+            ("Packages", loading.packages),
             (
-                f"Chargeable (W/M): {chargeable_wm:.3f}"
-                if chargeable_wm is not None
-                else "Chargeable (W/M): -"
+                "Chargeable W/M",
+                f"{chargeable_wm:.3f}" if chargeable_wm is not None else None,
             ),
-        )
-    pdf.drawString(
-        margin,
-        route_top - 114,
-        f"Container Number: {loading.container_number or '-'}",
-    )
-    pdf.drawString(
-        margin,
-        route_top - 128,
-        "Container Size: "
-        + (loading.get_container_size_display() if loading.container_size else "-"),
+            ("Container", loading.container_number),
+            (
+                "Size",
+                (
+                    loading.get_container_size_display()
+                    if loading.container_size
+                    else None
+                ),
+            ),
+        ],
+        label_width=82,
+        max_chars=34,
     )
 
-    notes_top = route_top - 146
-    pdf.setFont("Helvetica-Bold", 12)
-    pdf.drawString(margin, notes_top, "Description")
+    notes_top = top - 170
+    text_y = _draw_pdf_card(
+        pdf, margin, notes_top, width - (2 * margin), 125, "Description", colors.white
+    )
+    pdf.setFillColor(PDF_BRAND_BLACK)
     pdf.setFont("Helvetica", 9)
-    text_obj = pdf.beginText(margin, notes_top - 16)
+    text_obj = pdf.beginText(margin + 12, text_y)
     for line in (loading.item_description or "-").splitlines()[:10]:
         text_obj.textLine(line)
     pdf.drawText(text_obj)
@@ -1247,17 +1284,16 @@ def loading_packing_list_document(request, pk):
     _draw_standard_doc_header(pdf, width, height, "PACKING LIST", reference)
 
     top = height - 126
-    pdf.setFillColor(colors.black)
+    pdf.setFillColor(PDF_BRAND_BLACK)
     pdf.setFont("Helvetica-Bold", 12)
-    pdf.drawString(margin, top, "Shipment Information")
-    pdf.setFont("Helvetica", 9)
-    pdf.drawString(margin, top - 16, f"Cargo Reference: {loading.loading_id}")
-    pdf.drawString(margin, top - 30, f"Client: {loading.client.name}")
-    pdf.drawString(margin, top - 44, f"Entry Type: {loading.get_entry_type_display()}")
-    pdf.drawString(
+    info_y = _draw_pdf_card(
+        pdf,
         margin,
-        top - 58,
-        f"Loading Date: {loading.loading_date.strftime('%Y-%m-%d %H:%M')}",
+        top,
+        width - (2 * margin),
+        88,
+        "Shipment Information",
+        PDF_SOFT_GOLD,
     )
 
     if loading.entry_type == "FULL_CONTAINER":
@@ -1266,9 +1302,21 @@ def loading_packing_list_document(request, pk):
     else:
         reference_number = loading.groupage_note_number or "-"
         reference_label = "Groupage Note"
-    pdf.drawString(margin, top - 72, f"{reference_label}: {reference_number}")
+    _draw_pdf_key_values(
+        pdf,
+        margin + 12,
+        info_y,
+        [
+            ("Cargo Reference", loading.loading_id),
+            ("Client", loading.client.name),
+            ("Entry Type", loading.get_entry_type_display()),
+            ("Loading Date", loading.loading_date.strftime("%Y-%m-%d %H:%M")),
+            (reference_label, reference_number),
+        ],
+        label_width=92,
+    )
 
-    table_top = top - 98
+    table_top = top - 115
     row_height = 21
     col_widths = [32, 200, 60, 70, 153]
     headers = ["No", "Item Description", "Packages", "Weight (KG)", "CBM / Container"]
@@ -1285,12 +1333,12 @@ def loading_packing_list_document(request, pk):
     ]
 
     x = margin
-    pdf.setStrokeColor(colors.HexColor("#CFCFCF"))
-    pdf.setFillColor(colors.HexColor("#F8F8F8"))
+    pdf.setStrokeColor(PDF_BORDER)
+    pdf.setFillColor(PDF_SOFT_GOLD)
     for idx, header in enumerate(headers):
         w = col_widths[idx]
         pdf.rect(x, table_top, w, row_height, fill=1, stroke=1)
-        pdf.setFillColor(colors.black)
+        pdf.setFillColor(PDF_BRAND_BLACK)
         pdf.setFont("Helvetica-Bold", 9)
         pdf.drawString(x + 4, table_top + 7, header)
         x += w
@@ -1301,27 +1349,33 @@ def loading_packing_list_document(request, pk):
         w = col_widths[idx]
         pdf.setFillColor(colors.white)
         pdf.rect(x, y, w, row_height, fill=1, stroke=1)
-        pdf.setFillColor(colors.black)
+        pdf.setFillColor(PDF_BRAND_BLACK)
         pdf.setFont("Helvetica", 9)
         pdf.drawString(x + 4, y + 7, str(value)[:45])
         x += w
 
     route_top = y - 24
-    pdf.setFont("Helvetica-Bold", 12)
-    pdf.drawString(margin, route_top, "Route")
-    pdf.setFont("Helvetica", 9)
-    pdf.drawString(margin, route_top - 16, f"Origin: {loading.origin}")
-    pdf.drawString(margin, route_top - 30, f"Destination: {loading.destination}")
-    pdf.drawString(
-        margin,
-        route_top - 44,
-        "Container Number: " + (loading.container_number or "-"),
+    route_y = _draw_pdf_card(
+        pdf, margin, route_top, width - (2 * margin), 82, "Route", colors.white
     )
-    pdf.drawString(
-        margin,
-        route_top - 58,
-        "Container Size: "
-        + (loading.get_container_size_display() if loading.container_size else "-"),
+    _draw_pdf_key_values(
+        pdf,
+        margin + 12,
+        route_y,
+        [
+            ("Origin", loading.origin),
+            ("Destination", loading.destination),
+            ("Container Number", loading.container_number),
+            (
+                "Container Size",
+                (
+                    loading.get_container_size_display()
+                    if loading.container_size
+                    else None
+                ),
+            ),
+        ],
+        label_width=98,
     )
 
     _draw_international_terms_footer(pdf, margin, 68)
@@ -1838,72 +1892,67 @@ def payment_invoice(request, pk):
     pdf = canvas.Canvas(buffer, pagesize=A4)
     width, height = A4
     margin = 40
-    primary = colors.HexColor("#1E1A23")
-    accent = colors.HexColor("#F4C21F")
 
     _draw_standard_doc_header(
         pdf, width, height, "FREIGHT INVOICE", payment.invoice_number
     )
 
-    pdf.setFillColor(colors.black)
     info_top = height - 115
-    pdf.setFont("Helvetica-Bold", 12)
-    pdf.drawString(margin, info_top, "Invoice Details")
-    pdf.setFont("Helvetica", 11)
-    pdf.drawString(
-        margin, info_top - 18, f"Issue Date: {timezone.now().strftime('%Y-%m-%d')}"
-    )
-    pdf.drawString(margin, info_top - 34, f"Prepared By: {payment.created_by.username}")
-    pdf.drawString(margin, info_top - 50, f"Loading ID: {payment.loading.loading_id}")
     invoice_ref = f"FI-{payment.final_invoice_id}" if payment.final_invoice_id else "-"
-    pdf.drawString(margin, info_top - 66, f"Attached Invoice: {invoice_ref}")
+    details_y = _draw_pdf_card(
+        pdf,
+        margin,
+        info_top,
+        width - (2 * margin),
+        82,
+        "Invoice Details",
+        PDF_SOFT_GOLD,
+    )
+    _draw_pdf_key_values(
+        pdf,
+        margin + 12,
+        details_y,
+        [
+            ("Issue Date", timezone.now().strftime("%Y-%m-%d")),
+            ("Prepared By", payment.created_by.username),
+            ("Loading ID", payment.loading.loading_id),
+            ("Attached Invoice", invoice_ref),
+        ],
+        label_width=94,
+    )
 
     bill_top = info_top - 96
     box_width = (width / 2) - margin
-    pdf.roundRect(margin, bill_top - 110, box_width - 10, 110, 8, stroke=1)
-    pdf.setFont("Helvetica-Bold", 12)
-    pdf.drawString(margin + 10, bill_top - 15, "Bill To:")
-    pdf.setFont("Helvetica", 11)
-    pdf.drawString(margin + 10, bill_top - 32, payment.loading.client.name)
-    pdf.drawString(
-        margin + 10, bill_top - 48, f"Client ID: {payment.loading.client.client_id}"
+    bill_y = _draw_pdf_card(
+        pdf, margin, bill_top, box_width - 10, 110, "Bill To", colors.white
     )
-    pdf.drawString(
-        margin + 10, bill_top - 64, f"Contact: {payment.loading.client.phone}"
+    _draw_pdf_key_values(
+        pdf,
+        margin + 12,
+        bill_y,
+        [
+            ("Client", payment.loading.client.name),
+            ("Client ID", payment.loading.client.client_id),
+            ("Contact", payment.loading.client.phone),
+            ("Address", payment.loading.client.address[:60]),
+        ],
+        label_width=62,
+        max_chars=30,
     )
-    pdf.drawString(margin + 10, bill_top - 80, payment.loading.client.address[:60])
 
     ship_left = margin + box_width + 5
-    pdf.roundRect(ship_left, bill_top - 110, box_width - 10, 110, 8, stroke=1)
-    pdf.setFont("Helvetica-Bold", 12)
-    pdf.drawString(ship_left + 10, bill_top - 15, "Shipment")
-    pdf.setFont("Helvetica", 11)
-    pdf.drawString(
-        ship_left + 10,
-        bill_top - 32,
-        f"Route: {payment.loading.origin} -> {payment.loading.destination}",
-    )
-    pdf.drawString(
-        ship_left + 10,
-        bill_top - 48,
-        f"Container: {payment.loading.container_number}",
-    )
     container_size_label = (
         payment.loading.get_container_size_display()
         if payment.loading.container_size
-        else "N/A"
-    )
-    pdf.drawString(
-        ship_left + 10,
-        bill_top - 64,
-        f"Container Size: {container_size_label}",
+        else None
     )
     weight_label = f"{payment.loading.weight} KG" if payment.loading.weight else "N/A"
-    pdf.drawString(
-        ship_left + 10,
-        bill_top - 80,
-        f"Weight: {weight_label}",
-    )
+    shipment_rows = [
+        ("Route", f"{payment.loading.origin} -> {payment.loading.destination}"),
+        ("Container", payment.loading.container_number),
+        ("Size", container_size_label),
+        ("Weight", weight_label),
+    ]
     if payment.loading.entry_type == "GROUPAGE":
         cbm_label = payment.loading.cbm if payment.loading.cbm is not None else "N/A"
         basis_label = payment.get_billing_basis_display()
@@ -1912,24 +1961,38 @@ def payment_invoice(request, pk):
             if payment.billing_rate is not None
             else "N/A"
         )
-        pdf.drawString(ship_left + 10, bill_top - 96, f"CBM: {cbm_label}")
-        pdf.drawString(ship_left + 10, bill_top - 112, f"Billing Basis: {basis_label}")
-        pdf.drawString(ship_left + 10, bill_top - 128, f"Billing Rate: {rate_label}")
-        loading_date_y = bill_top - 144
-    else:
-        loading_date_y = bill_top - 96
-    pdf.drawString(
-        ship_left + 10,
-        loading_date_y,
-        f"Loading Date: {payment.loading.loading_date.strftime('%Y-%m-%d')}",
+        shipment_rows.extend(
+            [
+                ("CBM", cbm_label),
+                ("Billing Basis", basis_label),
+                ("Billing Rate", rate_label),
+            ]
+        )
+    shipment_rows.append(
+        ("Loading Date", payment.loading.loading_date.strftime("%Y-%m-%d"))
+    )
+    ship_y = _draw_pdf_card(
+        pdf,
+        ship_left,
+        bill_top,
+        box_width - 10,
+        146 if payment.loading.entry_type == "GROUPAGE" else 110,
+        "Shipment",
+        colors.white,
+    )
+    _draw_pdf_key_values(
+        pdf, ship_left + 12, ship_y, shipment_rows, label_width=76, max_chars=28
     )
 
     summary_top = (
         bill_top - 170 if payment.loading.entry_type == "GROUPAGE" else bill_top - 120
     )
-    pdf.setFillColor(accent)
-    pdf.rect(margin, summary_top - 80, width - (2 * margin), 80, fill=1, stroke=0)
-    pdf.setFillColor(primary)
+    pdf.setFillColor(PDF_SOFT_GOLD)
+    pdf.setStrokeColor(PDF_BRAND_GOLD)
+    pdf.roundRect(
+        margin, summary_top - 80, width - (2 * margin), 80, 9, fill=1, stroke=1
+    )
+    pdf.setFillColor(PDF_BRAND_BLACK)
     pdf.setFont("Helvetica-Bold", 12)
     pdf.drawString(margin + 15, summary_top - 25, "Amount Due")
     pdf.drawString(margin + 190, summary_top - 25, "Amount Paid")
@@ -1939,7 +2002,7 @@ def payment_invoice(request, pk):
     pdf.drawString(margin + 190, summary_top - 55, f"${payment.amount_paid:,.2f}")
     pdf.drawString(margin + 365, summary_top - 55, f"${payment.balance:,.2f}")
 
-    pdf.setFillColor(colors.black)
+    pdf.setFillColor(PDF_BRAND_BLACK)
     notes_top = summary_top - 110
     pdf.setFont("Helvetica-Bold", 12)
     pdf.drawString(margin, notes_top, "Notes")
@@ -2001,43 +2064,51 @@ def payment_receipt(request, transaction_id):
         pdf, width, height, "FREIGHT PAYMENT RECEIPT", transaction.receipt_number
     )
 
-    pdf.setFillColor(colors.black)
     info_top = height - 105
-    pdf.setFont("Helvetica-Bold", 12)
-    pdf.drawString(margin, info_top, "Received From")
-    pdf.setFont("Helvetica", 11)
-    pdf.drawString(margin, info_top - 18, payment.loading.client.name)
-    pdf.drawString(margin, info_top - 34, f"Invoice: {payment.invoice_number}")
-    pdf.drawString(
-        margin,
-        info_top - 50,
-        f"Route: {payment.loading.origin} -> {payment.loading.destination}",
+    from_y = _draw_pdf_card(
+        pdf, margin, info_top, width - (2 * margin), 80, "Received From", PDF_SOFT_GOLD
+    )
+    _draw_pdf_key_values(
+        pdf,
+        margin + 12,
+        from_y,
+        [
+            ("Client", payment.loading.client.name),
+            ("Invoice", payment.invoice_number),
+            ("Route", f"{payment.loading.origin} -> {payment.loading.destination}"),
+        ],
+        label_width=70,
     )
 
-    pdf.setFont("Helvetica-Bold", 12)
-    pdf.drawString(margin, info_top - 80, "Amount Details")
-    pdf.setFont("Helvetica", 11)
-    pdf.drawString(margin, info_top - 100, f"Amount Paid: ${transaction.amount:,.2f}")
-    pdf.drawString(
+    details_top = info_top - 100
+    amount_y = _draw_pdf_card(
+        pdf,
         margin,
-        info_top - 118,
-        f"Payment Date: {transaction.payment_date.strftime('%Y-%m-%d')}",
+        details_top,
+        width - (2 * margin),
+        130,
+        "Amount Details",
+        colors.white,
     )
-    pdf.drawString(
-        margin, info_top - 136, f"Method: {transaction.get_payment_method_display()}"
-    )
-    if transaction.reference:
-        pdf.drawString(margin, info_top - 154, f"Reference: {transaction.reference}")
-    pdf.drawString(
-        margin,
-        info_top - 172,
-        f"Outstanding After Payment: ${balance_after:,.2f}",
+    _draw_pdf_key_values(
+        pdf,
+        margin + 12,
+        amount_y,
+        [
+            ("Amount Paid", f"${transaction.amount:,.2f}"),
+            ("Payment Date", transaction.payment_date.strftime("%Y-%m-%d")),
+            ("Method", transaction.get_payment_method_display()),
+            ("Reference", transaction.reference),
+            ("Outstanding", f"${balance_after:,.2f}"),
+        ],
+        label_width=96,
     )
 
     pdf.setFont("Helvetica", 10)
+    pdf.setFillColor(PDF_BRAND_GREY)
     pdf.drawString(
         margin,
-        info_top - 210,
+        details_top - 158,
         f"Recorded By: {transaction.created_by.username} on {transaction.created_at.strftime('%Y-%m-%d %H:%M')}",
     )
     _draw_international_terms_footer(pdf, margin, 60)
@@ -3938,16 +4009,11 @@ def proforma_pdf(request, pk):
     if canonical:
         return canonical
     document_signature = _document_signature_for(proforma)
-    pdf_data = render_to_pdf(
-        "logistics/pdf/proforma.html",
+    pdf_data = render_to_browser_pdf(
+        "logistics/pdf/proforma_standalone.html",
         {
             "proforma": proforma,
             "document_signature": document_signature,
-            "doc_label": (
-                "Cargo Proforma" if proforma.loading_id else "Sourcing Proforma"
-            ),
-            "doc_number": f"PI-{proforma.pk}",
-            "doc_meta": proforma.transaction.transaction_id,
         },
     )
     response = HttpResponse(pdf_data, content_type="application/pdf")
@@ -3968,6 +4034,29 @@ def proforma_pdf(request, pk):
         category="document",
     )
     return response
+
+
+@login_required
+@role_required("PROCUREMENT", "FINANCE", "DIRECTOR", "ADMIN")
+@xframe_options_sameorigin
+def proforma_html_preview(request, pk):
+    """Render the proforma standalone template as plain HTML (for iframe embedding)."""
+    proforma = get_object_or_404(
+        ProformaInvoice.objects.select_related(
+            "transaction__customer", "created_by", "loading"
+        ),
+        pk=pk,
+    )
+    document_signature = _document_signature_for(proforma)
+    response = render(
+        request,
+        "logistics/pdf/proforma_standalone.html",
+        {
+            "proforma": proforma,
+            "document_signature": document_signature,
+        },
+    )
+    return _prevent_stale_pdf_cache(response)
 
 
 @login_required
@@ -4299,6 +4388,48 @@ def final_invoice_update(request, pk):
 
 @login_required
 @role_required("PROCUREMENT", "FINANCE", "DIRECTOR", "ADMIN")
+@xframe_options_sameorigin
+def final_invoice_html_preview(request, pk):
+    invoice = get_object_or_404(
+        FinalInvoice.objects.select_related(
+            "transaction__customer", "created_by", "loading"
+        ),
+        pk=pk,
+    )
+    canonical = _canonical_route_redirect(
+        request, _final_invoice_route_name(invoice, "html_preview"), pk=invoice.pk
+    )
+    if canonical:
+        return canonical
+    total_paid = _final_invoice_total_paid(invoice) or 0
+    balance = max((invoice.total_amount or 0) - total_paid, 0)
+    if total_paid > 0 and balance <= 0:
+        payment_status_label = "Paid"
+        payment_status_class = "bg-success"
+    elif total_paid > 0:
+        payment_status_label = "Partial Payment"
+        payment_status_class = "bg-warning text-dark"
+    else:
+        payment_status_label = "Unpaid"
+        payment_status_class = "bg-secondary"
+    response = render(
+        request,
+        "logistics/pdf/final_invoice_standalone.html",
+        {
+            "invoice": invoice,
+            "total_paid": total_paid,
+            "balance": balance,
+            "payment_status_label": payment_status_label,
+            "payment_status_class": payment_status_class,
+            "document_signature": _document_signature_for(invoice),
+        },
+    )
+    _prevent_stale_pdf_cache(response)
+    return response
+
+
+@login_required
+@role_required("PROCUREMENT", "FINANCE", "DIRECTOR", "ADMIN")
 def final_invoice_pdf(request, pk):
     invoice = get_object_or_404(
         FinalInvoice.objects.select_related("transaction__customer", "created_by"),
@@ -4321,8 +4452,8 @@ def final_invoice_pdf(request, pk):
         payment_status_label = "Unpaid"
         payment_status_class = "bg-secondary"
     document_signature = _document_signature_for(invoice)
-    pdf_data = render_to_pdf(
-        "logistics/pdf/final_invoice.html",
+    pdf_data = render_to_browser_pdf(
+        "logistics/pdf/final_invoice_standalone.html",
         {
             "invoice": invoice,
             "total_paid": total_paid,
@@ -4330,11 +4461,6 @@ def final_invoice_pdf(request, pk):
             "payment_status_label": payment_status_label,
             "payment_status_class": payment_status_class,
             "document_signature": document_signature,
-            "doc_label": "Cargo Invoice" if invoice.loading_id else "Sourcing Invoice",
-            "doc_number": f"FI-{invoice.pk}",
-            "doc_meta": invoice.transaction.transaction_id,
-            "doc_status": payment_status_label,
-            "doc_status_class": payment_status_class,
         },
     )
     response = HttpResponse(pdf_data, content_type="application/pdf")
@@ -4742,7 +4868,9 @@ def _pdf_report_response(filename, title, headers, rows):
     )
     styles = getSampleStyleSheet()
     elements = []
-    elements.append(Paragraph(f"<b>GMI TERRALINK — {title}</b>", styles["Title"]))
+    title_style = styles["Title"]
+    title_style.textColor = PDF_BRAND_BLACK
+    elements.append(Paragraph(f"<b>GMI TERRALINK - {title}</b>", title_style))
     elements.append(Spacer(1, 10))
 
     table_data = [headers] + [
@@ -4754,17 +4882,17 @@ def _pdf_report_response(filename, title, headers, rows):
     table.setStyle(
         TableStyle(
             [
-                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1a5276")),
-                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                ("TEXTCOLOR", (0, 0), (-1, 0), PDF_BRAND_BLACK),
+                ("BACKGROUND", (0, 0), (-1, 0), PDF_BRAND_GOLD),
                 ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
                 ("FONTSIZE", (0, 0), (-1, -1), 8),
                 (
                     "ROWBACKGROUNDS",
                     (0, 1),
                     (-1, -1),
-                    [colors.white, colors.HexColor("#eaf4fb")],
+                    [colors.white, PDF_SOFT_GREY],
                 ),
-                ("GRID", (0, 0), (-1, -1), 0.4, colors.grey),
+                ("GRID", (0, 0), (-1, -1), 0.4, PDF_BORDER),
                 ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
                 ("PADDING", (0, 0), (-1, -1), 4),
             ]
@@ -5896,6 +6024,47 @@ def receipt_detail(request, pk):
 
 
 @login_required
+@xframe_options_sameorigin
+def receipt_html_preview(request, pk):
+    """Render the same receipt document used for browser-based PDF generation."""
+    receipt = get_object_or_404(Receipt, pk=pk)
+    client = None
+    if receipt.logistics_payment and receipt.logistics_payment.payment:
+        loading = receipt.logistics_payment.payment.loading
+        client = getattr(loading, "client", None)
+    elif receipt.sourcing_payment and receipt.sourcing_payment.transaction:
+        client = getattr(receipt.sourcing_payment.transaction, "customer", None)
+
+    invoice_fully_paid = False
+    try:
+        if receipt.sourcing_payment and receipt.sourcing_payment.final_invoice:
+            fi = receipt.sourcing_payment.final_invoice
+            invoice_fully_paid = (
+                fi.total_amount or 0
+            ) > 0 and _final_invoice_total_paid(fi) >= (fi.total_amount or 0)
+        elif receipt.logistics_payment and receipt.logistics_payment.payment:
+            p = receipt.logistics_payment.payment
+            p.refresh_totals()
+            invoice_fully_paid = (p.amount_charged or 0) > 0 and (
+                p.amount_paid or 0
+            ) >= (p.amount_charged or 0)
+    except Exception:
+        invoice_fully_paid = False
+
+    response = render(
+        request,
+        "logistics/pdf/receipt_standalone.html",
+        {
+            "receipt": receipt,
+            "client": client,
+            "invoice_fully_paid": invoice_fully_paid,
+        },
+    )
+    _prevent_stale_pdf_cache(response)
+    return response
+
+
+@login_required
 def receipt_pdf(request, pk):
     """Download a receipt as PDF (rendered from the print-preview template)."""
     receipt = get_object_or_404(Receipt, pk=pk)
@@ -5924,17 +6093,12 @@ def receipt_pdf(request, pk):
     except Exception:
         invoice_fully_paid = False
 
-    pdf_bytes = render_to_pdf(
-        "logistics/pdf/receipt.html",
+    pdf_bytes = render_to_browser_pdf(
+        "logistics/pdf/receipt_standalone.html",
         {
             "receipt": receipt,
             "client": client,
             "invoice_fully_paid": invoice_fully_paid,
-            "doc_label": "Official Receipt",
-            "doc_number": receipt.receipt_number,
-            "doc_meta": receipt.issued_at.strftime("%d %b %Y, %H:%M"),
-            "doc_status": "Reversed" if receipt.is_reversed else "Paid",
-            "doc_status_class": "is-reversed" if receipt.is_reversed else "is-paid",
         },
     )
     response = HttpResponse(pdf_bytes, content_type="application/pdf")
@@ -6441,73 +6605,62 @@ def pod_delivery_note_pdf(request, pk):
 
     _draw_standard_doc_header(pdf, width, height, "DELIVERY NOTE", pod.pod_number)
 
-    pdf.setFillColor(colors.black)
-    y = height - 170
-    pdf.setFont("Helvetica-Bold", 11)
-    pdf.drawString(50, y, "Lane:")
-    pdf.setFont("Helvetica", 11)
-    pdf.drawString(150, y, pod.business_side.title())
-    y -= 18
-
-    pdf.setFont("Helvetica-Bold", 11)
-    pdf.drawString(50, y, "Reference:")
-    pdf.setFont("Helvetica", 11)
-    pdf.drawString(150, y, pod.target_reference or "-")
-    y -= 18
+    y = height - 130
+    party_label = None
+    party_name = None
 
     if pod.business_side == "logistics" and pod.loading and pod.loading.client:
-        pdf.setFont("Helvetica-Bold", 11)
-        pdf.drawString(50, y, "Client:")
-        pdf.setFont("Helvetica", 11)
-        pdf.drawString(150, y, pod.loading.client.name)
-        y -= 18
+        party_label = "Client"
+        party_name = pod.loading.client.name
     elif pod.business_side == "trading" and pod.fulfillment_order:
-        pdf.setFont("Helvetica-Bold", 11)
-        pdf.drawString(50, y, "Customer:")
-        pdf.setFont("Helvetica", 11)
-        pdf.drawString(150, y, pod.fulfillment_order.transaction.customer.name)
-        y -= 18
+        party_label = "Customer"
+        party_name = pod.fulfillment_order.transaction.customer.name
 
-    pdf.setFont("Helvetica-Bold", 11)
-    pdf.drawString(50, y, "Delivered at:")
-    pdf.setFont("Helvetica", 11)
-    pdf.drawString(150, y, pod.delivered_at.strftime("%Y-%m-%d %H:%M"))
-    y -= 18
-
-    pdf.setFont("Helvetica-Bold", 11)
-    pdf.drawString(50, y, "Received by:")
-    pdf.setFont("Helvetica", 11)
     received = pod.received_by_name + (
         f"  ({pod.received_by_phone})" if pod.received_by_phone else ""
     )
-    pdf.drawString(150, y, received)
-    y -= 18
 
-    if pod.delivery_address:
-        pdf.setFont("Helvetica-Bold", 11)
-        pdf.drawString(50, y, "Address:")
-        pdf.setFont("Helvetica", 11)
-        pdf.drawString(150, y, pod.delivery_address[:80])
-        y -= 18
+    detail_y = _draw_pdf_card(
+        pdf, 50, y, width - 100, 140, "Delivery Details", PDF_SOFT_GOLD
+    )
+    _draw_pdf_key_values(
+        pdf,
+        62,
+        detail_y,
+        [
+            ("Lane", pod.business_side.title()),
+            ("Reference", pod.target_reference),
+            (party_label or "Party", party_name),
+            ("Delivered at", pod.delivered_at.strftime("%Y-%m-%d %H:%M")),
+            ("Received by", received),
+            ("Address", pod.delivery_address[:80] if pod.delivery_address else None),
+            (
+                "GPS",
+                (
+                    f"{pod.gps_lat}, {pod.gps_lng}"
+                    if pod.gps_lat is not None and pod.gps_lng is not None
+                    else None
+                ),
+            ),
+        ],
+        label_width=100,
+        max_chars=72,
+    )
 
-    if pod.gps_lat is not None and pod.gps_lng is not None:
-        pdf.setFont("Helvetica-Bold", 11)
-        pdf.drawString(50, y, "GPS:")
-        pdf.setFont("Helvetica", 11)
-        pdf.drawString(150, y, f"{pod.gps_lat}, {pod.gps_lng}")
-        y -= 18
+    y -= 165
 
     if pod.notes:
-        y -= 10
-        pdf.setFont("Helvetica-Bold", 11)
-        pdf.drawString(50, y, "Notes:")
-        y -= 16
+        notes_y = _draw_pdf_card(pdf, 50, y, width - 100, 110, "Notes", colors.white)
         pdf.setFont("Helvetica", 10)
+        pdf.setFillColor(PDF_BRAND_BLACK)
+        cursor = notes_y
         for chunk in [pod.notes[i : i + 95] for i in range(0, len(pod.notes), 95)][:8]:
-            pdf.drawString(50, y, chunk)
-            y -= 14
+            pdf.drawString(62, cursor, chunk)
+            cursor -= 14
+        y -= 130
 
     y -= 30
+    pdf.setFillColor(PDF_BRAND_BLACK)
     pdf.setFont("Helvetica-Bold", 11)
     pdf.drawString(50, y, "Receiver Signature:")
     pdf.line(180, y - 2, 420, y - 2)

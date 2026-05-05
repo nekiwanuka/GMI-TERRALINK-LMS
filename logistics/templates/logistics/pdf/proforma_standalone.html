@@ -1,0 +1,508 @@
+{% load humanize static %}<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Proforma Invoice PI-{{ proforma.pk }}</title>
+<style>
+@page {
+    size: A4 portrait;
+    margin: 10mm 14mm;
+}
+* { box-sizing: border-box; }
+html, body {
+    margin: 0;
+    padding: 0;
+    background: #ffffff;
+}
+body {
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 9.3px;
+    line-height: 1.34;
+    color: #191919;
+}
+table { border-collapse: collapse; width: 100%; }
+td, th { padding: 0; text-align: left; vertical-align: top; }
+p { margin: 0 0 3px 0; }
+
+.document {
+    width: 100%;
+    background: #ffffff;
+    border: 1px solid #d8d8d8;
+    border-radius: 8px;
+    overflow: hidden;
+}
+.header-table {
+    background: #ffffff;
+    color: #111111;
+    border-top: 5px solid #d4af37;
+    border-bottom: 2px solid #111111;
+}
+.logo-cell {
+    width: 128px;
+    padding: 10px 12px 9px 14px;
+    vertical-align: middle;
+}
+.logo-box {
+    background: #ffffff;
+    padding: 6px 8px;
+    border: 1px solid #d4af37;
+    border-radius: 7px;
+}
+.logo {
+    width: 94px;
+    display: block;
+}
+.brand-cell {
+    padding: 11px 10px 9px 0;
+    vertical-align: middle;
+}
+.brand-name {
+    font-size: 20.5px;
+    font-weight: bold;
+    letter-spacing: 0;
+    color: #111111;
+}
+.brand-line {
+    margin-top: 4px;
+    font-size: 8.5px;
+    color: #8a6d1d;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+.doc-cell {
+    width: 215px;
+    padding: 10px 14px 9px 8px;
+    text-align: right;
+    vertical-align: middle;
+}
+.doc-title {
+    font-size: 18.5px;
+    font-weight: bold;
+    text-transform: uppercase;
+    color: #111111;
+}
+.doc-number {
+    margin-top: 5px;
+    font-size: 13.5px;
+    font-weight: bold;
+    color: #111111;
+    background: #d4af37;
+    padding: 4px 7px;
+    border-left: 18px solid #111111;
+}
+.doc-meta {
+    margin-top: 4px;
+    font-size: 8.5px;
+    color: #555555;
+    text-transform: uppercase;
+}
+
+.address-table {
+    background: #fbf8ee;
+    border-bottom: 1px solid #d8c886;
+}
+.address-cell {
+    width: 50%;
+    padding: 7px 14px;
+    color: #252525;
+}
+.address-cell.right {
+    border-left: 1px solid #d8c886;
+}
+.address-title {
+    font-size: 8px;
+    font-weight: bold;
+    text-transform: uppercase;
+    color: #8a6d1d;
+    letter-spacing: 0.8px;
+    margin-bottom: 3px;
+}
+.address-line { font-size: 8.8px; margin-bottom: 2px; }
+.address-phone { font-size: 9px; font-weight: bold; color: #111111; margin-top: 3px; }
+.address-email { font-size: 8.4px; color: #333333; margin-top: 2px; }
+
+.body-pad { padding: 18px 14px 0 14px; }
+.summary-table { margin-bottom: 13px; }
+.bill-cell { width: 58%; padding-right: 10px; }
+.amount-cell { width: 42%; padding-left: 10px; }
+.info-card {
+    min-height: 116px;
+    border: 1px solid #d8d8d8;
+    border-radius: 8px;
+    background: #ffffff;
+    padding: 10px 11px;
+}
+.info-card.gold-card {
+    background: #fffdf8;
+    border-color: #e5d8ac;
+}
+.section-label {
+    font-size: 8.5px;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 0.9px;
+    color: #8a6d1d;
+    border-bottom: 1px solid #d4af37;
+    padding-bottom: 3px;
+    margin-bottom: 9px;
+}
+.client-name {
+    font-size: 16px;
+    font-weight: bold;
+    color: #111111;
+    margin-bottom: 4px;
+}
+.detail-line { font-size: 9px; color: #3f3f3f; margin-bottom: 2px; }
+.doc-type {
+    display: block;
+    width: 118px;
+    font-size: 8px;
+    font-weight: bold;
+    color: #111111;
+    background: #f5e8b8;
+    border: 0.5pt solid #d4af37;
+    border-left: 8px solid #111111;
+    border-radius: 5px;
+    padding: 3px 5px;
+    text-transform: uppercase;
+    margin-bottom: 7px;
+}
+.summary-card {
+    border: 0.5pt solid #d8c886;
+    border-top: 2px solid #d4af37;
+    border-radius: 7px;
+    background: #fffdf8;
+    padding: 0;
+    overflow: hidden;
+}
+.summary-card-table td {
+    padding: 4px 8px;
+    border-bottom: 0.5pt solid #eee4bd;
+    font-size: 8.6px;
+    line-height: 1.25;
+}
+.summary-card-table tr.last td { border-bottom: 0; }
+.summary-card-table .k {
+    width: 44%;
+    color: #666666;
+}
+.summary-card-table .v {
+    width: 56%;
+    text-align: right;
+    font-weight: bold;
+    color: #111111;
+}
+.amount-due-table td {
+    background: #d4af37;
+    color: #111111;
+    padding: 7px 8px 8px 8px;
+    line-height: 1.25;
+}
+.amount-due-table .amount-label {
+    width: 44%;
+    border-left: 10px solid #111111;
+    font-size: 8px;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 0.7px;
+}
+.amount-due-table .amount-value {
+    width: 56%;
+    text-align: right;
+    font-size: 11.5px;
+    font-weight: bold;
+}
+
+.table-card {
+    margin-top: 13px;
+    border: 0.5pt solid #d2d2d2;
+    border-radius: 8px;
+    overflow: hidden;
+    background: #ffffff;
+}
+.items-table {
+    margin-top: 0;
+    border: 0;
+}
+.items-table th {
+    background: #2b2b2b;
+    color: #ffffff;
+    padding: 7px 8px;
+    font-size: 9px;
+    font-weight: bold;
+    text-transform: uppercase;
+    border-bottom: 1pt solid #d4af37;
+}
+.items-table th.center, .items-table td.center { text-align: center; }
+.items-table th.right, .items-table td.right { text-align: right; }
+.items-table td {
+    padding: 7px 8px;
+    border-bottom: 0.5pt solid #dcdcdc;
+    font-size: 9px;
+    color: #222222;
+}
+.items-table tr.alt td { background: #fbf8ee; }
+.items-table .desc { line-height: 1.4; }
+.items-table .muted { color: #777777; }
+.post-totals-reserved-space { height: 220px; }
+
+.totals-wrap { margin-top: 10px; }
+.totals-spacer { width: 52%; }
+.totals-box { border: 0.5pt solid #d2d2d2; border-top: 1.5pt solid #d4af37; border-radius: 7px; overflow: hidden; }
+.totals-box td {
+    padding: 6px 9px;
+    border-bottom: 0.5pt solid #dfdfdf;
+    font-size: 9.2px;
+    line-height: 1.4;
+}
+.totals-box .k { width: 58%; color: #333333; }
+.totals-box .v { width: 42%; text-align: right; font-weight: bold; color: #111111; }
+.totals-grand td {
+    background: #d4af37;
+    color: #111111;
+    border-bottom: 0;
+    font-weight: bold;
+    font-size: 10.8px;
+    padding: 8px 9px 9px 9px;
+    line-height: 1.45;
+}
+.totals-grand .v { font-size: 12px; }
+
+.lower-table { margin-top: 8mm; }
+.terms-cell { width: 62%; padding-right: 15px; }
+.sign-cell { width: 38%; text-align: center; }
+.panel-title {
+    font-size: 8.8px;
+    font-weight: bold;
+    color: #8a6d1d;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    margin-bottom: 5px;
+}
+.terms-box {
+    border: 1px solid #d8c886;
+    border-radius: 8px;
+    background: #fbf8ee;
+    padding: 9px 10px;
+    font-size: 8.5px;
+    color: #333333;
+    line-height: 1.45;
+}
+.sign-box {
+    border: 1px solid #d8d8d8;
+    border-top: 3px solid #d4af37;
+    border-radius: 8px;
+    padding: 11px 10px 9px;
+    margin-top: 8px;
+    background: #ffffff;
+}
+.sign-img { height: 38px; margin-bottom: 4px; }
+.sign-line {
+    width: 170px;
+    margin: 28px auto 0 auto;
+    border-top: 1px solid #111111;
+    padding-top: 4px;
+    font-size: 9.2px;
+    font-weight: bold;
+    color: #111111;
+}
+.sign-title { font-size: 8.2px; color: #555555; margin-top: 2px; }
+
+.footer {
+    margin: 14px 14px 0 14px;
+    padding-top: 8px;
+    border-top: 1px solid #d8d8d8;
+    font-size: 7.7px;
+    color: #555555;
+}
+.service-strip {
+    margin-top: 6px;
+    background: #d4af37;
+    color: #111111;
+    border-top: 1px solid #111111;
+    border-bottom: 1px solid #111111;
+}
+.service-strip td {
+    padding: 5px 8px;
+    text-align: center;
+    font-size: 7.6px;
+}
+.service-strip b { color: #111111; }
+.validation {
+    margin-top: 5px;
+    font-size: 7px;
+    text-align: center;
+    color: #777777;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+@media screen {
+    html {
+        background: #e9e9e9;
+    }
+    body {
+        width: 210mm;
+        min-height: 297mm;
+        margin: 0 auto;
+        padding: 10mm 14mm;
+        background: #ffffff;
+    }
+    .document {
+        width: 100%;
+    }
+}
+</style>
+</head>
+<body>
+<div class="document">
+    <table class="header-table">
+        <tr>
+            <td class="logo-cell">
+                <div class="logo-box"><img class="logo" src="{% static 'images/gmi_logo.png' %}" alt="GMI Terralink"></div>
+            </td>
+            <td class="brand-cell">
+                <div class="brand-name">GMI TERRALINK</div>
+                <div class="brand-line">Logistics | Sourcing | Trade Solutions</div>
+            </td>
+            <td class="doc-cell">
+                <div class="doc-title">Proforma Invoice</div>
+                <div class="doc-number">PI-{{ proforma.pk }}</div>
+                <div class="doc-meta">{{ proforma.transaction.transaction_id }}</div>
+            </td>
+        </tr>
+    </table>
+
+    <table class="address-table">
+        <tr>
+            <td class="address-cell">
+                <div class="address-title">China Branch | Guangzhou</div>
+                <div class="address-line">B239B (ECAT), Jinsha Block B 2F, Baiyun</div>
+                <div class="address-phone">+86 177 0195 4464</div>
+            </td>
+            <td class="address-cell right">
+                <div class="address-title">Uganda Branch | Kampala</div>
+                <div class="address-line">Plot 10/12, Hamdeen Lwanga Close, Muyenga</div>
+                <div class="address-phone">+256 768 049 940</div>
+                <div class="address-email">gmiterralinkinfo@gmail.com | www.gmi-terralink.com</div>
+            </td>
+        </tr>
+    </table>
+
+    <div class="body-pad">
+        <table class="summary-table">
+            <tr>
+                <td class="bill-cell">
+                    <div class="info-card gold-card">
+                        <div class="section-label">Bill To</div>
+                        <div class="doc-type">{% if proforma.loading %}Cargo Proforma{% else %}Sourcing Proforma{% endif %}</div>
+                        <div class="client-name">{{ proforma.transaction.customer.name }}</div>
+                        {% if proforma.transaction.customer.company_name %}<div class="detail-line">{{ proforma.transaction.customer.company_name }}</div>{% endif %}
+                        {% if proforma.transaction.customer.email %}<div class="detail-line">{{ proforma.transaction.customer.email }}</div>{% endif %}
+                        {% if proforma.transaction.customer.phone %}<div class="detail-line">{{ proforma.transaction.customer.phone }}</div>{% endif %}
+                        {% if proforma.supplier_name %}<div class="detail-line">Supplier: {{ proforma.supplier_name }}</div>{% endif %}
+                        {% if proforma.loading %}<div class="detail-line">Cargo Ref: {{ proforma.loading.loading_id }}</div>{% endif %}
+                    </div>
+                </td>
+                <td class="amount-cell">
+                    <div class="info-card">
+                        <div class="section-label">Document Summary</div>
+                        <div class="summary-card">
+                            <table class="summary-card-table">
+                                <tr><td class="k">Proforma No.</td><td class="v">PI-{{ proforma.pk }}</td></tr>
+                                <tr><td class="k">Transaction</td><td class="v">{{ proforma.transaction.transaction_id }}</td></tr>
+                                <tr><td class="k">Issue Date</td><td class="v">{{ proforma.created_at|date:"d M Y" }}</td></tr>
+                                <tr class="last"><td class="k">Valid Until</td><td class="v">{{ proforma.validity_date|date:"d M Y" }}</td></tr>
+                            </table>
+                            <table class="amount-due-table">
+                                <tr><td class="amount-label">Amount Due</td><td class="amount-value">USD {{ proforma.total_amount|floatformat:2|intcomma }}</td></tr>
+                            </table>
+                        </div>
+                    </div>
+                </td>
+            </tr>
+        </table>
+
+        <div class="table-card">
+            <table class="items-table">
+                <thead>
+                    <tr>
+                        <th style="width:32px;" class="center">No</th>
+                        <th>Item Description</th>
+                        <th style="width:82px;" class="right">Unit Price</th>
+                        <th style="width:54px;" class="center">Qty</th>
+                        <th style="width:92px;" class="right">Line Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in proforma.items %}
+                    <tr{% if forloop.counter|divisibleby:2 %} class="alt"{% endif %}>
+                        <td class="center">{{ forloop.counter }}</td>
+                        <td class="desc">{{ item.description }}</td>
+                        <td class="right">
+                            {% if item.unit_price %}$ {{ item.unit_price|floatformat:2|intcomma }}{% elif item.sales_price %}$ {{ item.sales_price|floatformat:2|intcomma }}{% elif item.amount %}$ {{ item.amount|floatformat:2|intcomma }}{% else %}<span class="muted">&mdash;</span>{% endif %}
+                        </td>
+                        <td class="center">{{ item.quantity|default:"1" }}{% if item.unit %} {{ item.unit }}{% endif %}</td>
+                        <td class="right">
+                            {% if item.total %}$ {{ item.total|floatformat:2|intcomma }}{% elif item.amount %}$ {{ item.amount|floatformat:2|intcomma }}{% elif item.sales_price %}$ {{ item.sales_price|floatformat:2|intcomma }}{% else %}<span class="muted">&mdash;</span>{% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="5" class="center muted" style="padding:18px;">No line items.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <table class="totals-wrap">
+            <tr>
+                <td class="totals-spacer"></td>
+                <td>
+                    <table class="totals-box">
+                        <tr><td class="k">Subtotal</td><td class="v">$ {{ proforma.subtotal|floatformat:2|intcomma }}</td></tr>
+                        <tr><td class="k">Sourcing Fee</td><td class="v">$ {{ proforma.sourcing_fee|floatformat:2|intcomma }}</td></tr>
+                        <tr><td class="k">Handling Fee</td><td class="v">$ {{ proforma.handling_fee|floatformat:2|intcomma }}</td></tr>
+                        <tr><td class="k">Shipping Fee</td><td class="v">$ {{ proforma.shipping_fee|floatformat:2|intcomma }}</td></tr>
+                        <tr class="totals-grand"><td class="k">Grand Total</td><td class="v">USD {{ proforma.total_amount|floatformat:2|intcomma }}</td></tr>
+                    </table>
+                </td>
+            </tr>
+        </table>
+
+        <div class="post-totals-reserved-space"></div>
+
+        <table class="lower-table">
+            <tr>
+                <td class="terms-cell">
+                    <div class="panel-title">Payment Details & Terms</div>
+                    <div class="terms-box">
+                        Bank details: <b>GMI TERRALINK LTD - ABSA BANK UGANDA LIMITED - 6010028181 (UGX)</b>. Please quote <b>PI-{{ proforma.pk }}</b> and <b>{{ proforma.transaction.transaction_id }}</b> when making payment; prices are Ex-Works unless otherwise agreed, and bank charges, taxes, customs, demurrage, freight and destination fees remain for the buyer's account unless expressly included.
+                    </div>
+                </td>
+                <td class="sign-cell">
+                    <div class="panel-title">Authorised Signatory</div>
+                    <div class="sign-box">
+                        {% if document_signature and document_signature.signature_profile.signature_image %}
+                        <img class="sign-img" src="{{ document_signature.signature_profile.signature_image.url }}" alt="Signature">
+                        <div class="sign-line">{{ document_signature.signer_name }}</div>
+                        <div class="sign-title">{{ document_signature.signer_title }}</div>
+                        {% else %}
+                        <div class="sign-line">For GMI Terralink Co. Ltd</div>
+                        <div class="sign-title">Authorised Signature</div>
+                        {% endif %}
+                    </div>
+                </td>
+            </tr>
+        </table>
+    </div>
+
+    <div class="footer">
+        <b>International Terms:</b> Delivery timelines are estimates and may vary due to carrier schedules, port operations, customs controls, force majeure, or regulatory actions. Claims for shortages or damage must be submitted in writing within 3 business days of delivery.
+        <table class="service-strip">
+            <tr><td><b>Service Portfolio:</b> Procurement | Sea &amp; Air Freight Logistics | Mining &amp; Equipment Solutions | Translation Services | Money Transfer</td></tr>
+        </table>
+        <div class="validation">This is a system-generated document and is valid with the accompanying authorised signatory mark.</div>
+    </div>
+</div>
+</body>
+</html>
