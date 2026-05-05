@@ -2346,7 +2346,6 @@ class Receipt(models.Model):
 
     def generate_pdf(self):
         from io import BytesIO
-        from pathlib import Path
         from reportlab.lib import colors as rcolors
         from reportlab.lib.pagesizes import A4
         from reportlab.pdfbase.pdfmetrics import stringWidth
@@ -2358,33 +2357,22 @@ class Receipt(models.Model):
         margin = 40
         primary = rcolors.HexColor("#1E1A23")
         accent = rcolors.HexColor("#F4C21F")
-        border = rcolors.HexColor("#D9D9D9")
-        muted = rcolors.HexColor("#666666")
-        soft_fill = rcolors.HexColor("#FFF2C2")
+        border = rcolors.HexColor("#E6E2D5")
+        muted = rcolors.HexColor("#6C6772")
+        soft_fill = rcolors.HexColor("#FBF7E4")
+        soft_fill_2 = rcolors.HexColor("#F5E6A8")
+        cream_border = rcolors.HexColor("#ECE7CD")
+        gold_dark = rcolors.HexColor("#8A6D1D")
+        ink = rcolors.HexColor("#1A1A1A")
         danger = rcolors.HexColor("#9C2F2F")
+        green_paid = rcolors.HexColor("#0F6D49")
 
-        def draw_info_box(x, y, box_width, box_height, title, lines):
-            pdf.setFillColor(rcolors.white)
-            pdf.setStrokeColor(border)
-            pdf.rect(x, y, box_width, box_height, fill=1, stroke=1)
-            pdf.setFillColor(muted)
-            pdf.setFont("Helvetica-Bold", 9)
-            pdf.drawString(x + 12, y + box_height - 16, title.upper())
-            pdf.setFillColor(rcolors.black)
-            pdf.setFont("Helvetica", 9)
-            line_y = y + box_height - 34
-            for line in lines[:5]:
-                pdf.drawString(x + 12, line_y, str(line)[:88])
-                line_y -= 14
-
-        def draw_wrapped_lines(
-            x, y_top, text, max_width, font_name="Helvetica", font_size=8, line_gap=11
-        ):
-            words = str(text).split()
+        def wrap_text(text, max_width, font_name, font_size):
+            words = str(text or "").split()
             if not words:
-                return y_top
-            current = words[0]
+                return [""]
             lines = []
+            current = words[0]
             for word in words[1:]:
                 trial = f"{current} {word}"
                 if stringWidth(trial, font_name, font_size) <= max_width:
@@ -2393,12 +2381,18 @@ class Receipt(models.Model):
                     lines.append(current)
                     current = word
             lines.append(current)
+            return lines
+
+        def draw_wrapped_lines(
+            x, y_top, text, max_width, font_name="Helvetica", font_size=8, line_gap=11
+        ):
             pdf.setFont(font_name, font_size)
-            for line in lines:
+            for line in wrap_text(text, max_width, font_name, font_size):
                 pdf.drawString(x, y_top, line)
                 y_top -= line_gap
             return y_top
 
+        # 1) Header strip (China | Logo | Uganda)
         _draw_standard_doc_header(
             pdf,
             width,
@@ -2407,7 +2401,7 @@ class Receipt(models.Model):
             self.receipt_number,
         )
 
-        # Resolve client/contact details from whichever payment source created this receipt.
+        # Resolve client + payment context once.
         client = None
         if self.logistics_payment and self.logistics_payment.payment:
             loading = self.logistics_payment.payment.loading
@@ -2415,261 +2409,298 @@ class Receipt(models.Model):
         elif self.sourcing_payment and self.sourcing_payment.transaction:
             client = getattr(self.sourcing_payment.transaction, "customer", None)
 
-        payment_method = ""
         if self.logistics_payment:
             payment_method = self.logistics_payment.get_payment_method_display()
         elif self.sourcing_payment:
             payment_method = self.sourcing_payment.get_payment_method_display()
+        else:
+            payment_method = ""
 
         payment_type = (
             "Logistics Shipment" if self.logistics_payment else "Sourcing / Trade"
         )
 
-        top = height - 108
-        content_width = width - (2 * margin)
-
-        pdf.setFillColor(rcolors.black)
-        pdf.setFont("Helvetica-Bold", 16)
-        pdf.drawString(margin, top, self.receipt_number)
-        pdf.setFont("Helvetica", 10)
-        pdf.setFillColor(rcolors.HexColor("#555555"))
-        pdf.drawString(margin, top - 16, f"Issued to {self.issued_to}")
-        meta_y = top - 30
-        meta_parts = [
-            self.issued_at.strftime("%d %B %Y %H:%M"),
-            payment_type,
-            payment_method or "-",
-        ]
-        pdf.drawString(margin, meta_y, "   |   ".join(meta_parts))
-
-        # -------- Premium amount capsule (top-right) --------
-        # Two-tone pill: dark left tab with currency + light right body with amount.
         amount_text = f"{self.amount:,.2f}"
-        currency_text = (self.currency or "").strip().upper() or "—"
-        body_font_size = 17
-        cur_font_size = 11
-        amount_w = stringWidth(amount_text, "Helvetica-Bold", body_font_size)
-        cur_w = stringWidth(currency_text, "Helvetica-Bold", cur_font_size)
-        cur_tab_w = max(48, cur_w + 22)
-        body_pad_x = 16
-        chip_body_w = amount_w + (body_pad_x * 2)
-        chip_w = cur_tab_w + chip_body_w
-        chip_h = 44
-        chip_x = width - margin - chip_w
-        chip_y = top - 26
+        currency_text = (self.currency or "").strip().upper() or "USD"
 
-        # Light body
-        pdf.setFillColor(soft_fill)
-        pdf.setStrokeColor(rcolors.HexColor("#E6D9A8"))
-        pdf.setLineWidth(0.6)
-        pdf.roundRect(chip_x, chip_y, chip_w, chip_h, 10, fill=1, stroke=1)
+        content_width = width - (2 * margin)
+        cursor_y = height - 110  # below the header gold line
 
-        # Dark currency tab on the left of the pill
-        pdf.saveState()
-        pdf.setFillColor(primary)
-        pdf.setStrokeColor(primary)
-        # Draw a rounded rect, then mask the right side so only the left is rounded.
-        pdf.roundRect(chip_x, chip_y, cur_tab_w, chip_h, 10, fill=1, stroke=0)
-        pdf.rect(chip_x + cur_tab_w - 10, chip_y, 10, chip_h, fill=1, stroke=0)
-        pdf.restoreState()
-
-        # Vertical divider between tab and body
-        pdf.setStrokeColor(rcolors.HexColor("#E6D9A8"))
-        pdf.setLineWidth(0.6)
-        pdf.line(
-            chip_x + cur_tab_w,
-            chip_y + 6,
-            chip_x + cur_tab_w,
-            chip_y + chip_h - 6,
-        )
-
-        # Tiny "AMOUNT PAID" eyebrow above the body amount
-        pdf.setFillColor(rcolors.HexColor("#8a6d1d"))
-        pdf.setFont("Helvetica-Bold", 6.5)
-        pdf.drawString(
-            chip_x + cur_tab_w + body_pad_x, chip_y + chip_h - 11, "AMOUNT PAID"
-        )
-
-        # Currency on the dark tab
-        pdf.setFillColor(accent)
-        pdf.setFont("Helvetica-Bold", cur_font_size)
-        pdf.drawCentredString(
-            chip_x + (cur_tab_w / 2),
-            chip_y + (chip_h / 2) - (cur_font_size / 3),
-            currency_text,
-        )
-
-        # Amount on the light body
-        pdf.setFillColor(primary)
-        pdf.setFont("Helvetica-Bold", body_font_size)
-        pdf.drawString(
-            chip_x + cur_tab_w + body_pad_x,
-            chip_y + 11,
-            amount_text,
-        )
-
-        content_top = top - 54
+        # 2) Reversed banner (only if applicable) — mirrors .receipt-status-banner.is-reversed
         if self.is_reversed:
-            alert_y = content_top - 8
-            pdf.setFillColor(rcolors.HexColor("#F8DEDE"))
+            banner_h = 28
+            cursor_y -= banner_h
+            pdf.setFillColor(rcolors.HexColor("#FBE9E9"))
             pdf.setStrokeColor(rcolors.HexColor("#E5B9B9"))
-            pdf.roundRect(margin, alert_y, content_width, 28, 12, fill=1, stroke=1)
+            pdf.setLineWidth(0.6)
+            pdf.roundRect(
+                margin, cursor_y, content_width, banner_h, 10, fill=1, stroke=1
+            )
             pdf.setFillColor(danger)
-            pdf.setFont("Helvetica-Bold", 10)
+            pdf.setFont("Helvetica-Bold", 9)
             text = f"Reversed on {self.reversed_at.strftime('%d %b %Y %H:%M')}"
             if self.reversed_by:
                 text += f" by {self.reversed_by.username}"
             if self.reversal_notes:
-                text += f" - {self.reversal_notes}"
-            pdf.drawString(margin + 12, alert_y + 10, text)
-            content_top = alert_y - 18
+                text += f" — {self.reversal_notes}"
+            pdf.drawString(margin + 14, cursor_y + 10, text[:120])
+            cursor_y -= 12
 
-        if client:
-            client_lines = [f"Name: {client.name}"]
-            client_lines.append(
-                f"Contact: {client.contact_person}{' | ' + client.phone if client.phone else ''}"
-            )
-            if client.email:
-                client_lines.append(f"Email: {client.email}")
-            if client.address:
-                client_lines.append(f"Address: {client.address}")
-        else:
-            client_lines = ["Client details not available."]
-
-        left_y = content_top - 96
-        left_h = 96
-        right_h = 96
-        gutter = 14
-        left_w = int(content_width * 0.58)
-        right_w = content_width - left_w - gutter
-        right_x = margin + left_w + gutter
-
-        summary_lines = [
-            payment_type,
-            payment_method or "-",
-        ]
-        if self.logistics_payment and self.logistics_payment.payment:
-            summary_lines.append(
-                f"Loading Ref: {self.logistics_payment.payment.loading.loading_id}"
-            )
-        elif self.sourcing_payment and self.sourcing_payment.transaction:
-            summary_lines.append(
-                f"Transaction: {self.sourcing_payment.transaction.transaction_id}"
-            )
-            summary_lines.append(
-                "Payment Type: "
-                + (
-                    "Full Payment"
-                    if self.sourcing_payment.is_full_payment
-                    else "Partial Payment"
-                )
-            )
-
-        draw_info_box(margin, left_y, left_w, left_h, "Client Details", client_lines)
-
-        # -------- Premium "AMOUNT RECEIVED" panel --------
-        pdf.setFillColor(rcolors.white)
-        pdf.setStrokeColor(border)
-        pdf.setLineWidth(0.6)
-        pdf.rect(right_x, left_y, right_w, right_h, fill=1, stroke=1)
-
-        # Soft cream header strip
-        header_h = 18
+        # 3) Hero card (cream gradient feel) — two columns
+        hero_h = 96
+        hero_y = cursor_y - hero_h
+        # Background — solid cream with cream border (gradient is approximated)
         pdf.setFillColor(soft_fill)
-        pdf.setStrokeColor(soft_fill)
+        pdf.setStrokeColor(cream_border)
+        pdf.setLineWidth(0.6)
+        pdf.roundRect(margin, hero_y, content_width, hero_h, 14, fill=1, stroke=1)
+        # Subtle right-side darker wash to fake the gradient
+        pdf.saveState()
+        pdf.setFillColor(soft_fill_2)
+        pdf.setStrokeColor(soft_fill_2)
+        wash_w = int(content_width * 0.35)
         pdf.rect(
-            right_x, left_y + right_h - header_h, right_w, header_h, fill=1, stroke=0
+            margin + content_width - wash_w,
+            hero_y + 2,
+            wash_w - 2,
+            hero_h - 4,
+            fill=1,
+            stroke=0,
         )
-
-        # Gold accent bar on the left edge of the panel
+        pdf.restoreState()
+        # Gold accent bar on the left edge of the hero
         pdf.setFillColor(accent)
         pdf.setStrokeColor(accent)
-        pdf.rect(right_x, left_y, 3, right_h, fill=1, stroke=0)
+        pdf.rect(margin, hero_y, 4, hero_h, fill=1, stroke=0)
 
-        pdf.setFillColor(rcolors.HexColor("#8a6d1d"))
-        pdf.setFont("Helvetica-Bold", 9)
-        pdf.drawString(right_x + 12, left_y + right_h - 12, "AMOUNT RECEIVED")
+        # Hero left column: eyebrow + two-tone amount capsule
+        hero_left_x = margin + 18
+        eyebrow_y = hero_y + hero_h - 18
+        pdf.setFillColor(rcolors.HexColor("#5C4915"))
+        pdf.setFont("Helvetica-Bold", 8)
+        pdf.drawString(hero_left_x, eyebrow_y, "AMOUNT RECEIVED")
 
-        # Big amount: currency in muted weight, value in primary bold
-        amount_y = left_y + right_h - 38
-        pdf.setFillColor(muted)
-        pdf.setFont("Helvetica-Bold", 10)
-        pdf.drawString(right_x + 12, amount_y, currency_text)
-        cur_label_w = stringWidth(currency_text, "Helvetica-Bold", 10)
+        # Two-tone capsule
+        cap_body_font = 18
+        cap_cur_font = 11
+        amount_w = stringWidth(amount_text, "Helvetica-Bold", cap_body_font)
+        cur_w = stringWidth(currency_text, "Helvetica-Bold", cap_cur_font)
+        cur_tab_w = max(56, cur_w + 24)
+        body_pad_x = 18
+        cap_body_w = amount_w + (body_pad_x * 2)
+        cap_w = cur_tab_w + cap_body_w
+        cap_h = 44
+        cap_x = hero_left_x
+        cap_y = hero_y + 14
+        # White body
+        pdf.setFillColor(rcolors.white)
+        pdf.setStrokeColor(rcolors.HexColor("#D8C98A"))
+        pdf.setLineWidth(0.6)
+        pdf.roundRect(cap_x, cap_y, cap_w, cap_h, 10, fill=1, stroke=1)
+        # Dark currency tab (left side, rounded only on the left)
+        pdf.saveState()
         pdf.setFillColor(primary)
-        pdf.setFont("Helvetica-Bold", 19)
-        pdf.drawString(
-            right_x + 12 + cur_label_w + 6,
-            amount_y - 3,
-            amount_text,
+        pdf.setStrokeColor(primary)
+        pdf.roundRect(cap_x, cap_y, cur_tab_w, cap_h, 10, fill=1, stroke=0)
+        pdf.rect(cap_x + cur_tab_w - 10, cap_y, 10, cap_h, fill=1, stroke=0)
+        pdf.restoreState()
+        # Currency text
+        pdf.setFillColor(accent)
+        pdf.setFont("Helvetica-Bold", cap_cur_font)
+        pdf.drawCentredString(
+            cap_x + (cur_tab_w / 2),
+            cap_y + (cap_h / 2) - (cap_cur_font / 3),
+            currency_text,
+        )
+        # Amount text
+        pdf.setFillColor(ink)
+        pdf.setFont("Helvetica-Bold", cap_body_font)
+        pdf.drawString(cap_x + cur_tab_w + body_pad_x, cap_y + 13, amount_text)
+
+        # Hero right column: stacked meta rows
+        hero_right_x = margin + int(content_width * 0.55)
+        hero_right_w = content_width - int(content_width * 0.55) - 18
+        meta_rows = [
+            ("Issued To", self.issued_to or "—"),
+            ("Date", self.issued_at.strftime("%d %b %Y, %H:%M")),
+            ("Method", payment_method or "—"),
+            ("Stream", payment_type),
+        ]
+        row_y = hero_y + hero_h - 20
+        for label, value in meta_rows:
+            pdf.setFillColor(rcolors.HexColor("#7A6F4F"))
+            pdf.setFont("Helvetica-Bold", 7)
+            pdf.drawString(hero_right_x, row_y, label.upper())
+            pdf.setFillColor(ink)
+            pdf.setFont("Helvetica-Bold", 9)
+            pdf.drawRightString(hero_right_x + hero_right_w, row_y, str(value)[:42])
+            row_y -= 4
+            pdf.setStrokeColor(rcolors.HexColor("#E0D7B0"))
+            pdf.setLineWidth(0.4)
+            pdf.line(hero_right_x, row_y, hero_right_x + hero_right_w, row_y)
+            row_y -= 13
+
+        cursor_y = hero_y - 14
+
+        # 4) Two-panel grid: Client Details | Payment Reference
+        gutter = 14
+        panel_w = (content_width - gutter) / 2
+        panel_h = 150
+        panel_y = cursor_y - panel_h
+        left_x = margin
+        right_x = margin + panel_w + gutter
+
+        def draw_panel(x, y, w, h, title):
+            pdf.setFillColor(rcolors.HexColor("#FAFAFA"))
+            pdf.setStrokeColor(rcolors.HexColor("#EAE7E0"))
+            pdf.setLineWidth(0.6)
+            pdf.roundRect(x, y, w, h, 14, fill=1, stroke=1)
+            pdf.setFillColor(muted)
+            pdf.setFont("Helvetica-Bold", 8)
+            pdf.drawString(x + 14, y + h - 16, title.upper())
+
+        # Client Details panel
+        draw_panel(left_x, panel_y, panel_w, panel_h, "Client Details")
+        cd_y = panel_y + panel_h - 36
+        cd_x = left_x + 14
+        cd_w = panel_w - 28
+        if client:
+            client_rows = [("Name", client.name or "—")]
+            contact_value = client.contact_person or "—"
+            if getattr(client, "phone", ""):
+                contact_value = f"{contact_value} | {client.phone}"
+            client_rows.append(("Contact", contact_value))
+            if getattr(client, "email", ""):
+                client_rows.append(("Email", client.email))
+            if getattr(client, "address", ""):
+                client_rows.append(("Address", client.address))
+        else:
+            client_rows = [("Status", "Client details not available.")]
+
+        for label, value in client_rows:
+            pdf.setFillColor(muted)
+            pdf.setFont("Helvetica-Bold", 8)
+            pdf.drawString(cd_x, cd_y, f"{label}:")
+            pdf.setFillColor(ink)
+            pdf.setFont("Helvetica", 9)
+            wrapped = wrap_text(str(value), cd_w - 50, "Helvetica", 9)
+            for i, line in enumerate(wrapped[:2]):
+                pdf.drawString(cd_x + 50, cd_y - (i * 11), line)
+            cd_y -= 14 + (11 * (min(len(wrapped), 2) - 1))
+            if cd_y < panel_y + 12:
+                break
+
+        # Payment Reference panel
+        draw_panel(right_x, panel_y, panel_w, panel_h, "Payment Reference")
+        pr_y = panel_y + panel_h - 36
+        pr_x = right_x + 14
+        pr_w = panel_w - 28
+
+        ref_rows = []
+        if self.logistics_payment and self.logistics_payment.payment:
+            ref_rows.append(
+                ("Loading Ref", self.logistics_payment.payment.loading.loading_id)
+            )
+            ref_rows.append(("Payment ID", f"#{self.logistics_payment.pk}"))
+        elif self.sourcing_payment:
+            sp = self.sourcing_payment
+            if sp.transaction:
+                ref_rows.append(("Transaction", sp.transaction.transaction_id))
+            ref_rows.append(
+                ("Type", "Full Payment" if sp.is_full_payment else "Partial Payment")
+            )
+            if sp.final_invoice_id:
+                ref_rows.append(("Invoice", f"FI-{sp.final_invoice_id}"))
+            ref_rows.append(
+                (
+                    "Amount Due",
+                    f"{sp.amount_due_snapshot:,.2f} {sp.currency}",
+                )
+            )
+            ref_rows.append(
+                (
+                    "Balance After",
+                    f"{sp.balance_after:,.2f} {sp.currency}",
+                )
+            )
+            if sp.cash_received:
+                ref_rows.append(
+                    (
+                        "Cash Received",
+                        f"{sp.cash_received:,.2f} {sp.currency}",
+                    )
+                )
+                ref_rows.append(
+                    (
+                        "Change Returned",
+                        f"{sp.change_given:,.2f} {sp.currency}",
+                    )
+                )
+        else:
+            ref_rows.append(("Reference", "—"))
+        ref_rows.append(("Receipt No.", self.receipt_number))
+
+        for label, value in ref_rows:
+            pdf.setFillColor(muted)
+            pdf.setFont("Helvetica", 8)
+            pdf.drawString(pr_x, pr_y, label)
+            pdf.setFillColor(ink)
+            pdf.setFont("Helvetica-Bold", 8.5)
+            pdf.drawRightString(pr_x + pr_w, pr_y, str(value)[:32])
+            pr_y -= 4
+            pdf.setStrokeColor(rcolors.HexColor("#E8E4DA"))
+            pdf.setLineWidth(0.4)
+            pdf.line(pr_x, pr_y, pr_x + pr_w, pr_y)
+            pr_y -= 10
+            if pr_y < panel_y + 10:
+                break
+
+        cursor_y = panel_y - 18
+
+        # 5) Sign-off: Thanks (left) | Signature line (right)
+        signoff_y = cursor_y - 56
+        thanks_x = margin
+        thanks_w = int(content_width * 0.6)
+        pdf.setFillColor(ink)
+        pdf.setFont("Helvetica-Bold", 10)
+        pdf.drawString(thanks_x, cursor_y - 4, "Thank you for your business.")
+        pdf.setFillColor(muted)
+        pdf.setFont("Helvetica", 8.5)
+        thanks_text = (
+            "This receipt acknowledges payment received in good order. Please retain a "
+            "copy for your records. For queries, reference the receipt number above."
+        )
+        draw_wrapped_lines(
+            thanks_x,
+            cursor_y - 18,
+            thanks_text,
+            thanks_w,
+            font_name="Helvetica",
+            font_size=8.5,
+            line_gap=11,
         )
 
-        # Gold hairline separator under the amount
-        pdf.setStrokeColor(accent)
-        pdf.setLineWidth(0.8)
-        sep_y = amount_y - 12
-        pdf.line(right_x + 12, sep_y, right_x + right_w - 12, sep_y)
-        pdf.setLineWidth(0.4)
+        sig_x = margin + content_width
+        sig_line_w = 200
+        pdf.setStrokeColor(rcolors.HexColor("#888888"))
+        pdf.setLineWidth(0.7)
+        pdf.line(sig_x - sig_line_w, signoff_y + 28, sig_x, signoff_y + 28)
+        pdf.setFillColor(rcolors.HexColor("#3D3845"))
+        pdf.setFont("Helvetica-Bold", 8.5)
+        pdf.drawRightString(sig_x, signoff_y + 16, "AUTHORISED SIGNATURE")
+        pdf.setFillColor(muted)
+        pdf.setFont("Helvetica", 7.5)
+        pdf.drawRightString(
+            sig_x, signoff_y + 5, "For & on behalf of GMi Terralink Co. Ltd"
+        )
 
-        pdf.setFont("Helvetica", 8.5)
-        fact_y = sep_y - 4
+        # 6) Footer terms
+        footer_top = signoff_y - 10
         pdf.setStrokeColor(border)
-        for line in summary_lines[:3]:
-            pdf.setFillColor(muted)
-            if ": " in line:
-                key, value = line.split(": ", 1)
-            else:
-                key, value = ("Type", line)
-            pdf.drawString(right_x + 12, fact_y, key)
-            pdf.setFillColor(primary)
-            pdf.drawRightString(right_x + right_w - 12, fact_y, value[:26])
-            fact_y -= 11
-            pdf.line(right_x + 12, fact_y + 3, right_x + right_w - 12, fact_y + 3)
-
-        detail_y = left_y - 78
-        if self.sourcing_payment:
-            pdf.setFillColor(rcolors.white)
-            pdf.setStrokeColor(border)
-            pdf.rect(margin, detail_y, content_width, 64, fill=1, stroke=1)
-            pdf.setFillColor(muted)
-            pdf.setFont("Helvetica-Bold", 9)
-            pdf.drawString(margin + 12, detail_y + 48, "TRADE PAYMENT DETAILS")
-            pdf.setFillColor(rcolors.black)
-            pdf.setFont("Helvetica", 9)
-            pdf.drawString(
-                margin + 12,
-                detail_y + 32,
-                f"Amount Due At Receipt: {self.sourcing_payment.amount_due_snapshot:,.2f} {self.sourcing_payment.currency}",
-            )
-            pdf.drawString(
-                margin + 12,
-                detail_y + 18,
-                f"Balance After Payment: {self.sourcing_payment.balance_after:,.2f} {self.sourcing_payment.currency}",
-            )
-            if self.sourcing_payment.final_invoice_id:
-                pdf.drawString(
-                    margin + 300,
-                    detail_y + 32,
-                    f"Linked Invoice: FI-{self.sourcing_payment.final_invoice_id}",
-                )
-            if self.sourcing_payment.cash_received:
-                pdf.drawString(
-                    margin + 300,
-                    detail_y + 18,
-                    f"Cash Received: {self.sourcing_payment.cash_received:,.2f} {self.sourcing_payment.currency}",
-                )
-                pdf.drawString(
-                    margin + 300,
-                    detail_y + 4,
-                    f"Change Returned: {self.sourcing_payment.change_given:,.2f} {self.sourcing_payment.currency}",
-                )
-
-        footer_top = detail_y - 20 if self.sourcing_payment else left_y - 20
-        pdf.setStrokeColor(border)
+        pdf.setLineWidth(0.5)
         pdf.line(margin, footer_top, width - margin, footer_top)
         pdf.setFillColor(rcolors.HexColor("#6C757D"))
         footer_y = footer_top - 12
-        footer_width = content_width
         footer_lines = [
             "International Terms & Conditions: Prices are quoted Ex-Works unless otherwise agreed in writing. Bank charges, customs duties, taxes, demurrage, and destination fees are for the buyer account unless expressly included.",
             "Delivery timelines are estimates and may vary due to carrier schedules, port operations, customs controls, force majeure, or regulatory actions. Claims for shortages or damage must be submitted in writing within 3 business days of delivery.",
@@ -2680,7 +2711,7 @@ class Receipt(models.Model):
                 margin,
                 footer_y,
                 paragraph,
-                footer_width,
+                content_width,
                 font_name="Helvetica",
                 font_size=7,
                 line_gap=9,
@@ -2692,6 +2723,41 @@ class Receipt(models.Model):
             footer_y - 2,
             "gmiterralinkinfo@gmail.com | +256 768 049 940 | +86 177 0195 4464 | www.gmi-terralink.com",
         )
+
+        # 7) PAID / REVERSED watermark — only when fully settled
+        invoice_fully_paid = False
+        try:
+            if self.sourcing_payment and self.sourcing_payment.final_invoice:
+                fi = self.sourcing_payment.final_invoice
+                total_paid = (
+                    fi.payment_records.aggregate(total=Sum("amount"))["total"] or 0
+                )
+                invoice_fully_paid = (fi.total_amount or 0) > 0 and total_paid >= (
+                    fi.total_amount or 0
+                )
+            elif self.logistics_payment and self.logistics_payment.payment:
+                p = self.logistics_payment.payment
+                p.refresh_totals()
+                invoice_fully_paid = (p.amount_charged or 0) > 0 and (
+                    p.amount_paid or 0
+                ) >= (p.amount_charged or 0)
+        except Exception:
+            invoice_fully_paid = False
+
+        if self.is_reversed or invoice_fully_paid:
+            pdf.saveState()
+            pdf.translate(width / 2, height / 2)
+            pdf.rotate(22)
+            label = "REVERSED" if self.is_reversed else "PAID"
+            color = rcolors.HexColor("#B32B2B") if self.is_reversed else green_paid
+            pdf.setFillColor(color)
+            try:
+                pdf.setFillAlpha(0.08)
+            except Exception:
+                pass
+            pdf.setFont("Helvetica-Bold", 110)
+            pdf.drawCentredString(0, -36, label)
+            pdf.restoreState()
 
         pdf.showPage()
         pdf.save()
