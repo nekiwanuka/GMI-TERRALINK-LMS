@@ -14,15 +14,15 @@
         </td>
         <td class="iv-card meta" style="width: 45%;">
             <div class="title">Invoice Details</div>
-            <dl>
-                <dt>Invoice #</dt><dd>FI-{{ invoice.pk }}</dd>
-                <dt>Invoice Date</dt><dd>{{ invoice.created_at|date:"d/m/Y" }}</dd>
-                <dt>Shipping</dt><dd>{{ invoice.get_shipping_mode_display }}</dd>
-                <dt>Status</dt><dd><span class="iv-status {% if balance <= 0 %}paid{% elif total_paid and total_paid > 0 %}partial{% else %}unpaid{% endif %}">{{ payment_status_label|default:"Unpaid" }}</span></dd>
-                <dt>Ref</dt><dd>{{ invoice.transaction.transaction_id }}</dd>
-                {% if invoice.loading %}<dt>Cargo</dt><dd>{{ invoice.loading.loading_id }}</dd>{% endif %}
-                {% if invoice.route %}<dt>Route</dt><dd>{{ invoice.route }}</dd>{% endif %}
-            </dl>
+            <table class="iv-details">
+                <tr><td class="k">Invoice #</td><td class="v">FI-{{ invoice.pk }}</td></tr>
+                <tr><td class="k">Invoice Date</td><td class="v">{{ invoice.created_at|date:"d/m/Y" }}</td></tr>
+                <tr><td class="k">Shipping</td><td class="v">{{ invoice.get_shipping_mode_display }}</td></tr>
+                <tr><td class="k">Status</td><td class="v"><span class="iv-status {% if balance <= 0 %}paid{% elif total_paid and total_paid > 0 %}partial{% else %}unpaid{% endif %}">{{ payment_status_label|default:"Unpaid" }}</span></td></tr>
+                <tr><td class="k">Ref</td><td class="v">{{ invoice.transaction.transaction_id }}</td></tr>
+                {% if invoice.loading %}<tr><td class="k">Cargo</td><td class="v">{{ invoice.loading.loading_id }}</td></tr>{% endif %}
+                {% if invoice.route %}<tr><td class="k">Route</td><td class="v">{{ invoice.route }}</td></tr>{% endif %}
+            </table>
         </td>
     </tr>
 </table>
