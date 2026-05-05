@@ -1,0 +1,91 @@
+{% load humanize %}
+{% if receipt.is_reversed %}
+<div class="r-watermark reversed">REVERSED</div>
+<div class="r-banner">
+    Reversed on {{ receipt.reversed_at|date:"d M Y H:i" }}{% if receipt.reversed_by %} by {{ receipt.reversed_by.username }}{% endif %}{% if receipt.reversal_notes %} &mdash; {{ receipt.reversal_notes }}{% endif %}
+</div>
+{% elif invoice_fully_paid %}
+<div class="r-watermark">PAID</div>
+<div class="r-status-strip paid">Payment received in full</div>
+{% endif %}
+
+<table class="r-hero">
+    <tr>
+        <td style="width: 55%;">
+            <div class="eyebrow">Amount Received</div>
+            <table class="r-amount-pill">
+                <tr>
+                    <td class="cur">{{ receipt.currency|default:"USD" }}</td>
+                    <td class="val">{{ receipt.amount|floatformat:2|intcomma }}</td>
+                </tr>
+            </table>
+        </td>
+        <td style="width: 45%;">
+            <table class="r-meta">
+                <tr><td class="lbl">Issued To</td><td class="val">{{ receipt.issued_to|default:"&mdash;" }}</td></tr>
+                <tr><td class="lbl">Date</td><td class="val">{{ receipt.issued_at|date:"d M Y, H:i" }}</td></tr>
+                <tr><td class="lbl">Method</td><td class="val">{% if receipt.logistics_payment %}{{ receipt.logistics_payment.get_payment_method_display }}{% elif receipt.sourcing_payment %}{{ receipt.sourcing_payment.get_payment_method_display }}{% else %}&mdash;{% endif %}</td></tr>
+                <tr><td class="lbl">Stream</td><td class="val">{% if receipt.logistics_payment %}Logistics Shipment{% else %}Sourcing / Trade{% endif %}</td></tr>
+            </table>
+        </td>
+    </tr>
+</table>
+
+<table class="r-grid" cellspacing="0" cellpadding="0">
+    <tr>
+        <td style="width: 50%; padding-right: 6px;">
+            <div class="r-panel">
+                <div class="ptitle">Client Details</div>
+                {% if client %}
+                <ul>
+                    <li><b>Name:</b> {{ client.name }}</li>
+                    <li><b>Contact:</b> {{ client.contact_person|default:"&mdash;" }}{% if client.phone %} | {{ client.phone }}{% endif %}</li>
+                    {% if client.email %}<li><b>Email:</b> {{ client.email }}</li>{% endif %}
+                    {% if client.address %}<li><b>Address:</b> {{ client.address }}</li>{% endif %}
+                </ul>
+                {% else %}
+                <p>Client details not available.</p>
+                {% endif %}
+            </div>
+        </td>
+        <td style="width: 50%; padding-left: 6px;">
+            <div class="r-panel">
+                <div class="ptitle">Payment Reference</div>
+                <table class="r-facts">
+                    {% if receipt.logistics_payment %}
+                    <tr><td class="k">Loading Ref</td><td class="v">{{ receipt.logistics_payment.payment.loading.loading_id }}</td></tr>
+                    <tr><td class="k">Payment ID</td><td class="v">#{{ receipt.logistics_payment.pk }}</td></tr>
+                    {% elif receipt.sourcing_payment %}
+                    <tr><td class="k">Transaction</td><td class="v">{{ receipt.sourcing_payment.transaction.transaction_id }}</td></tr>
+                    <tr><td class="k">Type</td><td class="v">{% if receipt.sourcing_payment.is_full_payment %}Full Payment{% else %}Partial Payment{% endif %}</td></tr>
+                    {% if receipt.sourcing_payment.final_invoice %}
+                    <tr><td class="k">Invoice</td><td class="v">FI-{{ receipt.sourcing_payment.final_invoice.pk }}</td></tr>
+                    {% endif %}
+                    <tr><td class="k">Amount Due</td><td class="v">{{ receipt.sourcing_payment.amount_due_snapshot|floatformat:2|intcomma }} {{ receipt.sourcing_payment.currency }}</td></tr>
+                    <tr><td class="k">Balance After</td><td class="v">{{ receipt.sourcing_payment.balance_after|floatformat:2|intcomma }} {{ receipt.sourcing_payment.currency }}</td></tr>
+                    {% if receipt.sourcing_payment.cash_received %}
+                    <tr><td class="k">Cash Received</td><td class="v">{{ receipt.sourcing_payment.cash_received|floatformat:2|intcomma }} {{ receipt.sourcing_payment.currency }}</td></tr>
+                    <tr><td class="k">Change Returned</td><td class="v">{{ receipt.sourcing_payment.change_given|floatformat:2|intcomma }} {{ receipt.sourcing_payment.currency }}</td></tr>
+                    {% endif %}
+                    {% else %}
+                    <tr><td class="k">Reference</td><td class="v">&mdash;</td></tr>
+                    {% endif %}
+                    <tr><td class="k">Receipt No.</td><td class="v">{{ receipt.receipt_number }}</td></tr>
+                </table>
+            </div>
+        </td>
+    </tr>
+</table>
+
+<table class="r-signoff">
+    <tr>
+        <td style="width: 60%;" class="r-thanks">
+            <b>Thank you for your business.</b>
+            This receipt acknowledges payment received in good order. Please retain a copy for your records. For queries, reference the receipt number above.
+        </td>
+        <td style="width: 40%;" class="r-sig">
+            <span class="sig-line">Authorised Signature</span>
+            <span class="sig-name">For &amp; on behalf of GMi Terralink Co. Ltd</span>
+        </td>
+    </tr>
+</table>

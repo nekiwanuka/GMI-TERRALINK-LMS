@@ -539,6 +539,8 @@
     background: #d4af37;
     border-color: #d4af37;
 }
+{% include "logistics/pdf/_base_styles.html" %}
+{% include "logistics/pdf/_proforma_styles.html" %}
 </style>
 
 <!-- Action bar (no print) -->
@@ -587,113 +589,10 @@
 
 <!-- Proforma Invoice Document -->
 <div class="container pb-4 print-root">
-<div class="pf-page" id="proforma-print-target">
-
-    {% include 'logistics/components/document_header.html' with doc_label=proforma.loading|yesno:"Cargo Proforma,Sourcing Proforma" doc_number="PI-"|add:proforma.pk|stringformat:"s" doc_meta=proforma.transaction.transaction_id %}
-
-    <div class="pf-info">
-        <div class="pf-bill">
-            <div class="pf-bill-title">Bill To</div>
-            <p class="pf-muted" style="text-transform:uppercase;font-size:10px;font-weight:700;letter-spacing:.04em;">{% if proforma.loading %}Cargo Document{% else %}Sourcing Document{% endif %}</p>
-            <p class="pf-bill-name">{{ proforma.transaction.customer.name }}</p>
-            <p>Ref: {{ proforma.transaction.transaction_id }}</p>
-            {% if proforma.loading %}<p>Cargo: {{ proforma.loading.loading_id }}</p>{% endif %}
-            {% if proforma.supplier_name %}<p>Supplier: {{ proforma.supplier_name }}</p>{% endif %}
-            {% if proforma.supplier_address %}<p class="pf-muted">{{ proforma.supplier_address }}</p>{% endif %}
-        </div>
-        <div class="pf-meta">
-            <div class="pf-meta-title">Amount Due</div>
-            <p><strong>Total Due:</strong> USD $ {{ proforma.total_amount|floatformat:2|intcomma }}</p>
-            <p><strong>Date:</strong> {{ proforma.created_at|date:"d/m/Y" }}</p>
-            <p><strong>Due:</strong> {{ proforma.validity_date|date:"d/m/Y" }}</p>
-        </div>
-    </div>
-
-    <div class="pf-table-wrap">
-        <table class="pf-table">
-            <thead>
-                <tr>
-                    <th class="pf-col-sl">No</th>
-                    <th class="pf-col-desc">Item Description</th>
-                    <th class="pf-col-price">Price</th>
-                    <th class="pf-col-qty">Qty</th>
-                    <th class="pf-col-amt">Total</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for item in proforma.items %}
-                <tr>
-                    <td class="pf-col-sl">{{ forloop.counter }}</td>
-                    <td class="pf-col-desc">{{ item.description }}</td>
-                    <td class="pf-col-price">
-                        {% if item.unit_price %}${{ item.unit_price|floatformat:2|intcomma }}
-                        {% elif item.sales_price %}${{ item.sales_price|floatformat:2|intcomma }}
-                        {% elif item.amount %}${{ item.amount|floatformat:2|intcomma }}
-                        {% else %}—{% endif %}
-                    </td>
-                    <td class="pf-col-qty">{{ item.quantity|default:"1" }}</td>
-                    <td class="pf-col-amt">
-                        {% if item.total %}${{ item.total|floatformat:2|intcomma }}
-                        {% elif item.amount %}${{ item.amount|floatformat:2|intcomma }}
-                        {% elif item.unit_price %}${{ item.unit_price|floatformat:2|intcomma }}
-                        {% else %}—{% endif %}
-                    </td>
-                </tr>
-                {% empty %}
-                <tr><td colspan="5" class="text-center" style="color:#8f8f8f;padding:14px;">No line items.</td></tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-
-    <div class="pf-lower">
-        <div class="pf-summary">
-            <div class="pf-sum-row"><span>Sub Total</span><strong>$ {{ proforma.subtotal|floatformat:2|intcomma }}</strong></div>
-            <div class="pf-sum-row"><span>Sourcing Fee</span><strong>$ {{ proforma.sourcing_fee|floatformat:2|intcomma }}</strong></div>
-            <div class="pf-sum-row"><span>Handling Fee</span><strong>$ {{ proforma.handling_fee|floatformat:2|intcomma }}</strong></div>
-            <div class="pf-sum-row"><span>Shipping Fee</span><strong>$ {{ proforma.shipping_fee|floatformat:2|intcomma }}</strong></div>
-            <div class="pf-sum-row"><span>Vat tax 0%</span><strong>$ 0.00</strong></div>
-            <div class="pf-total-pill"><span>Grand Total</span><span>$ {{ proforma.total_amount|floatformat:2|intcomma }}</span></div>
-        </div>
-    </div>
-
-    <div class="pf-signature">
-        {% if document_signature and document_signature.signature_profile.signature_image %}
-        <img src="{% url 'protected_media' document_signature.signature_profile.signature_image.name %}" alt="Authorized signature" class="pf-signature-image">
-        <span class="pf-sign-line">{{ document_signature.signer_name }}</span>
-        <small>{{ document_signature.signer_title }}</small>
-        <span class="pf-signed-meta">Signed {{ document_signature.signed_at|date:"d M Y, H:i" }}</span>
-        {% else %}
-        <span class="pf-sign-line">Signature</span>
-        <small>For GMI Terralink Co. Ltd</small>
-        {% endif %}
-    </div>
-
-    <div class="pf-international-footer">
-        <div class="pf-international-grid">
-            <div class="pf-international-box">
-                <h6>International quotation terms</h6>
-                <p>Prices are quoted Ex-Works unless otherwise agreed in writing. Freight, insurance, customs duties, taxes, demurrage, bank charges, and destination fees are for the buyer account unless expressly included.</p>
-                <p>Validity: {{ proforma.validity_date|date:"d M Y" }}. Final availability and carrier schedules remain subject to supplier confirmation.</p>
-            </div>
-            <div class="pf-international-box">
-                <h6>Payment reference</h6>
-                <p><strong>Bank:</strong> Stanbic Bank Uganda</p>
-                <p><strong>Account:</strong> GMI Terralink Co. Ltd</p>
-                <p><strong>SWIFT:</strong> SBICUGKX</p>
-                <p>Quote <strong>PI-{{ proforma.pk }}</strong> and {{ proforma.transaction.transaction_id }} on all international remittances.</p>
-            </div>
-            <div class="pf-international-box">
-                <h6>Trade compliance</h6>
-                <p>Delivery timelines are estimates and may vary due to port operations, customs controls, carrier space, force majeure, inspections, or regulatory actions.</p>
-                <p>Email confirmations, signed copies, receipts, and system records form part of the commercial file.</p>
-            </div>
-        </div>
-        <div class="pf-international-ribbon">
-            <strong>Service Portfolio:</strong> Procurement &middot; Sea &amp; Air Freight Logistics &middot; Mining &amp; Equipment Solutions &middot; Translation Services &middot; Money Transfer
-        </div>
-    </div>
-
+<div class="pdf-page" id="proforma-print-target">
+    {% include "logistics/pdf/_document_header.html" with doc_label=proforma.loading|yesno:"Cargo Proforma,Sourcing Proforma" doc_number="PI-"|add:proforma.pk|stringformat:"s" doc_meta=proforma.transaction.transaction_id %}
+    {% include "logistics/pdf/_proforma_body.html" %}
+    {% include "logistics/pdf/_document_footer.html" %}
 </div>
 </div>
 

@@ -5852,6 +5852,13 @@ def receipt_detail(request, pk):
     can_reverse_receipt = (
         request.user.is_superuser or getattr(request.user, "role", "") == "DIRECTOR"
     )
+    client = None
+    if receipt.logistics_payment and receipt.logistics_payment.payment:
+        loading = receipt.logistics_payment.payment.loading
+        client = getattr(loading, "client", None)
+    elif receipt.sourcing_payment and receipt.sourcing_payment.transaction:
+        client = getattr(receipt.sourcing_payment.transaction, "customer", None)
+
     # Decide whether the underlying invoice is fully paid. The PAID watermark
     # should only appear for receipts whose source invoice/payment has zero
     # outstanding balance (partial payments must not look like settlements).
@@ -5881,6 +5888,7 @@ def receipt_detail(request, pk):
         "logistics/receipts/detail.html",
         {
             "receipt": receipt,
+            "client": client,
             "can_reverse_receipt": can_reverse_receipt,
             "invoice_fully_paid": invoice_fully_paid,
         },

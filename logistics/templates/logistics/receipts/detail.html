@@ -790,6 +790,8 @@
         width: 100%;
     }
 }
+{% include "logistics/pdf/_base_styles.html" %}
+{% include "logistics/pdf/_receipt_styles.html" %}
 </style>
 {% endblock %}
 
@@ -815,107 +817,10 @@
     </section>
 
     <section class="receipt-print-area">
-        <article class="receipt-document">
-            {% if receipt.is_reversed %}
-            <div class="receipt-watermark is-reversed">REVERSED</div>
-            {% elif invoice_fully_paid %}
-            <div class="receipt-watermark">PAID</div>
-            {% endif %}
-
-            {% include 'logistics/components/document_header.html' with doc_label="Official Receipt" doc_number=receipt.receipt_number doc_meta=receipt.issued_at|date:"d F Y H:i" doc_status=receipt.is_reversed|yesno:"Reversed,Paid" doc_status_class=receipt.is_reversed|yesno:"is-reversed,is-paid" %}
-
-            {% if receipt.is_reversed %}
-            <div class="receipt-status-banner is-reversed">
-                <i class="bi bi-x-octagon-fill"></i>
-                <span>Reversed on {{ receipt.reversed_at|date:"d M Y H:i" }} by {{ receipt.reversed_by.username }}{% if receipt.reversal_notes %} &mdash; {{ receipt.reversal_notes }}{% endif %}</span>
-            </div>
-            {% endif %}
-
-            {# Hero: amount received + key facts #}
-            <div class="receipt-hero">
-                <div class="receipt-hero-left">
-                    <div class="label">Amount Received</div>
-                    <div class="receipt-hero-amount">
-                        <span class="cur">{{ receipt.currency }}</span>
-                        <span class="val">{{ receipt.amount|floatformat:2 }}</span>
-                    </div>
-                </div>
-                <div class="receipt-hero-right">
-                    <div class="receipt-hero-meta">
-                        <div class="row-l"><span>Issued To</span><strong>{{ receipt.issued_to }}</strong></div>
-                        <div class="row-l"><span>Date</span><strong>{{ receipt.issued_at|date:"d M Y, H:i" }}</strong></div>
-                        <div class="row-l"><span>Method</span><strong>{% if receipt.logistics_payment %}{{ receipt.logistics_payment.get_payment_method_display }}{% elif receipt.sourcing_payment %}{{ receipt.sourcing_payment.get_payment_method_display }}{% else %}&mdash;{% endif %}</strong></div>
-                        <div class="row-l"><span>Stream</span><strong>{% if receipt.logistics_payment %}Logistics Shipment{% else %}Sourcing / Trade{% endif %}</strong></div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="receipt-grid">
-                <section class="receipt-panel">
-                    <h2 class="receipt-subtitle">Client Details</h2>
-                    {% if receipt.logistics_payment and receipt.logistics_payment.payment and receipt.logistics_payment.payment.loading and receipt.logistics_payment.payment.loading.client %}
-                        {% with client=receipt.logistics_payment.payment.loading.client %}
-                        <ul class="receipt-list">
-                            <li><strong>Name:</strong> {{ client.name }}</li>
-                            <li><strong>Contact:</strong> {{ client.contact_person }}{% if client.phone %} | {{ client.phone }}{% endif %}</li>
-                            {% if client.email %}<li><strong>Email:</strong> {{ client.email }}</li>{% endif %}
-                            {% if client.address %}<li><strong>Address:</strong> {{ client.address }}</li>{% endif %}
-                        </ul>
-                        {% endwith %}
-                    {% elif receipt.sourcing_payment and receipt.sourcing_payment.transaction and receipt.sourcing_payment.transaction.customer %}
-                        {% with client=receipt.sourcing_payment.transaction.customer %}
-                        <ul class="receipt-list">
-                            <li><strong>Name:</strong> {{ client.name }}</li>
-                            <li><strong>Contact:</strong> {{ client.contact_person }}{% if client.phone %} | {{ client.phone }}{% endif %}</li>
-                            {% if client.email %}<li><strong>Email:</strong> {{ client.email }}</li>{% endif %}
-                            {% if client.address %}<li><strong>Address:</strong> {{ client.address }}</li>{% endif %}
-                        </ul>
-                        {% endwith %}
-                    {% else %}
-                        <p>Client details are not available.</p>
-                    {% endif %}
-                </section>
-
-                <section class="receipt-panel">
-                    <h2 class="receipt-subtitle">Payment Reference</h2>
-                    <div class="receipt-facts">
-                        {% if receipt.logistics_payment %}
-                            <div class="receipt-fact"><span>Loading Ref</span><span>{{ receipt.logistics_payment.payment.loading.loading_id }}</span></div>
-                            <div class="receipt-fact"><span>Payment ID</span><span>#{{ receipt.logistics_payment.pk }}</span></div>
-                        {% elif receipt.sourcing_payment %}
-                            <div class="receipt-fact"><span>Transaction</span><span>{{ receipt.sourcing_payment.transaction.transaction_id }}</span></div>
-                            <div class="receipt-fact"><span>Type</span><span>{% if receipt.sourcing_payment.is_full_payment %}Full Payment{% else %}Partial Payment{% endif %}</span></div>
-                            {% if receipt.sourcing_payment.final_invoice %}
-                            <div class="receipt-fact"><span>Invoice</span><span>FI-{{ receipt.sourcing_payment.final_invoice.pk }}</span></div>
-                            {% endif %}
-                            <div class="receipt-fact"><span>Amount Due</span><span>{{ receipt.sourcing_payment.amount_due_snapshot|floatformat:2 }} {{ receipt.sourcing_payment.currency }}</span></div>
-                            <div class="receipt-fact"><span>Balance After</span><span>{{ receipt.sourcing_payment.balance_after|floatformat:2 }} {{ receipt.sourcing_payment.currency }}</span></div>
-                            {% if receipt.sourcing_payment.cash_received %}
-                            <div class="receipt-fact"><span>Cash Received</span><span>{{ receipt.sourcing_payment.cash_received|floatformat:2 }} {{ receipt.sourcing_payment.currency }}</span></div>
-                            <div class="receipt-fact"><span>Change Returned</span><span>{{ receipt.sourcing_payment.change_given|floatformat:2 }} {{ receipt.sourcing_payment.currency }}</span></div>
-                            {% endif %}
-                        {% else %}
-                            <div class="receipt-fact"><span>Reference</span><span>&mdash;</span></div>
-                        {% endif %}
-                        <div class="receipt-fact"><span>Receipt No.</span><span>{{ receipt.receipt_number }}</span></div>
-                    </div>
-                </section>
-            </div>
-
-            <div class="receipt-signoff">
-                <div class="receipt-thanks">
-                    <strong>Thank you for your business.</strong>
-                    This receipt acknowledges payment received in good order. Please retain a copy for your records. For queries, reference the receipt number above.
-                </div>
-                <div class="receipt-signature">
-                    <span class="sig-line">Authorised Signature</span>
-                    <span class="sig-name">For &amp; on behalf of GMi Terralink Co. Ltd</span>
-                </div>
-            </div>
-
-            <div class="receipt-footer-note">
-                {% include "logistics/components/document_terms_footer.html" %}
-            </div>
+        <article class="pdf-page">
+            {% include "logistics/pdf/_document_header.html" with doc_label="Official Receipt" doc_number=receipt.receipt_number doc_meta=receipt.issued_at|date:"d F Y H:i" doc_status=receipt.is_reversed|yesno:"Reversed,Paid" doc_status_class=receipt.is_reversed|yesno:"is-reversed,is-paid" %}
+            {% include "logistics/pdf/_receipt_body.html" %}
+            {% include "logistics/pdf/_document_footer.html" %}
         </article>
     </section>
 </div>
