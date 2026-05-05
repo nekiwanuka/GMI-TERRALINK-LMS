@@ -132,6 +132,14 @@
         font-size: 18px !important;
         line-height: 1.05 !important;
     }
+    .receipt-hero-amount .cur {
+        padding: 0.3rem 0.55rem !important;
+        font-size: 9px !important;
+    }
+    .receipt-hero-amount .val {
+        padding: 0.25rem 0.65rem !important;
+        font-size: 16px !important;
+    }
 
     .receipt-hero-meta {
         font-size: 9.5px !important;
@@ -540,15 +548,29 @@
 
 .receipt-hero {
     margin-top: 0.9rem;
-    padding: 0.9rem 1rem;
-    border-radius: 16px;
-    background: linear-gradient(135deg, #fbf7e4 0%, #f5e6a8 100%);
+    padding: 1rem 1.1rem;
+    border-radius: 18px;
+    background:
+        radial-gradient(120% 140% at 0% 0%, rgba(244, 194, 31, 0.18) 0%, rgba(244, 194, 31, 0) 55%),
+        linear-gradient(135deg, #fbf7e4 0%, #f5e6a8 100%);
     color: #1a1a1a;
     display: grid;
     grid-template-columns: 1.1fr 1fr;
     gap: 1.1rem;
     align-items: center;
     border: 1px solid #ece7cd;
+    box-shadow: 0 8px 22px rgba(196, 157, 27, 0.10);
+    position: relative;
+    overflow: hidden;
+}
+
+.receipt-hero::before {
+    content: "";
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 4px;
+    background: linear-gradient(180deg, #f4c21f 0%, #b89028 100%);
+    border-radius: 4px 0 0 4px;
 }
 
 .receipt-hero-left .label,
@@ -562,18 +584,39 @@
 }
 
 .receipt-hero-amount {
+    display: inline-flex;
+    align-items: stretch;
+    border-radius: 12px;
+    overflow: hidden;
+    background: #ffffff;
+    border: 1px solid rgba(184, 144, 40, 0.35);
+    box-shadow: 0 4px 12px rgba(30, 26, 35, 0.06);
     font-family: "Space Grotesk", sans-serif;
-    font-size: clamp(1.7rem, 4vw, 2.4rem);
     font-weight: 700;
-    line-height: 1.05;
-    color: #1a1a1a;
+    line-height: 1;
 }
 
 .receipt-hero-amount .cur {
-    font-size: 0.55em;
-    font-weight: 600;
-    color: rgba(26, 26, 26, 0.55);
-    margin-right: 0.35rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(180deg, #1e1a23 0%, #2c2632 100%);
+    color: #f4c21f;
+    padding: 0.55rem 0.85rem;
+    font-size: 0.82rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-weight: 700;
+    border-right: 1px solid rgba(244, 194, 31, 0.25);
+}
+
+.receipt-hero-amount .val {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.45rem 1rem;
+    font-size: clamp(1.6rem, 3.6vw, 2.2rem);
+    color: #1a1a1a;
+    letter-spacing: -0.005em;
 }
 
 .receipt-hero-meta {
@@ -697,6 +740,14 @@
     .receipt-hero-amount {
         font-size: 22px !important;
     }
+    .receipt-hero-amount .cur {
+        padding: 0.32rem 0.6rem !important;
+        font-size: 10px !important;
+    }
+    .receipt-hero-amount .val {
+        padding: 0.28rem 0.7rem !important;
+        font-size: 20px !important;
+    }
     .receipt-signoff {
         margin-top: 0.7rem !important;
     }
@@ -784,7 +835,10 @@
             <div class="receipt-hero">
                 <div class="receipt-hero-left">
                     <div class="label">Amount Received</div>
-                    <div class="receipt-hero-amount"><span class="cur">{{ receipt.currency }}</span>{{ receipt.amount|floatformat:2 }}</div>
+                    <div class="receipt-hero-amount">
+                        <span class="cur">{{ receipt.currency }}</span>
+                        <span class="val">{{ receipt.amount|floatformat:2 }}</span>
+                    </div>
                 </div>
                 <div class="receipt-hero-right">
                     <div class="receipt-hero-meta">

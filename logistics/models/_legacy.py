@@ -2442,17 +2442,70 @@ class Receipt(models.Model):
         ]
         pdf.drawString(margin, meta_y, "   |   ".join(meta_parts))
 
-        chip_w = 190
-        chip_h = 34
+        # -------- Premium amount capsule (top-right) --------
+        # Two-tone pill: dark left tab with currency + light right body with amount.
+        amount_text = f"{self.amount:,.2f}"
+        currency_text = (self.currency or "").strip().upper() or "—"
+        body_font_size = 17
+        cur_font_size = 11
+        amount_w = stringWidth(amount_text, "Helvetica-Bold", body_font_size)
+        cur_w = stringWidth(currency_text, "Helvetica-Bold", cur_font_size)
+        cur_tab_w = max(48, cur_w + 22)
+        body_pad_x = 16
+        chip_body_w = amount_w + (body_pad_x * 2)
+        chip_w = cur_tab_w + chip_body_w
+        chip_h = 44
         chip_x = width - margin - chip_w
-        chip_y = top - 18
+        chip_y = top - 26
+
+        # Light body
         pdf.setFillColor(soft_fill)
-        pdf.setStrokeColor(soft_fill)
-        pdf.roundRect(chip_x, chip_y, chip_w, chip_h, 14, fill=1, stroke=0)
+        pdf.setStrokeColor(rcolors.HexColor("#E6D9A8"))
+        pdf.setLineWidth(0.6)
+        pdf.roundRect(chip_x, chip_y, chip_w, chip_h, 10, fill=1, stroke=1)
+
+        # Dark currency tab on the left of the pill
+        pdf.saveState()
         pdf.setFillColor(primary)
-        pdf.setFont("Helvetica-Bold", 16)
+        pdf.setStrokeColor(primary)
+        # Draw a rounded rect, then mask the right side so only the left is rounded.
+        pdf.roundRect(chip_x, chip_y, cur_tab_w, chip_h, 10, fill=1, stroke=0)
+        pdf.rect(chip_x + cur_tab_w - 10, chip_y, 10, chip_h, fill=1, stroke=0)
+        pdf.restoreState()
+
+        # Vertical divider between tab and body
+        pdf.setStrokeColor(rcolors.HexColor("#E6D9A8"))
+        pdf.setLineWidth(0.6)
+        pdf.line(
+            chip_x + cur_tab_w,
+            chip_y + 6,
+            chip_x + cur_tab_w,
+            chip_y + chip_h - 6,
+        )
+
+        # Tiny "AMOUNT PAID" eyebrow above the body amount
+        pdf.setFillColor(rcolors.HexColor("#8a6d1d"))
+        pdf.setFont("Helvetica-Bold", 6.5)
+        pdf.drawString(
+            chip_x + cur_tab_w + body_pad_x, chip_y + chip_h - 11, "AMOUNT PAID"
+        )
+
+        # Currency on the dark tab
+        pdf.setFillColor(accent)
+        pdf.setFont("Helvetica-Bold", cur_font_size)
         pdf.drawCentredString(
-            chip_x + (chip_w / 2), chip_y + 11, f"{self.currency} {self.amount:,.2f}"
+            chip_x + (cur_tab_w / 2),
+            chip_y + (chip_h / 2) - (cur_font_size / 3),
+            currency_text,
+        )
+
+        # Amount on the light body
+        pdf.setFillColor(primary)
+        pdf.setFont("Helvetica-Bold", body_font_size)
+        pdf.drawString(
+            chip_x + cur_tab_w + body_pad_x,
+            chip_y + 11,
+            amount_text,
         )
 
         content_top = top - 54
@@ -2514,32 +2567,64 @@ class Receipt(models.Model):
 
         draw_info_box(margin, left_y, left_w, left_h, "Client Details", client_lines)
 
+        # -------- Premium "AMOUNT RECEIVED" panel --------
         pdf.setFillColor(rcolors.white)
         pdf.setStrokeColor(border)
+        pdf.setLineWidth(0.6)
         pdf.rect(right_x, left_y, right_w, right_h, fill=1, stroke=1)
-        pdf.setFillColor(muted)
-        pdf.setFont("Helvetica-Bold", 9)
-        pdf.drawString(right_x + 12, left_y + right_h - 16, "AMOUNT RECEIVED")
-        pdf.setFillColor(primary)
-        pdf.setFont("Helvetica-Bold", 18)
-        pdf.drawString(
-            right_x + 12, left_y + right_h - 42, f"{self.currency} {self.amount:,.2f}"
+
+        # Soft cream header strip
+        header_h = 18
+        pdf.setFillColor(soft_fill)
+        pdf.setStrokeColor(soft_fill)
+        pdf.rect(
+            right_x, left_y + right_h - header_h, right_w, header_h, fill=1, stroke=0
         )
+
+        # Gold accent bar on the left edge of the panel
+        pdf.setFillColor(accent)
+        pdf.setStrokeColor(accent)
+        pdf.rect(right_x, left_y, 3, right_h, fill=1, stroke=0)
+
+        pdf.setFillColor(rcolors.HexColor("#8a6d1d"))
+        pdf.setFont("Helvetica-Bold", 9)
+        pdf.drawString(right_x + 12, left_y + right_h - 12, "AMOUNT RECEIVED")
+
+        # Big amount: currency in muted weight, value in primary bold
+        amount_y = left_y + right_h - 38
+        pdf.setFillColor(muted)
+        pdf.setFont("Helvetica-Bold", 10)
+        pdf.drawString(right_x + 12, amount_y, currency_text)
+        cur_label_w = stringWidth(currency_text, "Helvetica-Bold", 10)
+        pdf.setFillColor(primary)
+        pdf.setFont("Helvetica-Bold", 19)
+        pdf.drawString(
+            right_x + 12 + cur_label_w + 6,
+            amount_y - 3,
+            amount_text,
+        )
+
+        # Gold hairline separator under the amount
+        pdf.setStrokeColor(accent)
+        pdf.setLineWidth(0.8)
+        sep_y = amount_y - 12
+        pdf.line(right_x + 12, sep_y, right_x + right_w - 12, sep_y)
+        pdf.setLineWidth(0.4)
+
         pdf.setFont("Helvetica", 8.5)
-        fact_y = left_y + right_h - 60
+        fact_y = sep_y - 4
         pdf.setStrokeColor(border)
-        for line in summary_lines[:4]:
-            pdf.line(right_x + 12, fact_y, right_x + right_w - 12, fact_y)
-            fact_y -= 12
+        for line in summary_lines[:3]:
             pdf.setFillColor(muted)
             if ": " in line:
                 key, value = line.split(": ", 1)
             else:
                 key, value = ("Type", line)
-            pdf.drawString(right_x + 12, fact_y + 3, key)
+            pdf.drawString(right_x + 12, fact_y, key)
             pdf.setFillColor(primary)
-            pdf.drawRightString(right_x + right_w - 12, fact_y + 3, value[:26])
-            fact_y -= 8
+            pdf.drawRightString(right_x + right_w - 12, fact_y, value[:26])
+            fact_y -= 11
+            pdf.line(right_x + 12, fact_y + 3, right_x + right_w - 12, fact_y + 3)
 
         detail_y = left_y - 78
         if self.sourcing_payment:
