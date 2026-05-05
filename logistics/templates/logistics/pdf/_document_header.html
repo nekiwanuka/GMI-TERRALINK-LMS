@@ -1,0 +1,33 @@
+{% load static %}
+<table class="gmi-hero">
+    <tr>
+        <td class="logo-cell" style="width: 78px;">
+            <span class="logo-plate"><img src="{% static 'images/gmi_logo.png' %}" alt="GMI"></span>
+        </td>
+        <td style="width: 200px;">
+            <div class="brand-name">GMI Terralink</div>
+            <div class="brand-tag">Logistics &middot; Sourcing &middot; Trade</div>
+        </td>
+        <td class="right">
+            <div class="doc-title">{{ doc_label }}</div>
+            {% if doc_number %}<div class="doc-number">{{ doc_number }}</div>{% endif %}
+            {% if doc_meta %}<div class="doc-meta">{{ doc_meta }}</div>{% endif %}
+            {% if doc_status %}<span class="doc-status {{ doc_status_class|default:'' }}">{{ doc_status }}</span>{% endif %}
+        </td>
+    </tr>
+</table>
+<table class="gmi-addr">
+    <tr>
+        <td>
+            <div class="addr-title">China Branch &middot; Guangzhou</div>
+            <div class="addr-line">B239B (ECAT), Jinsha Block B 2F, Baiyun</div>
+            <div class="addr-line"><b>+86 177 0195 4464</b></div>
+        </td>
+        <td>
+            <div class="addr-title">Uganda Branch &middot; Kampala</div>
+            <div class="addr-line">Plot 10/12, Hamdeen Lwanga Close, Muyenga</div>
+            <div class="addr-line"><b>+256 768 049 940</b></div>
+            <div class="addr-line">gmiterralinkinfo@gmail.com &middot; www.gmi-terralink.com</div>
+        </td>
+    </tr>
+</table>

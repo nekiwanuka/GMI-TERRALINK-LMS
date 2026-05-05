@@ -377,6 +377,8 @@
 .inv-tbl tfoot td { font-size: 12.5px; }
 .inv-tbl tfoot tr.fee-row td { background: #fcfaf3; }
 .inv-tbl tfoot tr.subtotal-row td { background: #f5f1e1; font-weight: 700; }
+{% include "logistics/pdf/_base_styles.html" %}
+{% include "logistics/pdf/_final_invoice_styles.html" %}
 </style>
 
 <!-- Action bar -->
@@ -473,120 +475,7 @@
     </div>
 </div>
 
-<!-- Invoice Document -->
-<div class="container pb-4 print-root">
-<div class="inv-page" id="final-invoice-print-target">
-
-    {% include 'logistics/components/document_header.html' with doc_label=invoice.loading|yesno:"Cargo Invoice,Sourcing Invoice" doc_number="FI-"|add:invoice.pk|stringformat:"s" doc_meta=invoice.transaction.transaction_id doc_status=payment_status_label doc_status_class=payment_status_class %}
-
-    <!-- 3. Bill To card + Invoice Details card -->
-    <div class="inv-meta-row">
-        <div class="inv-card">
-            <div class="inv-card-title">Bill To</div>
-            <p class="inv-billto-name">{{ invoice.transaction.customer.name }}</p>
-            {% if invoice.transaction.customer.company_name and invoice.transaction.customer.company_name != invoice.transaction.customer.name %}
-                <p class="inv-billto-company">{{ invoice.transaction.customer.company_name }}</p>
-            {% endif %}
-            <div class="inv-billto-meta">
-                {% if invoice.transaction.customer.contact_person %}<div><i class="bi bi-person"></i><span>{{ invoice.transaction.customer.contact_person }}</span></div>{% endif %}
-                {% if invoice.transaction.customer.phone %}<div><i class="bi bi-telephone"></i><span>{{ invoice.transaction.customer.phone }}</span></div>{% endif %}
-                {% if invoice.transaction.customer.email %}<div><i class="bi bi-envelope"></i><span>{{ invoice.transaction.customer.email }}</span></div>{% endif %}
-                {% if invoice.transaction.customer.address %}<div><i class="bi bi-geo-alt"></i><span>{{ invoice.transaction.customer.address }}</span></div>{% endif %}
-            </div>
-        </div>
-        <div class="inv-card">
-            <div class="inv-card-title">Invoice Details</div>
-            <dl class="inv-details-grid">
-                <dt>Invoice #</dt><dd>FI-{{ invoice.pk }}</dd>
-                <dt>Invoice Date</dt><dd>{{ invoice.created_at|date:"d/m/Y" }}</dd>
-                <dt>Shipping</dt><dd>{{ invoice.get_shipping_mode_display }}</dd>
-                <dt>Status</dt><dd><span class="badge {{ payment_status_class }}" style="font-size:11px;">{{ payment_status_label }}</span></dd>
-            </dl>
-            <hr class="inv-billto-divider">
-            <dl class="inv-details-grid">
-                <dt>Ref</dt><dd>{{ invoice.transaction.transaction_id }}</dd>
-                {% if invoice.loading %}<dt>Cargo</dt><dd>{{ invoice.loading.loading_id }}</dd>{% endif %}
-                <dt>Route</dt><dd>{{ invoice.route }}</dd>
-            </dl>
-        </div>
-    </div>
-
-    <!-- 4. Items table -->
-    <table class="inv-tbl">
-        <thead>
-            <tr>
-                <th style="width:60px;">QTY</th>
-                <th class="desc-col">DESCRIPTION</th>
-                <th style="width:120px;">UNIT PRICE</th>
-                <th style="width:120px;">AMOUNT</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for item in invoice.items %}
-            <tr>
-                <td class="text-center qty-cell">{{ item.quantity|default:"1" }}</td>
-                <td class="desc-cell">{{ item.description }}</td>
-                <td class="text-end money-cell">
-                    {% if item.unit_price %}{{ item.unit_price|floatformat:2|intcomma }}
-                    {% elif item.sales_price %}{{ item.sales_price|floatformat:2|intcomma }}
-                    {% elif item.amount %}{{ item.amount|floatformat:2|intcomma }}
-                    {% else %}—{% endif %}
-                </td>
-                <td class="text-end money-cell">
-                    {% if item.total %}{{ item.total|floatformat:2|intcomma }}
-                    {% elif item.amount %}{{ item.amount|floatformat:2|intcomma }}
-                    {% elif item.unit_price %}{{ item.unit_price|floatformat:2|intcomma }}
-                    {% else %}—{% endif %}
-                </td>
-            </tr>
-            {% empty %}
-            <tr><td colspan="4" class="text-center" style="color:#999;padding:18px;">No line items.</td></tr>
-            {% endfor %}
-        </tbody>
-        <tfoot>
-            <tr class="subtotal-row">
-                <td colspan="3" class="text-end"><strong>Items Subtotal</strong></td>
-                <td class="text-end"><strong>{{ invoice.subtotal|floatformat:2|intcomma }}</strong></td>
-            </tr>
-            {% if invoice.sourcing_fee and invoice.sourcing_fee > 0 %}
-            <tr class="fee-row">
-                <td colspan="3" class="text-end">Sourcing Fee</td>
-                <td class="text-end">{{ invoice.sourcing_fee|floatformat:2|intcomma }}</td>
-            </tr>
-            {% endif %}
-            {% if invoice.service_fee and invoice.service_fee > 0 %}
-            <tr class="fee-row">
-                <td colspan="3" class="text-end">Handling Fee</td>
-                <td class="text-end">{{ invoice.service_fee|floatformat:2|intcomma }}</td>
-            </tr>
-            {% endif %}
-            {% if invoice.shipping_cost and invoice.shipping_cost > 0 %}
-            <tr class="fee-row">
-                <td colspan="3" class="text-end">Shipping Fee</td>
-                <td class="text-end">{{ invoice.shipping_cost|floatformat:2|intcomma }}</td>
-            </tr>
-            {% endif %}
-            <tr class="inv-total-row">
-                <td colspan="2" class="text-end" style="background:#fff8db;">
-                    <span class="amount-due-label">Amount Due</span>
-                </td>
-                <td class="text-end"><strong>TOTAL</strong></td>
-                <td class="text-end"><strong>{{ invoice.currency|default:"USD" }} {{ invoice.total_amount|floatformat:2|intcomma }}</strong></td>
-            </tr>
-            {% if total_paid and total_paid > 0 %}
-            <tr class="fee-row">
-                <td colspan="3" class="text-end">Total Paid</td>
-                <td class="text-end">({{ total_paid|floatformat:2|intcomma }})</td>
-            </tr>
-            <tr class="subtotal-row">
-                <td colspan="3" class="text-end"><strong>Balance Due</strong></td>
-                <td class="text-end"><strong>{{ balance|floatformat:2|intcomma }}</strong></td>
-            </tr>
-            {% endif %}
-        </tfoot>
-    </table>
-
-    <!-- Purchase order alert -->
+<!-- Purchase order alert -->
     {% if purchase_order %}
     <div class="no-print" style="margin:16px 28px 0;">
         <div class="alert alert-success d-flex justify-content-between align-items-center mb-0">
@@ -636,50 +525,12 @@
     </div>
     {% endif %}
 
-    <!-- Payment terms + bank details -->
-    <div class="inv-pay-grid">
-        <div class="inv-pay-card">
-            <div class="inv-card-title">Payment Instructions</div>
-            <div class="row-line"><span>Bank Name</span><strong>Stanbic Bank Uganda</strong></div>
-            <div class="row-line"><span>Account Name</span><strong>GMI Terralink Co. Ltd</strong></div>
-            <div class="row-line"><span>Account No.</span><strong>9030020123456</strong></div>
-            <div class="row-line"><span>SWIFT</span><strong>SBICUGKX</strong></div>
-            <div class="row-line"><span>Currency</span><strong>{{ invoice.currency|default:"USD" }}</strong></div>
-        </div>
-        <div class="inv-pay-card">
-            <div class="inv-card-title">Terms &amp; Notes</div>
-            <div style="margin-bottom:6px;">Payment due on receipt unless otherwise agreed in writing. Quote invoice <strong>FI-{{ invoice.pk }}</strong> as reference.</div>
-            <div style="color:#777;font-size:11px;">Goods remain the property of GMI Terralink Co. Ltd until full settlement. All disputes must be raised within 7 days of invoice date.</div>
-        </div>
-    </div>
-
-    <!-- Signatures -->
-    <div class="inv-sign-row">
-        <div class="inv-sign-block">
-            <div class="sign-meta">Prepared by</div>
-            <div class="sign-line">{{ invoice.created_by.get_full_name|default:invoice.created_by.username|default:"GMI Terralink" }}</div>
-        </div>
-        <div class="inv-sign-block">
-            <div class="sign-meta">Authorized Signature</div>
-            {% if document_signature and document_signature.signature_profile.signature_image %}
-            <img src="{% url 'protected_media' document_signature.signature_profile.signature_image.name %}" alt="Authorized signature" class="inv-signature-image">
-            <div class="sign-line signed">{{ document_signature.signer_name }}</div>
-            <div class="text-muted small">{{ document_signature.signer_title }}</div>
-            <span class="inv-signed-meta">Signed {{ document_signature.signed_at|date:"d M Y, H:i" }}</span>
-            {% else %}
-            <div class="sign-line">For GMI Terralink Co. Ltd</div>
-            {% endif %}
-        </div>
-    </div>
-
-    <!-- Ref footer -->
-    <div class="inv-footer-ref">
-        <span>Generated {{ invoice.created_at|date:"d M Y, H:i" }}</span>
-        <span>FI-{{ invoice.pk }} &nbsp;|&nbsp; {{ invoice.transaction.transaction_id }}</span>
-    </div>
-
-    {% include "logistics/components/document_terms_footer.html" %}
-
+<!-- Invoice Document -->
+<div class="container pb-4 print-root">
+<div class="pdf-page" id="final-invoice-print-target">
+    {% include "logistics/pdf/_document_header.html" with doc_label=invoice.loading|yesno:"Cargo Invoice,Sourcing Invoice" doc_number="FI-"|add:invoice.pk|stringformat:"s" doc_meta=invoice.transaction.transaction_id doc_status=payment_status_label doc_status_class=payment_status_class %}
+    {% include "logistics/pdf/_final_invoice_body.html" %}
+    {% include "logistics/pdf/_document_footer.html" %}
 </div>
 </div>
 
