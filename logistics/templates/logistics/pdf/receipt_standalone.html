@@ -55,7 +55,9 @@ td, th { padding: 0; vertical-align: top; }
 .sign-table { margin: 0 18px; }
 .thanks { width: 60%; padding-right: 22px; color: #333; font-size: 8.6px; line-height: 1.48; }
 .signature { width: 40%; text-align: center; border: 1px solid #d8d8d8; border-top: 3px solid #d4af37; border-radius: 8px; padding: 9px 10px; }
+.sig-img { display: block; max-width: 150px; max-height: 48px; object-fit: contain; margin: 0 auto 4px auto; }
 .sig-line { margin: 34px auto 0 auto; width: 180px; border-top: 1px solid #101010; padding-top: 5px; font-weight: bold; font-size: 9px; }
+.sig-line.signed { margin-top: 4px; }
 .sig-sub { margin-top: 2px; color: #666; font-size: 8px; }
 .footer { position: absolute; left: 18px; right: 18px; bottom: 12px; border-top: 1px solid #d8d8d8; padding-top: 8px; color: #555; font-size: 7.4px; }
 .footer-band { margin-top: 6px; background: #d4af37; color: #101010; padding: 5px 8px; text-align: center; font-size: 7.3px; text-transform: uppercase; letter-spacing: 0.6px; }
@@ -73,7 +75,7 @@ td, th { padding: 0; vertical-align: top; }
         {% if receipt.is_reversed %}<div class="reversal"><b>Reversal:</b> {% if receipt.reversed_at %}{{ receipt.reversed_at|date:"d M Y H:i" }}{% endif %}{% if receipt.reversed_by %} by {{ receipt.reversed_by.username }}{% endif %}{% if receipt.reversal_notes %} - {{ receipt.reversal_notes }}{% endif %}</div>{% endif %}
         <div class="post-details-space"></div>
     </div>
-    <table class="sign-table"><tr><td class="thanks"><b>Thank you for your business.</b><br>This receipt acknowledges payment received in good order. Please retain it for your records and quote the receipt number for any payment queries.</td><td class="signature"><div class="sig-line">Authorised Signature</div><div class="sig-sub">For GMI Terralink Ltd</div></td></tr></table>
+    <table class="sign-table"><tr><td class="thanks"><b>Thank you for your business.</b><br>This receipt acknowledges payment received in good order. Please retain it for your records and quote the receipt number for any payment queries.</td><td class="signature">{% if document_signature and document_signature.signature_profile.signature_image %}<img class="sig-img" src="{{ document_signature.signature_profile.signature_image.url }}" alt="Signature"><div class="sig-line signed">{{ document_signature.signer_name }}</div><div class="sig-sub">For GMI Terralink Ltd</div>{% if document_signature.signed_at %}<div class="sig-sub">Signed {{ document_signature.signed_at|date:"d M Y H:i" }}</div>{% endif %}{% else %}<div class="sig-line">Authorised Signature</div><div class="sig-sub">For GMI Terralink Ltd</div>{% endif %}</td></tr></table>
     <div class="footer">GMI TERRALINK LTD | Guangzhou, China | Kampala, Uganda | gmiterralinkinfo@gmail.com | +256 768 049 940<div class="footer-band">Procurement | Logistics | Documentation | Trade Support</div></div>
 </div>
 </body>

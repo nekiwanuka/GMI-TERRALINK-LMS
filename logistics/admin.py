@@ -21,6 +21,8 @@ from .models import (
     ProformaInvoice,
     ProofOfDelivery,
     Receipt,
+    DocumentSignature,
+    SignatureProfile,
     Sourcing,
     Supplier,
     SupplierPayment,
@@ -43,6 +45,18 @@ from .services import (
 admin.site.site_header = "GMI Terralink Administration"
 admin.site.site_title = "GMI Terralink Admin"
 admin.site.index_title = "Operations Control Center"
+
+
+def _admin_dashboard_has_permission(request):
+    user = request.user
+    return bool(
+        user.is_active
+        and user.is_staff
+        and (user.is_superuser or getattr(user, "role", "") == "ADMIN")
+    )
+
+
+admin.site.has_permission = _admin_dashboard_has_permission
 
 
 @admin.register(CustomUser)
@@ -72,13 +86,68 @@ class CustomUserAdmin(UserAdmin):
             None,
             {
                 "classes": ("wide",),
-                "fields": ("username", "email", "password1", "password2", "role"),
+                "fields": (
+                    "username",
+                    "email",
+                    "first_name",
+                    "last_name",
+                    "phone",
+                    "password1",
+                    "password2",
+                    "role",
+                ),
             },
         ),
     )
     list_display = ("username", "email", "first_name", "last_name", "role", "is_staff")
     list_filter = ("role", "is_staff", "is_active")
     search_fields = ("username", "first_name", "last_name", "email")
+
+
+@admin.register(SignatureProfile)
+class SignatureProfileAdmin(admin.ModelAdmin):
+    list_display = ("user", "display_name", "title", "is_active", "updated_at")
+    list_filter = ("is_active", "updated_at")
+    search_fields = ("user__username", "user__first_name", "user__last_name", "title")
+    readonly_fields = ("created_at", "updated_at")
+
+
+@admin.register(DocumentSignature)
+class DocumentSignatureAdmin(admin.ModelAdmin):
+    list_display = (
+        "content_object",
+        "signer_name",
+        "signer_role",
+        "signed_by",
+        "signed_at",
+    )
+    list_filter = ("signer_role", "signed_at")
+    search_fields = (
+        "signer_name",
+        "signer_role",
+        "signed_by__username",
+        "signed_by__first_name",
+        "signed_by__last_name",
+    )
+    readonly_fields = (
+        "content_type",
+        "object_id",
+        "signed_by",
+        "signature_profile",
+        "signer_name",
+        "signer_title",
+        "signer_role",
+        "note",
+        "signed_at",
+        "created_at",
+        "updated_at",
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(Client)

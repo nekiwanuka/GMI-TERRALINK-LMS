@@ -44,7 +44,7 @@
                             <div class="col-12"><label class="form-label">Warehouse Notes</label>{{ form.warehouse_notes }}{% if form.warehouse_notes.errors %}<div class="text-danger small mt-1">{{ form.warehouse_notes.errors|join:", " }}</div>{% endif %}</div>
                             <div class="col-12">
                                 <div class="alert alert-light border mb-0 small">
-                                    Fulfillment is anchored to the client-facing final invoice. Only fully paid invoices are available here. Purchase orders remain related procurement records under that invoice, and warehouse handling is only used when goods physically enter stock before dispatch.
+                                    Fulfillment is anchored to the client-facing final invoice. Only Paid or Post Pay invoices are available here. Purchase orders remain related procurement records under that invoice, and warehouse handling is only used when goods physically enter stock before dispatch.
                                 </div>
                             </div>
                         </div>

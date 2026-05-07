@@ -34,7 +34,10 @@
                         <td>{{ inv.total_amount }}</td>
                         <td>{{ inv.currency }}</td>
                         <td>{{ inv.get_shipping_mode_display }}</td>
-                        <td><span class="badge {{ inv.payment_status_class }}">{{ inv.payment_status_label }}</span></td>
+                        <td>
+                            <span class="badge {{ inv.payment_status_class }}">{{ inv.payment_status_label }}</span>
+                            {% if inv.balance_for_display > 0 %}<div class="small text-muted">Balance: {{ inv.balance_for_display }} {{ inv.currency }}</div>{% endif %}
+                        </td>
                         <td>
                             <a class="btn btn-sm btn-outline-dark" href="{% if inv.loading %}{% url 'logistics_final_invoice_detail' inv.id %}{% else %}{% url 'sourcing_final_invoice_detail' inv.id %}{% endif %}">Open</a>
                             <a class="btn btn-sm btn-outline-primary" href="{% if inv.loading %}{% url 'logistics_final_invoice_pdf' inv.id %}{% else %}{% url 'sourcing_final_invoice_pdf' inv.id %}{% endif %}">PDF</a>

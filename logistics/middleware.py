@@ -5,6 +5,7 @@ from django.http import HttpResponseForbidden
 from django.http import JsonResponse
 from django.contrib.auth.views import redirect_to_login
 from django.shortcuts import resolve_url
+from urllib.parse import urlsplit
 
 ROLE_ALIASES = {
     "superuser": "ADMIN",
@@ -80,3 +81,43 @@ class ModuleRoleMiddleware:
             return self.get_response(request)
 
         return self.get_response(request)
+
+
+class NotificationTargetReadMiddleware:
+    """Clear unread notification badges when the linked target page is opened."""
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        if (
+            request.user.is_authenticated
+            and request.method in {"GET", "HEAD"}
+            and not request.path.startswith("/notifications/")
+        ):
+            self._mark_matching_notifications_read(request)
+        return self.get_response(request)
+
+    def _mark_matching_notifications_read(self, request):
+        from logistics.models import Notification
+
+        ids_to_mark = []
+        current_path = request.path
+        current_full_path = request.get_full_path()
+        unread_notifications = Notification.objects.filter(
+            recipient=request.user,
+            is_read=False,
+        ).only("id", "link")[:250]
+        for notification in unread_notifications:
+            link = (notification.link or "").strip()
+            if not link:
+                continue
+            link_parts = urlsplit(link)
+            link_path = link_parts.path or link
+            link_full_path = link_path
+            if link_parts.query:
+                link_full_path = f"{link_path}?{link_parts.query}"
+            if link_path == current_path or link_full_path == current_full_path:
+                ids_to_mark.append(notification.id)
+        if ids_to_mark:
+            Notification.objects.filter(id__in=ids_to_mark).update(is_read=True)

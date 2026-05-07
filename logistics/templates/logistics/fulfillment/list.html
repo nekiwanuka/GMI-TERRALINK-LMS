@@ -35,6 +35,7 @@
                         <th>Transaction</th>
                         <th>Client</th>
                         <th>Invoice</th>
+                        <th>Payment</th>
                         <th>Status</th>
                         <th>Route</th>
                         <th class="text-center">Allocated</th>
@@ -57,6 +58,14 @@
                             <small class="text-muted">{% if order.final_invoice %}{{ order.final_invoice.transaction.customer.name }} - {{ order.final_invoice.transaction.transaction_id }}{% endif %}</small>
                             <div class="text-muted small">Receipt: {{ order.receipt_numbers_display }}</div>
                         </td>
+                        <td>
+                            {% if order.payment_snapshot %}
+                            <span class="badge {{ order.payment_snapshot.invoice_class }}">{{ order.payment_snapshot.invoice_label }}</span>
+                            {% if order.payment_snapshot.invoice_balance > 0 %}<div class="small text-muted">Balance: {{ order.payment_snapshot.invoice_balance }} {{ order.final_invoice.currency }}</div>{% endif %}
+                            {% else %}
+                            <span class="badge bg-secondary">No Invoice</span>
+                            {% endif %}
+                        </td>
                         <td><span class="badge bg-{% if order.status == 'DELIVERED' %}success{% elif order.status == 'SEA_TRANSIT' or order.status == 'INLAND_TRANSIT' %}primary{% elif order.status == 'AT_PORT' or order.status == 'AT_DESTINATION_PORT' %}info text-dark{% else %}secondary{% endif %}">{{ order.get_status_display }}</span></td>
                         <td>
                             <div>{{ order.port_of_loading|default:"-" }}</div>
@@ -75,7 +84,7 @@
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="10" class="text-center text-muted py-4">No fulfillment workflows found.</td>
+                        <td colspan="11" class="text-center text-muted py-4">No fulfillment workflows found.</td>
                     </tr>
                     {% endfor %}
                 </tbody>

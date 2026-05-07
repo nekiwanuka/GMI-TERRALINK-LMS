@@ -62,6 +62,9 @@
             <a href="{% url 'receipt_pdf' receipt.pk %}?v={% now 'U' %}" class="btn btn-primary">
                 <i class="bi bi-file-pdf"></i> Download PDF
             </a>
+            <a href="{% url 'receipt_sign' receipt.pk %}" class="btn {% if document_signature %}btn-outline-success{% else %}btn-outline-dark{% endif %}">
+                <i class="bi bi-pen"></i> {% if document_signature %}Signed{% else %}Sign{% endif %}
+            </a>
             {% if not receipt.is_reversed and can_reverse_receipt %}
             <a href="{% url 'receipt_reverse' receipt.pk %}" class="btn btn-danger">
                 <i class="bi bi-x-circle"></i> Reverse / Refund

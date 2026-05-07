@@ -178,8 +178,21 @@
             <small class="text-muted">{{ purchase_order.po_number }} - {{ purchase_order.transaction.transaction_id }}</small>
         </div>
         <div class="d-flex gap-2">
+            {% if purchase_order.can_edit_purchase_order %}
             <a href="{% url 'purchase_order_update' purchase_order.pk %}" class="btn btn-outline-dark">Edit PO</a>
+            {% else %}
+            <span class="btn btn-outline-secondary disabled"><i class="bi bi-lock-fill"></i> Locked</span>
+            <button type="button" class="btn btn-dark" data-bs-toggle="modal" data-bs-target="#poCorrectionModal">Request Correction</button>
+            {% endif %}
+            {% if can_split_purchase_order %}
             <a href="{% url 'purchase_order_split_create' purchase_order.pk %}" class="btn btn-dark">Split to Supplier</a>
+            {% elif purchase_order.is_split %}
+            <span class="btn btn-outline-secondary disabled">Split PO</span>
+            {% elif has_supplier_splits %}
+            <span class="btn btn-outline-secondary disabled">Already Split</span>
+            {% else %}
+            <span class="btn btn-outline-secondary disabled">Split Unavailable</span>
+            {% endif %}
             {% if purchase_order.final_invoice and purchase_order.transaction.fulfillment_order %}
             <a href="{% url 'fulfillment_order_update' purchase_order.transaction.fulfillment_order.pk %}" class="btn btn-outline-secondary">Open Invoice Fulfillment</a>
             {% elif purchase_order.final_invoice and can_start_invoice_fulfillment %}
@@ -190,6 +203,13 @@
             <a href="{% url 'transaction_detail' purchase_order.transaction.pk %}" class="btn btn-outline-secondary">Back to Transaction</a>
         </div>
     </div>
+
+    {% if purchase_order.edit_locked %}
+    <div class="alert alert-warning border mb-3">
+        <strong><i class="bi bi-lock-fill"></i> Purchase order locked.</strong>
+        {{ purchase_order.edit_lock_message }}{% if purchase_order.final_invoice %} Money corrections should be reviewed against {{ purchase_order.final_invoice|doc_number:"FI" }} before any invoice totals are changed.{% endif %}
+    </div>
+    {% endif %}
 
     <div class="card shadow-sm po-shell">
         {% include "logistics/components/document_header.html" with doc_label="PURCHASE ORDER" doc_number=purchase_order.po_number doc_meta=purchase_order.transaction.transaction_id %}
@@ -284,8 +304,12 @@
               <div class="card-header d-flex justify-content-between align-items-center">
                 <strong><i class="bi bi-cash-stack"></i> Supplier Payments</strong>
                 {% if user.is_superuser or user.role in 'ADMIN,DIRECTOR,FINANCE,PROCUREMENT' %}
-                  {% if not purchase_order.transaction.is_closed %}
+                                    {% if can_record_supplier_payment %}
                   <a href="{% url 'record_supplier_payment' purchase_order.pk %}" class="btn btn-sm btn-success"><i class="bi bi-plus-circle"></i> Record payment</a>
+                                    {% elif has_supplier_splits and not purchase_order.is_split %}
+                                    <span class="btn btn-sm btn-outline-secondary disabled"><i class="bi bi-diagram-3"></i> Pay Split POs</span>
+                                    {% elif supplier_balance_due <= 0 %}
+                                    <span class="btn btn-sm btn-outline-success disabled"><i class="bi bi-check2-circle"></i> Fully paid</span>
                   {% else %}
                   <span class="badge bg-secondary">Trade closed</span>
                   {% endif %}
@@ -294,19 +318,20 @@
               <div class="card-body py-2">
                 <div class="row g-2">
                   <div class="col-md-4"><small class="text-muted d-block">PO Subtotal</small><strong>{{ purchase_order.subtotal|default:"0.00" }}</strong></div>
-                  <div class="col-md-4"><small class="text-muted d-block">Total Paid</small><strong class="text-success">{{ supplier_total_paid }}</strong></div>
+                  <div class="col-md-4"><small class="text-muted d-block">{% if supplier_payments_include_splits %}Split Payments Paid{% else %}Total Paid{% endif %}</small><strong class="text-success">{{ supplier_total_paid }}</strong></div>
                   <div class="col-md-4"><small class="text-muted d-block">Balance Due</small><strong class="{% if supplier_balance_due > 0 %}text-danger{% else %}text-success{% endif %}">{{ supplier_balance_due }}</strong></div>
                 </div>
               </div>
               <div class="table-responsive">
                 <table class="table table-sm mb-0">
                   <thead class="table-light">
-                    <tr><th>Date</th><th>Amount</th><th>Method</th><th>Reference</th><th>By</th><th></th></tr>
+                    <tr><th>Date</th>{% if supplier_payments_include_splits %}<th>Split PO</th>{% endif %}<th>Amount</th><th>Method</th><th>Reference</th><th>By</th><th></th></tr>
                   </thead>
                   <tbody>
                     {% for p in supplier_payments %}
                     <tr>
                       <td>{{ p.paid_at|date:"Y-m-d H:i" }}</td>
+                      {% if supplier_payments_include_splits %}<td>{{ p.purchase_order.po_number }}</td>{% endif %}
                       <td>{{ p.amount }} {{ p.currency }}</td>
                       <td>{{ p.get_method_display }}</td>
                       <td>{{ p.reference|default:"—" }}</td>
@@ -318,7 +343,7 @@
                       </td>
                     </tr>
                     {% empty %}
-                    <tr><td colspan="6" class="text-center text-muted py-3">No supplier payments yet.</td></tr>
+                    <tr><td colspan="{% if supplier_payments_include_splits %}7{% else %}6{% endif %}" class="text-center text-muted py-3">No supplier payments yet.</td></tr>
                     {% endfor %}
                   </tbody>
                 </table>
@@ -329,4 +354,38 @@
         </div>
     </div>
 </div>
+
+{% if purchase_order.edit_locked %}
+<div class="modal fade" id="poCorrectionModal" tabindex="-1" aria-labelledby="poCorrectionModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <form method="post" action="{% url 'purchase_order_correction_request' purchase_order.pk %}">
+                {% csrf_token %}
+                <div class="modal-header">
+                    <h5 class="modal-title" id="poCorrectionModalLabel">Request Director Correction</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Reason</label>
+                        <textarea name="reason" class="form-control" rows="3" required></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Correction Needed</label>
+                        <textarea name="correction" class="form-control" rows="3" required></textarea>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="affects_money" id="affects_money">
+                        <label class="form-check-label" for="affects_money">This correction affects money or invoice totals</label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-dark">Send Request</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
 {% endblock %}

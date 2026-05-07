@@ -75,10 +75,12 @@
     background: #fff;
     border: 1px solid var(--gmi-border);
     border-radius: 9px;
+    color: inherit;
     padding: .65rem .75rem;
     display: flex;
     align-items: center;
     gap: .65rem;
+    text-decoration: none;
     transition: border-color .15s ease, transform .15s ease;
   }
   .kpi:hover { border-color: var(--gmi-black); transform: translateY(-1px); }
@@ -208,19 +210,19 @@
 
   <!-- Unified KPI grid -->
   <div class="kpi-grid">
-    <div class="kpi"><i class="bi bi-people"></i><div><div class="v">{{ total_clients }}</div><div class="l">Clients</div></div></div>
-    <div class="kpi"><i class="bi bi-box-seam"></i><div><div class="v">{{ total_loadings }}</div><div class="l">Cargo records</div></div></div>
-    <div class="kpi"><i class="bi bi-compass"></i><div><div class="v">{{ total_transits }}</div><div class="l">Shipments</div></div></div>
-    <div class="kpi"><i class="bi bi-diagram-3"></i><div><div class="v">{{ total_transactions }}</div><div class="l">Transactions</div></div></div>
-    <div class="kpi"><i class="bi bi-hourglass-split"></i><div><div class="v">{{ active_transactions }}</div><div class="l">Active</div></div></div>
-    <div class="kpi {% if pending_containers %}is-warn{% endif %}"><i class="bi bi-archive"></i><div><div class="v">{{ pending_containers }}</div><div class="l">Returns pending</div></div></div>
-    <div class="kpi {% if pending_verifications %}is-warn{% endif %}"><i class="bi bi-shield-check"></i><div><div class="v">{{ pending_verifications }}</div><div class="l">Verifications</div></div></div>
+    <a class="kpi" href="{% url 'client_list' %}"><i class="bi bi-people"></i><div><div class="v">{{ total_clients }}</div><div class="l">Clients</div></div></a>
+    <a class="kpi" href="{% url 'loading_list' %}"><i class="bi bi-box-seam"></i><div><div class="v">{{ total_loadings }}</div><div class="l">Cargo records</div></div></a>
+    <a class="kpi" href="{% url 'transit_list' %}"><i class="bi bi-compass"></i><div><div class="v">{{ total_transits }}</div><div class="l">Shipments</div></div></a>
+    <a class="kpi" href="{% url 'transaction_list' %}"><i class="bi bi-diagram-3"></i><div><div class="v">{{ total_transactions }}</div><div class="l">Transactions</div></div></a>
+    <a class="kpi" href="{% url 'transaction_list' %}"><i class="bi bi-hourglass-split"></i><div><div class="v">{{ active_transactions }}</div><div class="l">Active</div></div></a>
+    <a class="kpi {% if pending_containers %}is-warn{% endif %}" href="{% url 'container_return_list' %}"><i class="bi bi-archive"></i><div><div class="v">{{ pending_containers }}</div><div class="l">Returns pending</div></div></a>
+    <a class="kpi {% if pending_verifications %}is-warn{% endif %}" href="{% url 'payment_list' %}"><i class="bi bi-shield-check"></i><div><div class="v">{{ pending_verifications }}</div><div class="l">Verifications</div></div></a>
     {% if can_view_financials %}
-    <div class="kpi is-success"><i class="bi bi-currency-dollar"></i><div><div class="v">${{ total_revenue|floatformat:0 }}</div><div class="l">Revenue</div></div></div>
-    <div class="kpi is-danger"><i class="bi bi-exclamation-octagon"></i><div><div class="v">${{ outstanding_balance|floatformat:0 }}</div><div class="l">Outstanding</div></div></div>
-    <div class="kpi"><i class="bi bi-truck"></i><div><div class="v">{{ active_shipments }}</div><div class="l">In transit</div></div></div>
-    <div class="kpi"><i class="bi bi-arrow-repeat"></i><div><div class="v">{{ conversion.rate }}%</div><div class="l">Conversion</div></div></div>
-    <div class="kpi is-success"><i class="bi bi-piggy-bank"></i><div><div class="v">${{ profit_estimate|floatformat:0 }}</div><div class="l">Profit est.</div></div></div>
+    <a class="kpi is-success" href="{% url 'director_finance_summary' %}"><i class="bi bi-currency-dollar"></i><div><div class="v">${{ total_revenue|floatformat:0 }}</div><div class="l">Revenue</div></div></a>
+    <a class="kpi is-danger" href="{% url 'director_finance_summary' %}#sheet-invoices"><i class="bi bi-exclamation-octagon"></i><div><div class="v">${{ outstanding_balance|floatformat:0 }}</div><div class="l">Outstanding</div></div></a>
+    <a class="kpi" href="{% url 'transit_list' %}"><i class="bi bi-truck"></i><div><div class="v">{{ active_shipments }}</div><div class="l">In transit</div></div></a>
+    <a class="kpi" href="{% url 'reports_dashboard' %}"><i class="bi bi-arrow-repeat"></i><div><div class="v">{{ conversion.rate }}%</div><div class="l">Conversion</div></div></a>
+    <a class="kpi is-success" href="{% url 'director_finance_summary' %}"><i class="bi bi-piggy-bank"></i><div><div class="v">${{ profit_estimate|floatformat:0 }}</div><div class="l">Profit est.</div></div></a>
     {% endif %}
   </div>
 

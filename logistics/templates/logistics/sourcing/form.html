@@ -1,6 +1,6 @@
 {% extends "logistics/base.html" %}
 
-{% block title %}Sourcing - {{ title }} | GMI TERRALINK{% endblock %}
+{% block title %}{{ title }} | GMI TERRALINK{% endblock %}
 
 {% block content %}
 <style>
@@ -355,7 +355,7 @@
     <nav aria-label="breadcrumb" class="mb-2">
         <ol class="breadcrumb mb-0" style="font-size:0.82rem;">
             <li class="breadcrumb-item"><a href="{% url 'dashboard' %}">Dashboard</a></li>
-            <li class="breadcrumb-item"><a href="{% url 'sourcing_list' %}">Sourcing</a></li>
+            <li class="breadcrumb-item"><a href="{% url 'sourcing_list' %}">Q-Worksheets</a></li>
             <li class="breadcrumb-item active">{{ title }}</li>
         </ol>
     </nav>
@@ -371,7 +371,7 @@
                         <div style="font-size:0.75rem;opacity:.75;">Supplier quotation collection worksheet</div>
                     </div>
                     <div class="text-end">
-                        <div style="font-size:0.72rem;opacity:.7;">SOURCING WORKSHEET</div>
+                        <div style="font-size:0.72rem;opacity:.7;">Q-WORKSHEET</div>
                         {% if transaction %}
                         <span class="ref-badge">{{ transaction.transaction_id }}</span>
                         {% endif %}
@@ -476,7 +476,7 @@
                     <div class="d-flex justify-content-between align-items-start">
                         <div>
                             <div style="font-size:1.15rem;font-weight:700;letter-spacing:.04em;">GMI TERRALINK</div>
-                            <div style="font-size:0.75rem;opacity:.75;">Sourcing reference workspace</div>
+                            <div style="font-size:0.75rem;opacity:.75;">Q-Worksheet reference workspace</div>
                         </div>
                         <div class="text-end">
                             <div style="font-size:0.72rem;opacity:.7;">PURCHASE INQUIRY REFERENCE</div>
@@ -531,7 +531,7 @@
 
                     {% if form.item_rows %}
                     <div class="mb-3 pi-section-block">
-                        <div class="pi-section-title">Latest Sourcing Update</div>
+                        <div class="pi-section-title">Latest Q-Worksheet Update</div>
                         <table class="sourcing-print-table" style="width:100%;border-collapse:collapse;">
                             <thead>
                                 <tr style="background:#f8f9fa;border-bottom:2px solid #dee2e6;">
@@ -581,7 +581,7 @@
                     {% else %}
                     <div class="text-muted text-center py-4">
                         <i class="bi bi-file-earmark-x fs-2 d-block mb-2"></i>
-                        No PI document attached to this sourcing flow.
+                        No PI document attached to this Q-Worksheet.
                     </div>
                     {% endif %}
 
@@ -595,7 +595,7 @@
         <div class="col-lg-7 no-print">
             <div class="card">
                 <div class="card-header bg-warning d-flex justify-content-between align-items-center">
-                    <strong><i class="bi bi-table"></i> Optional Sourcing Worksheet</strong>
+                    <strong><i class="bi bi-table"></i> Optional Q-Worksheet</strong>
                     <div class="d-flex gap-2 align-items-center flex-wrap">
                         {% if pi_document %}
                         <a href="{% if transaction.source_loading %}{% url 'logistics_proforma_create' %}{% else %}{% url 'sourcing_proforma_create' %}{% endif %}?from_doc={{ pi_document.pk }}" class="btn btn-sm btn-dark">
@@ -614,7 +614,7 @@
                         <span class="btn btn-sm btn-outline-secondary disabled">Save first to export PDF</span>
                         {% endif %}
                         <button type="button" class="btn btn-sm btn-outline-dark" onclick="window.print()">
-                            <i class="bi bi-printer"></i> Print Sourcing Sheet
+                            <i class="bi bi-printer"></i> Print Q-Worksheet
                         </button>
                         <span class="badge bg-dark" style="font-size:0.72rem;">Optional</span>
                     </div>
@@ -631,9 +631,9 @@
                                 <div class="small text-muted">{{ transaction.customer.name }}</div>
                             </div>
                             {% if record %}
-                            <span class="badge bg-secondary">Editing existing sourcing record</span>
+                            <span class="badge bg-secondary">Editing existing Q-Worksheet</span>
                             {% else %}
-                            <span class="badge bg-primary">New sourcing record</span>
+                            <span class="badge bg-primary">New Q-Worksheet</span>
                             {% endif %}
                         </div>
                         {% else %}
@@ -654,7 +654,7 @@
                         <div class="line-items-section mb-3">
                             <div class="d-flex justify-content-between align-items-start mb-3 gap-2 flex-wrap">
                                 <div>
-                                    <div class="section-title">Sourcing Worksheet</div>
+                                    <div class="section-title">Q-Worksheet</div>
                                     <div class="section-sub">Simple spreadsheet-style sheet for supplier quote comparison. It can be filled online, saved blank, or printed. It is not required before creating a proforma.</div>
                                 </div>
                             </div>
@@ -707,7 +707,7 @@
                             </div>
                             {% else %}
                                 <div class="alert alert-light border text-muted mb-0">
-                                    No PI items were captured for this sourcing record.
+                                    No PI items were captured for this Q-Worksheet.
                                 </div>
                             {% endif %}
 
@@ -744,7 +744,7 @@
                             </a>
                             <div class="d-flex gap-2 flex-wrap">
                                 <button type="submit" name="submit_action" value="save" class="btn btn-outline-dark">
-                                    <i class="bi bi-floppy"></i> Save Sourcing Record
+                                    <i class="bi bi-floppy"></i> Save Q-Worksheet
                                 </button>
                                 <button type="submit" name="submit_action" value="open_proforma" class="btn btn-dark">
                                     <i class="bi bi-arrow-right-circle"></i> Save &amp; Create Proforma

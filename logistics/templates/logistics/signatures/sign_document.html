@@ -9,7 +9,7 @@
             <div class="workspace-hero-copy">
                 <span class="eyebrow-label"><i class="bi bi-pen"></i> Online signing</span>
                 <h1>Sign {{ document_label }}.</h1>
-                <p>Your uploaded signature, name, title, and signing time will be recorded on this document.</p>
+                <p>Your uploaded signature and name will print on the document. Your role is kept in the internal signing record.</p>
             </div>
         </div>
     </section>
@@ -19,7 +19,7 @@
             <div class="col-lg-7">
                 {% if existing_signature %}
                 <div class="alert alert-warning">
-                    This document is already signed by <strong>{{ existing_signature.signer_name }}</strong>. Signing again will update the signature record and timestamp.
+                    This document is already signed by <strong>{{ existing_signature.signer_name }}</strong>{% if existing_signature.signer_role %} ({{ existing_signature.signer_role }}){% endif %}. Signing again will update the signature record and timestamp.
                 </div>
                 {% endif %}
                 <form method="post">

@@ -446,6 +446,11 @@ urlpatterns = [
         name="purchase_order_update",
     ),
     path(
+        "invoicing/purchase-orders/<int:pk>/correction-request/",
+        views.purchase_order_correction_request,
+        name="purchase_order_correction_request",
+    ),
+    path(
         "invoicing/purchase-orders/<int:pk>/",
         views.purchase_order_detail,
         name="purchase_order_detail",
@@ -554,6 +559,7 @@ urlpatterns = [
     # Receipts
     path("receipts/", views.receipt_list, name="receipt_list"),
     path("receipts/<int:pk>/", views.receipt_detail, name="receipt_detail"),
+    path("receipts/<int:pk>/sign/", views.receipt_sign, name="receipt_sign"),
     path(
         "receipts/<int:pk>/preview/",
         views.receipt_html_preview,

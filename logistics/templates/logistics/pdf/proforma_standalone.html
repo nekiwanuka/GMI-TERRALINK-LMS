@@ -510,7 +510,7 @@ p { margin: 0 0 3px 0; }
                 <td class="terms-cell">
                     <div class="panel-title">Payment Details & Terms</div>
                     <div class="terms-box">
-                        Bank details: <b>GMI TERRALINK LTD - ABSA BANK UGANDA LIMITED - 6010028181 (UGX)</b>. Please quote <b>{{ document_number }}</b> and <b>{{ proforma.transaction.transaction_id }}</b> when making payment; prices are Ex-Works unless otherwise agreed, and bank charges, taxes, customs, demurrage, freight and destination fees remain for the buyer's account unless expressly included.
+                        Bank details: <b>UGX: GMI TERRALINK LTD - ABSA BANK UGANDA LIMITED 6010028181 (UGX)</b>; <b>USD: GMI TERRALINK LTD - ABSA BANK UGANDA LIMITED 6009897680 (USD)</b>. Please quote <b>{{ document_number }}</b> and <b>{{ proforma.transaction.transaction_id }}</b> when making payment; prices are Ex-Works unless otherwise agreed, and bank charges, taxes, customs, demurrage, freight and destination fees remain for the buyer's account unless expressly included.
                     </div>
                 </td>
                 <td class="sign-cell">
@@ -519,7 +519,7 @@ p { margin: 0 0 3px 0; }
                         {% if document_signature and document_signature.signature_profile.signature_image %}
                         <img class="sign-img" src="{{ document_signature.signature_profile.signature_image.url }}" alt="Signature">
                         <div class="sign-line">{{ document_signature.signer_name }}</div>
-                        <div class="sign-title">{{ document_signature.signer_title }}</div>
+                        <div class="sign-title">For GMI Terralink Ltd</div>
                         {% else %}
                         <div class="sign-line">For GMI Terralink Co. Ltd</div>
                         <div class="sign-title">Authorised Signature</div>

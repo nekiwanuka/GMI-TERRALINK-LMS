@@ -57,6 +57,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "logistics.middleware.AuthenticationRequiredMiddleware",
     "logistics.middleware.ModuleRoleMiddleware",
+    "logistics.middleware.NotificationTargetReadMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]

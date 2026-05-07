@@ -21,7 +21,7 @@ DEFAULT_CURRENCY = "USD"
 
 class Command(BaseCommand):
     help = (
-        "Delete existing app data, keep superusers only, and seed a realistic demo "
+        "Delete existing app data, keep all users, and seed a realistic demo "
         "dataset for both Logistics and Sourcing / Trade workflows."
     )
 
@@ -51,7 +51,7 @@ class Command(BaseCommand):
         self.stdout.write(
             self.style.SUCCESS(
                 "Seed complete. "
-                f"Preserved {User.objects.filter(is_superuser=True).count()} superuser(s), "
+                f"Preserved {User.objects.count()} user(s), "
                 f"created {len(clients)} clients, {len(suppliers)} suppliers, "
                 f"{len(loadings)} loadings, {len(transits)} transit record(s), "
                 f"{len(transactions)} transactions, {len(sourcing_records)} sourcing record(s), "
@@ -78,9 +78,11 @@ class Command(BaseCommand):
             BillingInvoiceLine,
             BillingPayment,
             CargoItemWorkflow,
+            Commission,
             ContainerReturn,
             Document,
             DocumentArchive,
+            DocumentSignature,
             DomainEvent,
             FinalInvoice,
             FulfillmentLine,
@@ -92,6 +94,7 @@ class Command(BaseCommand):
             Notification,
             Payment,
             PaymentTransaction,
+            ProofOfDelivery,
             ProformaInvoice,
             PurchaseOrder,
             Receipt,
@@ -99,6 +102,7 @@ class Command(BaseCommand):
             ShipmentWorkflow,
             Sourcing,
             Supplier,
+            SupplierPayment,
             SupplierProduct,
             Transaction,
             TransactionPaymentRecord,
@@ -107,9 +111,11 @@ class Command(BaseCommand):
         )
 
         deletion_order = [
+            DocumentSignature,
             Notification,
             AuditLog,
             Receipt,
+            ProofOfDelivery,
             BillingPayment,
             BillingInvoiceLine,
             BillingInvoice,
@@ -129,6 +135,7 @@ class Command(BaseCommand):
             FinalInvoice,
             ProformaInvoice,
             Sourcing,
+            SupplierPayment,
             DocumentArchive,
             Document,
             ContainerReturn,
@@ -136,21 +143,20 @@ class Command(BaseCommand):
             InventoryItem,
             SupplierProduct,
             Supplier,
+            Commission,
             Transaction,
             Loading,
             Client,
         ]
 
+        SupplierPayment.objects.all().delete()
         PurchaseOrder.objects.filter(parent_po__isnull=False).delete()
         PurchaseOrder.objects.filter(parent_po__isnull=True).delete()
 
         for model in deletion_order:
             model.objects.all().delete()
 
-        User.objects.filter(is_superuser=False).delete()
-        self.stdout.write(
-            f"  Preserved {User.objects.filter(is_superuser=True).count()} superuser(s)."
-        )
+        self.stdout.write(f"  Preserved {User.objects.count()} user account(s).")
 
     def _create_clients(self, created_by):
         client_payloads = {

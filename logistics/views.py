@@ -293,6 +293,7 @@ def _sign_business_document(request, *, document, detail_route, document_label):
                 "signature_profile": profile,
                 "signer_name": profile.display_name,
                 "signer_title": profile.title,
+                "signer_role": request.user.get_role_display(),
                 "note": note,
                 "signed_at": timezone.now(),
             },
@@ -445,19 +446,6 @@ def _apply_loading_lane(queryset, lane):
 
 
 def _apply_client_lane(queryset, lane):
-    # Clients with no loadings AND no transactions are "new" and should be
-    # visible in every lane so they can be found right after creation.
-    unassigned = Q(loadings__isnull=True) & Q(transactions__isnull=True)
-    if lane == "logistics":
-        return queryset.filter(
-            Q(loadings__isnull=False)
-            | Q(transactions__source_loading__isnull=False)
-            | unassigned
-        ).distinct()
-    if lane == "sourcing":
-        return queryset.filter(
-            Q(transactions__source_loading__isnull=True) | unassigned
-        ).distinct()
     return queryset
 
 
@@ -520,7 +508,7 @@ def _final_invoice_total_paid(invoice):
         "total"
     ] or Decimal("0.00")
     transaction_record_total = Decimal("0.00")
-    if invoice_record_total <= 0:
+    if invoice_record_total <= 0 and invoice.transaction.final_invoices.count() <= 1:
         transaction_record_total = invoice.transaction.payment_records.aggregate(
             total=Sum("amount")
         )["total"] or Decimal("0.00")
@@ -553,9 +541,16 @@ def _final_invoice_payment_snapshot(invoice, total_paid=None):
     fee_paid = min(max(total_paid - item_total, Decimal("0.00")), fee_total)
     fee_balance = max(fee_total - fee_paid, Decimal("0.00"))
 
-    if total_paid > 0 and invoice_balance <= 0:
+    item_funds_ready = item_total <= 0 or total_paid >= item_total
+    fully_paid = invoice_balance <= 0 and total_paid > 0
+    procurement_ready = fully_paid or (item_funds_ready and total_paid > 0)
+
+    if fully_paid:
         invoice_label = "Paid"
-        invoice_class = "bg-dark"
+        invoice_class = "bg-success"
+    elif procurement_ready:
+        invoice_label = "Post Pay"
+        invoice_class = "bg-info text-dark"
     elif total_paid > 0:
         invoice_label = "Partial Payment"
         invoice_class = "bg-warning text-dark"
@@ -601,8 +596,10 @@ def _final_invoice_payment_snapshot(invoice, total_paid=None):
         "fee_balance": fee_balance,
         "fee_label": fee_label,
         "fee_class": fee_class,
-        "item_funds_ready": item_total <= 0 or total_paid >= item_total,
-        "fully_paid": invoice_balance <= 0 and total_paid > 0,
+        "item_funds_ready": item_funds_ready,
+        "fully_paid": fully_paid,
+        "procurement_ready": procurement_ready,
+        "can_record_payment": invoice_balance > 0,
     }
 
 
@@ -623,7 +620,7 @@ def _decorate_purchase_order_invoice_payment(purchase_order):
     purchase_order.client_invoice_balance = snapshot["invoice_balance"]
     purchase_order.client_item_balance = snapshot["item_balance"]
     purchase_order.client_fee_balance = snapshot["fee_balance"]
-    purchase_order.can_start_invoice_fulfillment = snapshot["fully_paid"]
+    purchase_order.can_start_invoice_fulfillment = snapshot["procurement_ready"]
     return purchase_order
 
 
@@ -1836,7 +1833,6 @@ def dashboard(request):
         in {
             "ADMIN",
             "DIRECTOR",
-            "FINANCE",
         }
     )
     active_lane = _resolve_lane(request) if request.user.is_authenticated else "all"
@@ -2407,9 +2403,13 @@ def transaction_detail(request, pk):
     )
     invoice_balance = 0
     shipping_charge_included = False
+    latest_payment_snapshot = None
     if latest_invoice:
         total_paid = _final_invoice_total_paid(latest_invoice)
-        invoice_balance = max(latest_invoice.total_amount - total_paid, 0)
+        latest_payment_snapshot = _final_invoice_payment_snapshot(
+            latest_invoice, total_paid
+        )
+        invoice_balance = latest_payment_snapshot["invoice_balance"]
         shipping_charge_included = (
             (latest_invoice.sourcing_fee or 0)
             + (latest_invoice.shipping_cost or 0)
@@ -2418,6 +2418,13 @@ def transaction_detail(request, pk):
     final_invoices = list(transaction.final_invoices.select_related("created_by")[:10])
     for fi in final_invoices:
         paid_total = _final_invoice_total_paid(fi)
+        payment_snapshot = _final_invoice_payment_snapshot(fi, paid_total)
+        fi.total_paid_for_display = payment_snapshot["total_paid"]
+        fi.balance_for_display = payment_snapshot["invoice_balance"]
+        fi.payment_status_label = payment_snapshot["invoice_label"]
+        fi.payment_status_class = payment_snapshot["invoice_class"]
+        fi.can_record_payment = payment_snapshot["can_record_payment"]
+        fi.procurement_ready = payment_snapshot["procurement_ready"]
         fi.can_edit_invoice = paid_total <= 0
     fulfillment_lines = []
     shipment_legs = []
@@ -2449,6 +2456,11 @@ def transaction_detail(request, pk):
         final_invoice_purchase_orders = (
             fulfillment_order.final_invoice.purchase_orders.select_related("created_by")
         )
+        fulfillment_order.payment_snapshot = _final_invoice_payment_snapshot(
+            fulfillment_order.final_invoice
+        )
+    elif fulfillment_order and latest_payment_snapshot:
+        fulfillment_order.payment_snapshot = latest_payment_snapshot
     context = {
         "transaction": transaction,
         "documents": documents[:20],
@@ -2462,6 +2474,7 @@ def transaction_detail(request, pk):
         "latest_invoice": latest_invoice,
         "trade_total_paid": total_paid,
         "trade_balance": invoice_balance,
+        "latest_payment_snapshot": latest_payment_snapshot,
         "shipping_charge_included": shipping_charge_included,
         "purchase_orders": transaction.purchase_orders.select_related("created_by")[:5],
         "trade_payments": transaction.payment_records.select_related("created_by")[:10],
@@ -2556,14 +2569,14 @@ def transaction_document_upload(request, pk):
                 title="Client PI uploaded",
                 message=(
                     f"A client PI document was uploaded for transaction "
-                    f"{transaction.transaction_id}. Review the extracted PI to open a proforma invoice or optional sourcing worksheet."
+                    f"{transaction.transaction_id}. Review the extracted PI to open a proforma invoice or optional Q-Worksheet."
                 ),
                 link=reverse("transaction_detail", kwargs={"pk": transaction.pk}),
                 category="document",
             )
             messages.success(
                 request,
-                "Client PI uploaded and text extracted. Review the extracted PI below, then create a proforma or open the optional sourcing worksheet.",
+                "Client PI uploaded and text extracted. Review the extracted PI below, then create a proforma or open the optional Q-Worksheet.",
             )
         else:
             _notify_roles(
@@ -2624,9 +2637,9 @@ def document_edit_pi(request, pk):
                     status="SENT_TO_SOURCING"
                 )
             _notify_roles(
-                title="Sourcing worksheet opened",
+                title="Q-Worksheet opened",
                 message=(
-                    f"An optional sourcing worksheet was opened for transaction "
+                    f"An optional Q-Worksheet was opened for transaction "
                     f"{document.transaction.transaction_id}."
                 ),
                 link=reverse(
@@ -2636,7 +2649,7 @@ def document_edit_pi(request, pk):
             )
             messages.success(
                 request,
-                "PI data updated. Optional sourcing worksheet is ready for online capture or printing.",
+                "PI data updated. Optional Q-Worksheet is ready for online capture or printing.",
             )
             if existing_sourcing:
                 return redirect("sourcing_update", pk=existing_sourcing.pk)
@@ -2850,10 +2863,13 @@ def fulfillment_order_create(request, transaction_pk):
             transaction=transaction,
         )
         linked_invoice_total_paid = _final_invoice_total_paid(linked_invoice)
-        if linked_invoice_total_paid < (linked_invoice.total_amount or 0):
+        linked_invoice_snapshot = _final_invoice_payment_snapshot(
+            linked_invoice, linked_invoice_total_paid
+        )
+        if not linked_invoice_snapshot["procurement_ready"]:
             messages.error(
                 request,
-                "Fulfillment can only start from a fully paid final invoice.",
+                "Fulfillment can only start from a Paid or Post Pay final invoice.",
             )
             return redirect(
                 _final_invoice_route_name(linked_invoice, "detail"),
@@ -2930,6 +2946,10 @@ def fulfillment_list(request):
         orders = orders.filter(final_invoice_id=invoice_filter)
     page_obj, query_string, page_range = paginate_queryset(request, orders)
     for order in page_obj:
+        if order.final_invoice_id:
+            order.payment_snapshot = _final_invoice_payment_snapshot(
+                order.final_invoice
+            )
         scoped_payments = []
         if order.final_invoice_id:
             scoped_payments = list(order.final_invoice.payment_records.all())
@@ -3295,14 +3315,12 @@ def sourcing_update(request, pk):
             action = request.POST.get("submit_action")
             if action == "open_proforma":
                 validity_date = (request.POST.get("validity_date") or "").strip()
-                messages.success(
-                    request, "Sourcing record updated. Opening proforma form."
-                )
+                messages.success(request, "Q-Worksheet updated. Opening proforma form.")
                 target = f"{reverse('proforma_create')}?from_sourcing={sourcing.pk}"
                 if validity_date:
                     target += f"&validity_date={validity_date}"
                 return redirect(target)
-            messages.success(request, "Sourcing record updated")
+            messages.success(request, "Q-Worksheet updated")
             return redirect("sourcing_update", pk=sourcing.pk)
     else:
         form = SourcingForm(instance=sourcing)
@@ -3311,7 +3329,7 @@ def sourcing_update(request, pk):
         "logistics/sourcing/form.html",
         {
             "form": form,
-            "title": "Update Sourcing Record",
+            "title": "Update Q-Worksheet",
             "record": sourcing,
             "pi_document": pi_document,
             "transaction": sourcing.transaction,
@@ -3328,7 +3346,7 @@ def sourcing_pdf(request, pk):
     form = SourcingForm(instance=sourcing)
     response = HttpResponse(content_type="application/pdf")
     response["Content-Disposition"] = (
-        f'attachment; filename="sourcing_worksheet_{sourcing.transaction.transaction_id}.pdf"'
+        f'attachment; filename="q_worksheet_{sourcing.transaction.transaction_id}.pdf"'
     )
 
     buffer = BytesIO()
@@ -3345,7 +3363,7 @@ def sourcing_pdf(request, pk):
 
     story.append(
         Paragraph(
-            f"<b>GMI TERRALINK Sourcing Worksheet</b> - {sourcing.transaction.transaction_id}",
+            f"<b>GMI TERRALINK Q-Worksheet</b> - {sourcing.transaction.transaction_id}",
             styles["Title"],
         )
     )
@@ -3503,14 +3521,12 @@ def sourcing_create(request):
             action = request.POST.get("submit_action")
             if action == "open_proforma":
                 validity_date = (request.POST.get("validity_date") or "").strip()
-                messages.success(
-                    request, "Sourcing record saved. Opening proforma form."
-                )
+                messages.success(request, "Q-Worksheet saved. Opening proforma form.")
                 target = f"{reverse('proforma_create')}?from_sourcing={sourcing.pk}"
                 if validity_date:
                     target += f"&validity_date={validity_date}"
                 return redirect(target)
-            messages.success(request, "Sourcing record created")
+            messages.success(request, "Q-Worksheet created")
             return redirect("sourcing_update", pk=sourcing.pk)
     else:
         form = SourcingForm(initial=initial)
@@ -3526,7 +3542,7 @@ def sourcing_create(request):
         "logistics/sourcing/form.html",
         {
             "form": form,
-            "title": "Create Sourcing Record",
+            "title": "Create Q-Worksheet",
             "pi_document": pi_document,
             "transaction": transaction,
         },
@@ -4193,19 +4209,14 @@ def final_invoice_list(request):
 
     for inv in page_obj:
         total_paid = _final_invoice_total_paid(inv)
-        balance = max((inv.total_amount or 0) - total_paid, 0)
-        inv.total_paid_for_display = total_paid
-        inv.balance_for_display = balance
+        payment_snapshot = _final_invoice_payment_snapshot(inv, total_paid)
+        inv.total_paid_for_display = payment_snapshot["total_paid"]
+        inv.balance_for_display = payment_snapshot["invoice_balance"]
         inv.can_edit_invoice = total_paid <= 0
-        if total_paid > 0 and balance <= 0:
-            inv.payment_status_label = "Paid"
-            inv.payment_status_class = "bg-success"
-        elif total_paid > 0:
-            inv.payment_status_label = "Partial Payment"
-            inv.payment_status_class = "bg-warning text-dark"
-        else:
-            inv.payment_status_label = "Unpaid"
-            inv.payment_status_class = "bg-secondary"
+        inv.can_record_payment = payment_snapshot["can_record_payment"]
+        inv.procurement_ready = payment_snapshot["procurement_ready"]
+        inv.payment_status_label = payment_snapshot["invoice_label"]
+        inv.payment_status_class = payment_snapshot["invoice_class"]
 
     return render(
         request,
@@ -4256,16 +4267,9 @@ def final_invoice_detail(request, pk):
         _decorate_purchase_order_invoice_payment(split_purchase_order)
 
     total_paid_decimal = total_paid or 0
-    balance = max((invoice.total_amount or 0) - total_paid, 0)
-    if total_paid_decimal > 0 and balance <= 0:
-        payment_status_label = "Paid"
-        payment_status_class = "bg-success"
-    elif total_paid_decimal > 0:
-        payment_status_label = "Partial Payment"
-        payment_status_class = "bg-warning text-dark"
-    else:
-        payment_status_label = "Unpaid"
-        payment_status_class = "bg-secondary"
+    balance = payment_snapshot["invoice_balance"]
+    payment_status_label = payment_snapshot["invoice_label"]
+    payment_status_class = payment_snapshot["invoice_class"]
     can_edit_invoice = total_paid_decimal <= 0
 
     is_logistics_invoice = bool(invoice.loading_id)
@@ -4274,7 +4278,7 @@ def final_invoice_detail(request, pk):
         split_purchase_orders = []
     can_generate_po = (
         not is_logistics_invoice
-        and payment_snapshot["item_funds_ready"]
+        and payment_snapshot["procurement_ready"]
         and purchase_order is None
     )
     document_signature = _document_signature_for(invoice)
@@ -4288,6 +4292,7 @@ def final_invoice_detail(request, pk):
             "payment_status_label": payment_status_label,
             "payment_status_class": payment_status_class,
             "can_edit_invoice": can_edit_invoice,
+            "can_record_payment": payment_snapshot["can_record_payment"],
             "purchase_order": purchase_order,
             "split_purchase_orders": split_purchase_orders,
             "can_generate_po": can_generate_po,
@@ -4672,10 +4677,10 @@ def final_invoice_generate_purchase_order(request, pk):
         )
         return redirect(_final_invoice_route_name(invoice, "detail"), pk=invoice.pk)
     payment_snapshot = _final_invoice_payment_snapshot(invoice)
-    if not payment_snapshot["item_funds_ready"]:
+    if not payment_snapshot["procurement_ready"]:
         messages.error(
             request,
-            "Item funds are not covered yet. Record enough client payment for the invoice subtotal before generating a purchase order.",
+            "Purchase orders can only be generated from invoices marked Paid or Post Pay. Record enough client payment to cover the item funds first.",
         )
         return redirect(_final_invoice_route_name(invoice, "detail"), pk=invoice.pk)
 
@@ -4750,6 +4755,25 @@ def purchase_order_split_create(request, pk):
         pk=pk,
     )
     base_po = purchase_order.root_po
+    _decorate_purchase_order_status(base_po)
+    _decorate_purchase_order_edit_lock(base_po)
+    if base_po.edit_locked:
+        messages.error(request, base_po.edit_lock_message)
+        return redirect("purchase_order_detail", pk=base_po.pk)
+
+    existing_split_exists = base_po.split_purchase_orders.exists()
+    if purchase_order.is_split or existing_split_exists:
+        messages.warning(
+            request,
+            "This purchase order has already been split. Open the existing split instead of creating a duplicate.",
+        )
+        return redirect("purchase_order_detail", pk=base_po.pk)
+    if purchase_order.transaction.is_closed:
+        messages.error(
+            request, "This trade is closed; purchase orders cannot be split."
+        )
+        return redirect("purchase_order_detail", pk=base_po.pk)
+
     _decorate_purchase_order_invoice_payment(base_po)
     invoice = (
         base_po.final_invoice
@@ -4827,13 +4851,82 @@ def purchase_order_split_create(request, pk):
 @login_required
 @role_required("PROCUREMENT", "FINANCE", "DIRECTOR", "ADMIN")
 def purchase_order_list(request):
+    search = (request.GET.get("search") or "").strip()
+    status_filter = (request.GET.get("status") or "").strip().upper()
+    type_filter = (request.GET.get("type") or "").strip().lower()
+    lock_filter = (request.GET.get("lock") or "").strip().lower()
+
     purchase_orders = PurchaseOrder.objects.select_related(
         "transaction__customer", "created_by", "parent_po", "final_invoice"
     )
-    page_obj, query_string, page_range = paginate_queryset(request, purchase_orders)
-    for purchase_order in page_obj:
+    if search:
+        po_search_q = (
+            Q(po_number__icontains=search)
+            | Q(transaction__transaction_id__icontains=search)
+            | Q(transaction__customer__name__icontains=search)
+            | Q(supplier_name__icontains=search)
+        )
+        if search.isdigit():
+            po_search_q |= Q(final_invoice_id=int(search))
+        purchase_orders = purchase_orders.filter(po_search_q)
+    if type_filter == "base":
+        purchase_orders = purchase_orders.filter(parent_po__isnull=True)
+    elif type_filter == "split":
+        purchase_orders = purchase_orders.filter(parent_po__isnull=False)
+
+    decorated_purchase_orders = list(purchase_orders)
+    for purchase_order in decorated_purchase_orders:
         _decorate_purchase_order_status(purchase_order)
         _decorate_purchase_order_invoice_payment(purchase_order)
+        _decorate_purchase_order_edit_lock(purchase_order)
+
+    valid_statuses = {choice[0] for choice in PurchaseOrder.STATUS_CHOICES}
+    if status_filter in valid_statuses:
+        decorated_purchase_orders = [
+            purchase_order
+            for purchase_order in decorated_purchase_orders
+            if purchase_order.effective_status == status_filter
+        ]
+    if lock_filter == "locked":
+        decorated_purchase_orders = [
+            purchase_order
+            for purchase_order in decorated_purchase_orders
+            if purchase_order.edit_locked
+        ]
+    elif lock_filter == "open":
+        decorated_purchase_orders = [
+            purchase_order
+            for purchase_order in decorated_purchase_orders
+            if not purchase_order.edit_locked
+        ]
+
+    summary = {
+        "total": len(decorated_purchase_orders),
+        "base": sum(
+            1
+            for purchase_order in decorated_purchase_orders
+            if not purchase_order.parent_po_id
+        ),
+        "split": sum(
+            1
+            for purchase_order in decorated_purchase_orders
+            if purchase_order.parent_po_id
+        ),
+        "locked": sum(
+            1
+            for purchase_order in decorated_purchase_orders
+            if purchase_order.edit_locked
+        ),
+        "fulfilled": sum(
+            1
+            for purchase_order in decorated_purchase_orders
+            if purchase_order.effective_status == "FULFILLED"
+        ),
+    }
+
+    page_obj, query_string, page_range = paginate_queryset(
+        request, decorated_purchase_orders
+    )
     return render(
         request,
         "logistics/invoicing/purchase_order_list.html",
@@ -4842,6 +4935,12 @@ def purchase_order_list(request):
             "page_obj": page_obj,
             "query_string": query_string,
             "page_range": page_range,
+            "search": search,
+            "status_filter": status_filter,
+            "type_filter": type_filter,
+            "lock_filter": lock_filter,
+            "summary": summary,
+            "status_choices": PurchaseOrder.STATUS_CHOICES,
         },
     )
 
@@ -4860,6 +4959,12 @@ def purchase_order_update(request, pk):
         ),
         pk=pk,
     )
+    _decorate_purchase_order_status(purchase_order)
+    _decorate_purchase_order_edit_lock(purchase_order)
+    if purchase_order.edit_locked:
+        messages.error(request, purchase_order.edit_lock_message)
+        return redirect("purchase_order_detail", pk=purchase_order.pk)
+
     suppliers = Supplier.objects.all().order_by("name")
 
     if request.method == "POST":
@@ -4954,15 +5059,33 @@ def purchase_order_detail(request, pk):
     )
     _decorate_purchase_order_status(purchase_order)
     _decorate_purchase_order_invoice_payment(purchase_order)
+    _decorate_purchase_order_edit_lock(purchase_order)
     base_po = purchase_order.root_po
     sibling_splits = base_po.split_purchase_orders.select_related(
         "created_by", "final_invoice"
     ).order_by("-created_at")
+    has_supplier_splits = sibling_splits.exists()
     for split_purchase_order in sibling_splits:
         _decorate_purchase_order_status(split_purchase_order)
         _decorate_purchase_order_invoice_payment(split_purchase_order)
+        _decorate_purchase_order_edit_lock(split_purchase_order)
     can_start_invoice_fulfillment = getattr(
         purchase_order, "can_start_invoice_fulfillment", False
+    )
+    supplier_payments, supplier_total_paid, supplier_balance_due = _po_supplier_summary(
+        purchase_order
+    )
+    can_record_supplier_payment = (
+        not purchase_order.transaction.is_closed
+        and not purchase_order.payment_entry_locked
+        and supplier_balance_due > Decimal("0.00")
+        and not (not purchase_order.is_split and has_supplier_splits)
+    )
+    can_split_purchase_order = (
+        not purchase_order.is_split
+        and not has_supplier_splits
+        and not purchase_order.transaction.is_closed
+        and not purchase_order.edit_locked
     )
     return render(
         request,
@@ -4972,25 +5095,76 @@ def purchase_order_detail(request, pk):
             "base_po": base_po,
             "sibling_splits": sibling_splits,
             "can_start_invoice_fulfillment": can_start_invoice_fulfillment,
-            "supplier_payments": purchase_order.supplier_payments.select_related(
-                "created_by"
-            ).order_by("-paid_at", "-id"),
-            "supplier_total_paid": purchase_order.supplier_payments.aggregate(
-                total=Sum("amount")
-            )["total"]
-            or Decimal("0.00"),
-            "supplier_balance_due": max(
-                (purchase_order.subtotal or Decimal("0.00"))
-                - (
-                    purchase_order.supplier_payments.aggregate(total=Sum("amount"))[
-                        "total"
-                    ]
-                    or Decimal("0.00")
-                ),
-                Decimal("0.00"),
-            ),
+            "supplier_payments": supplier_payments,
+            "supplier_total_paid": supplier_total_paid,
+            "supplier_balance_due": supplier_balance_due,
+            "can_record_supplier_payment": can_record_supplier_payment,
+            "can_split_purchase_order": can_split_purchase_order,
+            "has_supplier_splits": has_supplier_splits,
+            "supplier_payments_include_splits": not purchase_order.is_split
+            and has_supplier_splits,
         },
     )
+
+
+@login_required
+@role_required("PROCUREMENT", "FINANCE", "DIRECTOR", "ADMIN")
+def purchase_order_correction_request(request, pk):
+    purchase_order = get_object_or_404(
+        PurchaseOrder.objects.select_related(
+            "transaction__customer", "final_invoice", "parent_po"
+        ),
+        pk=pk,
+    )
+    _decorate_purchase_order_status(purchase_order)
+    _decorate_purchase_order_edit_lock(purchase_order)
+    if request.method != "POST":
+        return redirect("purchase_order_detail", pk=purchase_order.pk)
+
+    reason = normalize_text_entry("reason", request.POST.get("reason") or "")
+    correction = normalize_text_entry(
+        "correction", request.POST.get("correction") or ""
+    )
+    affects_money = request.POST.get("affects_money") == "on"
+    if not reason or not correction:
+        messages.error(
+            request,
+            "Provide both the reason and the correction needed before requesting Director approval.",
+        )
+        return redirect("purchase_order_detail", pk=purchase_order.pk)
+
+    money_note = ""
+    if affects_money and purchase_order.final_invoice_id:
+        money_note = (
+            f" Money correction flagged: review linked invoice "
+            f"{display_document_number(purchase_order.final_invoice, 'FI')} so totals stay aligned."
+        )
+    elif affects_money:
+        money_note = " Money correction flagged: confirm whether a linked invoice adjustment is required."
+
+    _notify_roles(
+        title="Locked purchase order correction requested",
+        message=(
+            f"{request.user.get_full_name() or request.user.username} requested a correction "
+            f"for {purchase_order.po_number}. Reason: {reason}. Correction: {correction}."
+            f"{money_note}"
+        ),
+        link=reverse("purchase_order_detail", kwargs={"pk": purchase_order.pk}),
+        category="system",
+        roles=["ADMIN", "DIRECTOR"],
+    )
+    log_audit(
+        "purchase_order",
+        "update",
+        purchase_order.id,
+        f"Correction requested for {purchase_order.po_number}: {reason}",
+        request.user,
+    )
+    messages.success(
+        request,
+        "Correction request sent to the Director with the reason and proposed change.",
+    )
+    return redirect("purchase_order_detail", pk=purchase_order.pk)
 
 
 def _pdf_report_response(filename, title, headers, rows):
@@ -5066,7 +5240,6 @@ def reports_dashboard(request):
     can_view_financial_totals = request.user.is_superuser or request.user.role in {
         "ADMIN",
         "DIRECTOR",
-        "FINANCE",
     }
     totals = (
         DirectorReportingService.financial_totals()
@@ -5438,7 +5611,7 @@ def notification_open(request, pk):
         require_https=request.is_secure(),
     ):
         return redirect(target)
-    if target.startswith("/") and not target.startswith("//"):
+    if target and target.startswith("/") and not target.startswith("//"):
         return redirect(target)
     return _redirect_back(request, default="dashboard")
 
@@ -6016,6 +6189,36 @@ def log_audit(model_type, action, object_id, object_str, user):
 @director_required
 def director_finance_summary(request):
     """Director-only finance summary rendered as an executive UI."""
+    from .models import Commission
+
+    def section_page(items, page_param, per_page):
+        paginator = Paginator(items, per_page)
+        page_obj = paginator.get_page(request.GET.get(page_param))
+        query_params = request.GET.copy()
+        if page_param in query_params:
+            query_params.pop(page_param)
+        query_string = query_params.urlencode()
+        if query_string:
+            query_string = f"{query_string}&"
+        return page_obj, paginator.get_elided_page_range(page_obj.number), query_string
+
+    period_mode = (request.GET.get("period") or "weekly").strip().lower()
+    if period_mode not in {"weekly", "monthly"}:
+        period_mode = "weekly"
+
+    def period_bucket(value):
+        movement_date = value.date() if isinstance(value, datetime) else value
+        if period_mode == "monthly":
+            period_start = movement_date.replace(day=1)
+            return period_start, period_start.strftime("%B %Y")
+        period_start = movement_date - timedelta(days=movement_date.weekday())
+        return period_start, f"Week of {period_start.strftime('%d %b %Y')}"
+
+    def movement_sort_value(value):
+        if isinstance(value, datetime):
+            return value
+        return datetime.combine(value, datetime.min.time())
+
     all_invoices = list(
         FinalInvoice.objects.select_related("transaction__customer", "loading")
     )
@@ -6042,10 +6245,209 @@ def director_finance_summary(request):
     trade_summary = DirectorReportingService.trade_activity_summary()
     commission_totals = DirectorReportingService.commission_totals()
 
+    trade_client_payments = TransactionPaymentRecord.objects.select_related(
+        "transaction__customer", "final_invoice", "created_by"
+    )
+    logistics_client_payments = PaymentTransaction.objects.select_related(
+        "payment__loading__client", "created_by"
+    )
+    supplier_payments = SupplierPayment.objects.select_related(
+        "purchase_order__transaction__customer", "created_by"
+    )
+    commission_entries = list(
+        Commission.objects.select_related("client", "created_by").order_by(
+            "-date", "-created_at"
+        )
+    )
+
+    trade_client_collected = trade_client_payments.aggregate(total=Sum("amount"))[
+        "total"
+    ] or Decimal("0.00")
+    logistics_client_collected = logistics_client_payments.aggregate(
+        total=Sum("amount")
+    )["total"] or Decimal("0.00")
+    supplier_paid_out = supplier_payments.aggregate(total=Sum("amount"))[
+        "total"
+    ] or Decimal("0.00")
+    change_given = trade_client_payments.aggregate(total=Sum("change_given"))[
+        "total"
+    ] or Decimal("0.00")
+    commission_earned = Commission.objects.aggregate(total=Sum("amount"))[
+        "total"
+    ] or Decimal("0.00")
+    commission_usd = Commission.objects.filter(currency="USD").aggregate(
+        total=Sum("amount")
+    )["total"] or Decimal("0.00")
+
+    invoice_components = {
+        "items": sum((invoice.subtotal or Decimal("0.00")) for invoice in all_invoices),
+        "sourcing_fees": sum(
+            (invoice.sourcing_fee or Decimal("0.00")) for invoice in all_invoices
+        ),
+        "shipping_costs": sum(
+            (invoice.shipping_cost or Decimal("0.00")) for invoice in all_invoices
+        ),
+        "service_fees": sum(
+            (invoice.service_fee or Decimal("0.00")) for invoice in all_invoices
+        ),
+    }
+    money_additions = [
+        {
+            "label": "Client trade payments",
+            "amount": trade_client_collected,
+            "currency": "USD",
+            "count": trade_client_payments.count(),
+            "description": "Cash received from sourcing/trade final invoices.",
+        },
+        {
+            "label": "Freight payment receipts",
+            "amount": logistics_client_collected,
+            "currency": "UGX",
+            "count": logistics_client_payments.count(),
+            "description": "Cash received from logistics freight payment transactions.",
+        },
+        {
+            "label": "Commission earned",
+            "amount": commission_earned,
+            "currency": "Mixed",
+            "count": Commission.objects.count(),
+            "description": "Director commission entries recorded in the commission ledger.",
+        },
+    ]
+    money_subtractions = [
+        {
+            "label": "Supplier payments",
+            "amount": supplier_paid_out,
+            "currency": "USD",
+            "count": supplier_payments.count(),
+            "description": "Cash paid out to suppliers against purchase orders.",
+        },
+        {
+            "label": "Client change given",
+            "amount": change_given,
+            "currency": "USD",
+            "count": trade_client_payments.filter(change_given__gt=0).count(),
+            "description": "Cash returned to clients during trade payment collection.",
+        },
+    ]
+    total_additions = trade_client_collected + commission_usd
+    total_subtractions = supplier_paid_out + change_given
+    net_cash_position = total_additions - total_subtractions
+
+    recent_movements = []
+    for payment in trade_client_payments.order_by("-payment_date"):
+        recent_movements.append(
+            {
+                "date": payment.payment_date,
+                "direction": "in",
+                "label": "Client payment",
+                "reference": (
+                    payment.reference
+                    or display_document_number(payment.final_invoice, "FI")
+                    if payment.final_invoice_id
+                    else payment.transaction.transaction_id
+                ),
+                "party": payment.transaction.customer.name,
+                "amount": payment.amount,
+                "currency": payment.currency,
+            }
+        )
+        if (payment.change_given or Decimal("0.00")) > Decimal("0.00"):
+            recent_movements.append(
+                {
+                    "date": payment.payment_date,
+                    "direction": "out",
+                    "label": "Client change given",
+                    "reference": payment.reference
+                    or (
+                        display_document_number(payment.final_invoice, "FI")
+                        if payment.final_invoice_id
+                        else payment.transaction.transaction_id
+                    ),
+                    "party": payment.transaction.customer.name,
+                    "amount": payment.change_given,
+                    "currency": payment.currency,
+                }
+            )
+    for payment in supplier_payments.order_by("-paid_at"):
+        recent_movements.append(
+            {
+                "date": payment.paid_at,
+                "direction": "out",
+                "label": "Supplier payment",
+                "reference": payment.reference or payment.purchase_order.po_number,
+                "party": payment.supplier_name or payment.purchase_order.supplier_name,
+                "amount": payment.amount,
+                "currency": payment.currency,
+            }
+        )
+    for payment in logistics_client_payments.order_by("-payment_date"):
+        recent_movements.append(
+            {
+                "date": payment.payment_date,
+                "direction": "in",
+                "label": "Freight receipt",
+                "reference": payment.receipt_number,
+                "party": payment.payment.loading.client.name,
+                "amount": payment.amount,
+                "currency": "UGX",
+            }
+        )
+    for commission in commission_entries:
+        recent_movements.append(
+            {
+                "date": commission.date,
+                "direction": "in",
+                "label": "Commission earned",
+                "reference": commission.notes or "Commission ledger",
+                "party": commission.client.name,
+                "amount": commission.amount,
+                "currency": commission.currency,
+            }
+        )
+    recent_movements = sorted(
+        recent_movements,
+        key=lambda movement: movement_sort_value(movement["date"]),
+        reverse=True,
+    )
+
+    period_map = {}
+    for movement in recent_movements:
+        period_start, period_label = period_bucket(movement["date"])
+        key = (period_start, movement["currency"])
+        row = period_map.setdefault(
+            key,
+            {
+                "period_start": period_start,
+                "period": period_label,
+                "currency": movement["currency"],
+                "additions": Decimal("0.00"),
+                "subtractions": Decimal("0.00"),
+                "count": 0,
+            },
+        )
+        amount = movement["amount"] or Decimal("0.00")
+        if movement["direction"] == "in":
+            row["additions"] += amount
+        else:
+            row["subtractions"] += amount
+        row["count"] += 1
+    period_rows = sorted(
+        (
+            {
+                **row,
+                "net": row["additions"] - row["subtractions"],
+            }
+            for row in period_map.values()
+        ),
+        key=lambda row: (row["period_start"], row["currency"]),
+        reverse=True,
+    )
+
     recent_invoices = list(
         FinalInvoice.objects.select_related(
             "transaction__customer", "created_by", "loading"
-        ).order_by("-created_at")[:8]
+        ).order_by("-created_at")
     )
     for invoice in recent_invoices:
         paid_total = _final_invoice_total_paid(invoice)
@@ -6064,6 +6466,35 @@ def director_finance_summary(request):
             invoice.payment_status_label = "Unpaid"
             invoice.payment_status_class = "bg-secondary"
 
+    additions_page, additions_page_range, additions_query_string = section_page(
+        money_additions, "additions_page", 8
+    )
+    subtractions_page, subtractions_page_range, subtractions_query_string = (
+        section_page(money_subtractions, "subtractions_page", 8)
+    )
+    movements_page, movements_page_range, movements_query_string = section_page(
+        recent_movements, "movements_page", 10
+    )
+    period_page, period_page_range, period_query_string = section_page(
+        period_rows, "period_page", 10
+    )
+    invoices_page, invoices_page_range, invoices_query_string = section_page(
+        recent_invoices, "invoices_page", 10
+    )
+    commission_page, commission_page_range, commission_query_string = section_page(
+        commission_entries, "commission_page", 10
+    )
+    clients_page, clients_page_range, clients_query_string = section_page(
+        list(top_clients), "clients_page", 10
+    )
+    status_rows = [
+        {"status": status, "total": total} for status, total in status_counts.items()
+    ]
+    status_total_records = sum(status_counts.values())
+    statuses_page, statuses_page_range, statuses_query_string = section_page(
+        status_rows, "statuses_page", 10
+    )
+
     context = {
         "total_billed": total_billed,
         "total_collected": total_collected,
@@ -6081,7 +6512,43 @@ def director_finance_summary(request):
         "transactions_per_status": status_counts,
         "trade_summary": trade_summary,
         "commission_totals": commission_totals,
+        "invoice_components": invoice_components,
+        "money_additions": money_additions,
+        "money_subtractions": money_subtractions,
+        "total_additions": total_additions,
+        "total_subtractions": total_subtractions,
+        "net_cash_position": net_cash_position,
+        "recent_movements": recent_movements,
+        "period_mode": period_mode,
+        "period_label": "Weekly" if period_mode == "weekly" else "Monthly",
+        "period_page": period_page,
+        "period_page_range": period_page_range,
+        "period_query_string": period_query_string,
+        "additions_page": additions_page,
+        "additions_page_range": additions_page_range,
+        "additions_query_string": additions_query_string,
+        "subtractions_page": subtractions_page,
+        "subtractions_page_range": subtractions_page_range,
+        "subtractions_query_string": subtractions_query_string,
+        "movements_page": movements_page,
+        "movements_page_range": movements_page_range,
+        "movements_query_string": movements_query_string,
+        "supplier_paid_out": supplier_paid_out,
+        "change_given": change_given,
         "recent_invoices": recent_invoices,
+        "invoices_page": invoices_page,
+        "invoices_page_range": invoices_page_range,
+        "invoices_query_string": invoices_query_string,
+        "clients_page": clients_page,
+        "clients_page_range": clients_page_range,
+        "clients_query_string": clients_query_string,
+        "commission_page": commission_page,
+        "commission_page_range": commission_page_range,
+        "commission_query_string": commission_query_string,
+        "statuses_page": statuses_page,
+        "statuses_page_range": statuses_page_range,
+        "statuses_query_string": statuses_query_string,
+        "status_total_records": status_total_records,
         "trend_labels_json": json.dumps(trend_labels),
         "trend_values_json": json.dumps(trend_values),
         "status_labels_json": json.dumps(status_labels),
@@ -6213,7 +6680,20 @@ def receipt_detail(request, pk):
             "client": client,
             "can_reverse_receipt": can_reverse_receipt,
             "invoice_fully_paid": invoice_fully_paid,
+            "document_signature": _document_signature_for(receipt),
         },
+    )
+
+
+@login_required
+def receipt_sign(request, pk):
+    """Sign an issued receipt using the user's active signature profile."""
+    receipt = get_object_or_404(Receipt, pk=pk)
+    return _sign_business_document(
+        request,
+        document=receipt,
+        detail_route="receipt_detail",
+        document_label=f"Receipt {display_document_number(receipt, 'RCT')}",
     )
 
 
@@ -6253,6 +6733,7 @@ def receipt_html_preview(request, pk):
             "receipt_display_number": display_document_number(receipt, "RCT"),
             "client": client,
             "invoice_fully_paid": invoice_fully_paid,
+            "document_signature": _document_signature_for(receipt),
         },
     )
     _prevent_stale_pdf_cache(response)
@@ -6295,12 +6776,20 @@ def receipt_pdf(request, pk):
             "receipt_display_number": display_document_number(receipt, "RCT"),
             "client": client,
             "invoice_fully_paid": invoice_fully_paid,
+            "document_signature": _document_signature_for(receipt),
         },
     )
     response = HttpResponse(pdf_bytes, content_type="application/pdf")
     _prevent_stale_pdf_cache(response)
     response["Content-Disposition"] = (
         f'attachment; filename="{display_document_slug(receipt, "RCT")}_receipt.pdf"'
+    )
+    _notify_roles(
+        title="Receipt PDF generated",
+        message=f"A PDF was generated for receipt {display_document_number(receipt, 'RCT')}.",
+        link=reverse("receipt_detail", kwargs={"pk": receipt.pk}),
+        category="document",
+        roles=["ADMIN", "DIRECTOR", "FINANCE"],
     )
     return response
 
@@ -6344,6 +6833,9 @@ def sourcing_payment_create(request, transaction_pk=None):
     """Record a payment against a sourcing Transaction."""
     initial = {}
     requested_mode = (request.GET.get("mode") or "").strip().lower()
+    requested_invoice_pk = (
+        request.GET.get("invoice") or request.GET.get("final_invoice") or ""
+    ).strip()
     if requested_mode == "full":
         initial["is_full_payment"] = True
     elif requested_mode == "partial":
@@ -6355,15 +6847,25 @@ def sourcing_payment_create(request, transaction_pk=None):
         txn = get_object_or_404(Transaction, pk=transaction_pk)
         initial["transaction"] = txn
         # Pre-select the latest FinalInvoice (confirmed first, else any)
-        fi = (
-            FinalInvoice.objects.filter(transaction=txn)
-            .order_by("-is_confirmed", "-created_at")
-            .first()
+        invoice_queryset = FinalInvoice.objects.filter(transaction=txn).order_by(
+            "-is_confirmed", "-created_at"
         )
+        fi = None
+        if requested_invoice_pk:
+            fi = invoice_queryset.filter(pk=requested_invoice_pk).first()
+        if fi is None:
+            fi = invoice_queryset.first()
         if fi:
             initial["final_invoice"] = fi
             total_paid = _final_invoice_total_paid(fi)
-            amount_due = max(fi.total_amount - total_paid, 0)
+            payment_snapshot = _final_invoice_payment_snapshot(fi, total_paid)
+            amount_due = payment_snapshot["invoice_balance"]
+            if not payment_snapshot["can_record_payment"]:
+                messages.info(
+                    request,
+                    "This invoice is already paid. Additional payments are disabled.",
+                )
+                return redirect("transaction_detail", pk=txn.pk)
             initial["currency"] = fi.currency
             initial["amount_due_snapshot"] = amount_due
             initial["balance_after"] = amount_due
@@ -6382,12 +6884,11 @@ def sourcing_payment_create(request, transaction_pk=None):
                 or transaction.final_invoices.order_by("-created_at").first()
             )
             if invoice:
-                total_paid = (
-                    transaction.payment_records.aggregate(total=Sum("amount"))["total"]
-                    or 0
-                )
-                if total_paid >= invoice.total_amount:
+                total_paid = _final_invoice_total_paid(invoice)
+                payment_snapshot = _final_invoice_payment_snapshot(invoice, total_paid)
+                if payment_snapshot["fully_paid"]:
                     Transaction.objects.filter(pk=transaction.pk).update(status="PAID")
+                if payment_snapshot["procurement_ready"]:
                     purchase_order, created = _ensure_purchase_order_for_transaction(
                         transaction,
                         request.user,
@@ -6413,6 +6914,16 @@ def sourcing_payment_create(request, transaction_pk=None):
                 link=f"/transactions/{transaction.pk}/",
                 category="trading",
                 roles=["ADMIN", "DIRECTOR", "FINANCE", "PROCUREMENT"],
+            )
+            _notify_roles(
+                title="Receipt generated",
+                message=(
+                    f"Receipt {display_document_number(record.receipt, 'RCT')} was generated for "
+                    f"{transaction.transaction_id}."
+                ),
+                link=reverse("receipt_detail", kwargs={"pk": record.receipt.pk}),
+                category="document",
+                roles=["ADMIN", "DIRECTOR", "FINANCE"],
             )
             messages.success(
                 request,
@@ -6515,13 +7026,20 @@ def sourcing_payment_due_info(request):
         )
 
     amount_due = max(selected_invoice.total_amount - total_paid, 0)
+    payment_snapshot = _final_invoice_payment_snapshot(selected_invoice, total_paid)
     return JsonResponse(
         {
-            "ok": True,
+            "ok": payment_snapshot["can_record_payment"],
             "invoice_id": selected_invoice.pk,
             "currency": selected_invoice.currency,
             "total_paid": f"{total_paid:.2f}",
             "amount_due": f"{amount_due:.2f}",
+            "payment_status": payment_snapshot["invoice_label"],
+            "message": (
+                "This invoice is already paid. Additional payments are disabled."
+                if not payment_snapshot["can_record_payment"]
+                else ""
+            ),
         }
     )
 
@@ -6531,10 +7049,19 @@ def sourcing_payment_list(request, transaction_pk):
     """List all payment records for a given Transaction."""
     txn = get_object_or_404(Transaction, pk=transaction_pk)
     records = txn.payment_records.select_related("final_invoice", "created_by").all()
+    latest_invoice = txn.final_invoices.order_by("-is_confirmed", "-created_at").first()
+    payment_snapshot = (
+        _final_invoice_payment_snapshot(latest_invoice) if latest_invoice else None
+    )
     return render(
         request,
         "logistics/sourcing_payments/list.html",
-        {"transaction": txn, "records": records},
+        {
+            "transaction": txn,
+            "records": records,
+            "latest_invoice": latest_invoice,
+            "payment_snapshot": payment_snapshot,
+        },
     )
 
 
@@ -7458,20 +7985,69 @@ def reopen_loading(request, pk):
 
 def _po_supplier_summary(purchase_order):
     """Return (payments_qs, total_paid, balance_due) for a PO."""
-    payments = purchase_order.supplier_payments.select_related("created_by").order_by(
-        "-paid_at", "-id"
-    )
+    if not purchase_order.is_split and purchase_order.split_purchase_orders.exists():
+        payments = SupplierPayment.objects.filter(
+            Q(purchase_order=purchase_order)
+            | Q(purchase_order__parent_po=purchase_order)
+        ).select_related("created_by", "purchase_order")
+    else:
+        payments = purchase_order.supplier_payments.select_related(
+            "created_by", "purchase_order"
+        )
+    payments = payments.order_by("-paid_at", "-id")
     total_paid = payments.aggregate(total=Sum("amount"))["total"] or Decimal("0.00")
     subtotal = purchase_order.subtotal or Decimal("0.00")
     balance_due = max(subtotal - total_paid, Decimal("0.00"))
     return payments, total_paid, balance_due
 
 
+def _decorate_purchase_order_edit_lock(purchase_order):
+    payments, total_paid, balance_due = _po_supplier_summary(purchase_order)
+    subtotal = purchase_order.subtotal or Decimal("0.00")
+    effective_status = getattr(
+        purchase_order,
+        "effective_status",
+        _purchase_order_effective_status(purchase_order, total_paid),
+    )
+    is_paid = subtotal > 0 and total_paid >= subtotal
+    is_cleared = total_paid > 0 and balance_due <= Decimal("0.00")
+    has_supplier_payment = total_paid > 0
+    is_served = effective_status == "FULFILLED" or purchase_order.status == "FULFILLED"
+    is_closed = purchase_order.transaction.is_closed
+
+    reasons = []
+    if is_served:
+        reasons.append("served/fulfilled")
+    if is_cleared or is_paid:
+        reasons.append("supplier balance cleared")
+    elif has_supplier_payment:
+        reasons.append("supplier payment recorded")
+    if is_closed:
+        reasons.append("trade closed")
+
+    payment_entry_locked = is_served or is_cleared or is_paid or is_closed
+
+    purchase_order.edit_locked = bool(reasons)
+    purchase_order.payment_entry_locked = payment_entry_locked
+    purchase_order.edit_lock_reasons = reasons
+    purchase_order.edit_lock_reason = ", ".join(reasons)
+    purchase_order.edit_lock_message = (
+        "This purchase order is locked because it is "
+        f"{purchase_order.edit_lock_reason}. Request Director approval for corrections."
+        if reasons
+        else ""
+    )
+    purchase_order.can_edit_purchase_order = not purchase_order.edit_locked
+    purchase_order.can_record_more_supplier_payment = not payment_entry_locked
+    purchase_order.supplier_total_paid_for_lock = total_paid
+    purchase_order.supplier_balance_due_for_lock = balance_due
+    purchase_order.has_supplier_payments_for_lock = payments.exists()
+    return purchase_order
+
+
 def _purchase_order_effective_status(purchase_order, total_paid=None):
     if total_paid is None:
-        total_paid = purchase_order.supplier_payments.aggregate(total=Sum("amount"))[
-            "total"
-        ] or Decimal("0.00")
+        _, total_paid, _ = _po_supplier_summary(purchase_order)
     subtotal = purchase_order.subtotal or Decimal("0.00")
     if subtotal > 0 and total_paid >= subtotal:
         return "FULFILLED"
@@ -7483,9 +8059,7 @@ def _purchase_order_effective_status(purchase_order, total_paid=None):
 
 
 def _decorate_purchase_order_status(purchase_order, persist=False):
-    total_paid = purchase_order.supplier_payments.aggregate(total=Sum("amount"))[
-        "total"
-    ] or Decimal("0.00")
+    _, total_paid, _ = _po_supplier_summary(purchase_order)
     effective_status = _purchase_order_effective_status(purchase_order, total_paid)
     purchase_order.effective_status = effective_status
     purchase_order.effective_status_display = dict(PurchaseOrder.STATUS_CHOICES).get(
@@ -7509,47 +8083,79 @@ def record_supplier_payment(request, po_pk):
             "This trade is closed; supplier payments cannot be recorded.",
         )
         return redirect("purchase_order_detail", pk=purchase_order.pk)
+    _decorate_purchase_order_status(purchase_order)
+    _decorate_purchase_order_edit_lock(purchase_order)
+    if purchase_order.payment_entry_locked:
+        messages.error(request, purchase_order.edit_lock_message)
+        return redirect("purchase_order_detail", pk=purchase_order.pk)
+
+    if not purchase_order.is_split and purchase_order.split_purchase_orders.exists():
+        messages.warning(
+            request,
+            "This purchase order has supplier splits. Record supplier payments on the split purchase orders instead.",
+        )
+        return redirect("purchase_order_detail", pk=purchase_order.pk)
+
+    payments, total_paid, balance_due = _po_supplier_summary(purchase_order)
+    if balance_due <= Decimal("0.00"):
+        messages.info(
+            request,
+            "This supplier purchase order is fully paid. Additional supplier payments are disabled.",
+        )
+        _decorate_purchase_order_status(purchase_order, persist=True)
+        return redirect("purchase_order_detail", pk=purchase_order.pk)
 
     if request.method == "POST":
         form = SupplierPaymentForm(request.POST)
         if form.is_valid():
             payment = form.save(commit=False)
-            payment.purchase_order = purchase_order
-            if not payment.supplier_name:
-                payment.supplier_name = purchase_order.supplier_name
-            payment.created_by = request.user
-            payment.save()
-            _decorate_purchase_order_status(purchase_order, persist=True)
-            log_audit(
-                "supplier_payment",
-                "create",
-                payment.id,
-                f"{purchase_order.po_number} {payment.amount} {payment.currency}",
-                request.user,
-            )
-            _notify_roles(
-                title="Supplier payment recorded",
-                message=(
-                    f"{payment.amount} {payment.currency} paid to "
-                    f"{payment.supplier_name or purchase_order.supplier_name} "
-                    f"against {purchase_order.po_number}."
-                ),
-                link=f"/purchase-orders/{purchase_order.pk}/",
-                category="trading",
-                roles=["ADMIN", "DIRECTOR", "FINANCE", "PROCUREMENT"],
-            )
-            messages.success(request, "Supplier payment recorded.")
-            return redirect("purchase_order_detail", pk=purchase_order.pk)
+            if payment.amount > balance_due:
+                form.add_error(
+                    "amount",
+                    f"Payment cannot exceed the remaining supplier balance of {balance_due}.",
+                )
+            else:
+                payment.purchase_order = purchase_order
+                if not payment.supplier_name:
+                    payment.supplier_name = purchase_order.supplier_name
+                payment.created_by = request.user
+                payment.save()
+                _decorate_purchase_order_status(purchase_order, persist=True)
+                if purchase_order.parent_po_id:
+                    _decorate_purchase_order_status(
+                        purchase_order.parent_po, persist=True
+                    )
+                log_audit(
+                    "supplier_payment",
+                    "create",
+                    payment.id,
+                    f"{purchase_order.po_number} {payment.amount} {payment.currency}",
+                    request.user,
+                )
+                _notify_roles(
+                    title="Supplier payment recorded",
+                    message=(
+                        f"{payment.amount} {payment.currency} paid to "
+                        f"{payment.supplier_name or purchase_order.supplier_name} "
+                        f"against {purchase_order.po_number}."
+                    ),
+                    link=f"/purchase-orders/{purchase_order.pk}/",
+                    category="trading",
+                    roles=["ADMIN", "DIRECTOR", "FINANCE", "PROCUREMENT"],
+                )
+                messages.success(request, "Supplier payment recorded.")
+                return redirect("purchase_order_detail", pk=purchase_order.pk)
     else:
         form = SupplierPaymentForm(
             initial={
                 "supplier_name": purchase_order.supplier_name,
                 "currency": "USD",
+                "amount": balance_due,
                 "paid_at": timezone.now(),
             }
         )
+    form.fields["amount"].widget.attrs["max"] = balance_due
 
-    payments, total_paid, balance_due = _po_supplier_summary(purchase_order)
     return render(
         request,
         "logistics/invoicing/supplier_payment_form.html",
@@ -7597,9 +8203,19 @@ def supplier_payment_list(request):
 @role_required("ADMIN", "DIRECTOR")
 def supplier_payment_delete(request, pk):
     payment = get_object_or_404(
-        SupplierPayment.objects.select_related("purchase_order"), pk=pk
+        SupplierPayment.objects.select_related("purchase_order__parent_po"), pk=pk
     )
+    purchase_order = payment.purchase_order
     po_pk = payment.purchase_order_id
+    _decorate_purchase_order_status(purchase_order)
+    _decorate_purchase_order_edit_lock(purchase_order)
+    if purchase_order.edit_locked:
+        messages.error(
+            request,
+            "Supplier payments on a locked purchase order cannot be removed directly. Request Director approval for the correction.",
+        )
+        return redirect("purchase_order_detail", pk=po_pk)
+
     if request.method == "POST":
         log_audit(
             "supplier_payment",
@@ -7609,6 +8225,9 @@ def supplier_payment_delete(request, pk):
             request.user,
         )
         payment.delete()
+        _decorate_purchase_order_status(purchase_order, persist=True)
+        if purchase_order.parent_po_id:
+            _decorate_purchase_order_status(purchase_order.parent_po, persist=True)
         messages.success(request, "Supplier payment removed.")
         return redirect("purchase_order_detail", pk=po_pk)
     return render(

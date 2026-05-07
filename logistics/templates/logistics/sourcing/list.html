@@ -1,12 +1,12 @@
 {% extends "logistics/base.html" %}
 
-{% block title %}Sourcing - GMI TERRALINK Logistics Portal{% endblock %}
+{% block title %}Q-Worksheets - GMI TERRALINK Logistics Portal{% endblock %}
 
 {% block content %}
 <div class="container-fluid">
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <h1><i class="bi bi-globe2"></i> Sourcing Records</h1>
-        <a href="{% url 'sourcing_create' %}" class="btn btn-primary">New Sourcing Record</a>
+        <h1><i class="bi bi-table"></i> Q-Worksheets</h1>
+        <a href="{% url 'sourcing_create' %}" class="btn btn-primary">New Q-Worksheet</a>
     </div>
 
     <div class="card">
@@ -34,7 +34,7 @@
                         <td><a class="btn btn-sm btn-warning" href="{% url 'sourcing_update' rec.id %}">Edit</a></td>
                     </tr>
                     {% empty %}
-                    <tr><td colspan="6" class="text-center text-muted py-4">No sourcing records</td></tr>
+                    <tr><td colspan="6" class="text-center text-muted py-4">No Q-Worksheets</td></tr>
                     {% endfor %}
                 </tbody>
             </table>

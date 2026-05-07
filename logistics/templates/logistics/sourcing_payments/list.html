@@ -5,9 +5,15 @@
 <div class="container-fluid">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h2><i class="bi bi-cash-coin"></i> Payments — {{ transaction.transaction_id }}</h2>
+        {% if latest_invoice and payment_snapshot.can_record_payment %}
         <a href="{% url 'sourcing_payment_create_for' transaction.pk %}" class="btn btn-primary">
             <i class="bi bi-plus-lg"></i> Record Payment
         </a>
+        {% elif latest_invoice %}
+        <span class="btn btn-outline-success disabled"><i class="bi bi-check2-circle"></i> Paid</span>
+        {% else %}
+        <span class="btn btn-outline-secondary disabled"><i class="bi bi-receipt"></i> Awaiting Invoice</span>
+        {% endif %}
     </div>
 
     <div class="card mb-3">
@@ -15,6 +21,11 @@
             <strong>Customer:</strong> {{ transaction.customer.name }} &nbsp;|&nbsp;
             <strong>Status:</strong>
             <span class="badge bg-secondary">{{ transaction.get_status_display }}</span>
+            {% if payment_snapshot %}
+            &nbsp;|&nbsp; <strong>Invoice Payment:</strong>
+            <span class="badge {{ payment_snapshot.invoice_class }}">{{ payment_snapshot.invoice_label }}</span>
+            {% if payment_snapshot.invoice_balance > 0 %}<span class="text-muted small">Balance: {{ payment_snapshot.invoice_balance }} {{ latest_invoice.currency }}</span>{% endif %}
+            {% endif %}
         </div>
     </div>
 

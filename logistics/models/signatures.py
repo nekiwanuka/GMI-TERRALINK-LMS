@@ -52,6 +52,7 @@ class DocumentSignature(models.Model):
     )
     signer_name = models.CharField(max_length=150)
     signer_title = models.CharField(max_length=120)
+    signer_role = models.CharField(max_length=120, blank=True)
     note = models.CharField(max_length=255, blank=True)
     signed_at = models.DateTimeField(default=timezone.now)
     created_at = models.DateTimeField(auto_now_add=True)

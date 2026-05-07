@@ -1983,9 +1983,14 @@ class TransactionPaymentRecordForm(NormalizedTextMixin, forms.ModelForm):
             )
 
         cleaned_data["final_invoice"] = invoice
-        prior_paid = transaction.payment_records.exclude(pk=self.instance.pk).aggregate(
-            total=Sum("amount")
-        )["total"] or Decimal("0")
+        invoice_payments = invoice.payment_records.exclude(pk=self.instance.pk)
+        prior_paid = invoice_payments.aggregate(total=Sum("amount"))[
+            "total"
+        ] or Decimal("0")
+        if prior_paid <= 0 and transaction.final_invoices.count() <= 1:
+            prior_paid = transaction.payment_records.exclude(
+                pk=self.instance.pk
+            ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
         amount_due = max(Decimal(str(invoice.total_amount)) - prior_paid, Decimal("0"))
         cleaned_data["amount_due_snapshot"] = amount_due
 

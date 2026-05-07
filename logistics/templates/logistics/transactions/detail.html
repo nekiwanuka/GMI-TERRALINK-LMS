@@ -3,40 +3,252 @@
 
 {% block title %}{{ transaction.transaction_id }} - GMI TERRALINK Logistics Portal{% endblock %}
 
-{% block content %}
-<div class="container-fluid">
+{% block extra_css %}
+<style>
+.transaction-workspace {
+    display: grid;
+    gap: 1rem;
+}
+.transaction-hero {
+    border: 1px solid rgba(17, 17, 17, 0.08);
+    border-top: 4px solid #d4af37;
+    border-radius: 18px;
+    background: linear-gradient(135deg, #191919 0%, #3f3a3a 100%);
+    color: #fff;
+    padding: 1.2rem;
+    box-shadow: 0 18px 44px rgba(17, 17, 17, 0.16);
+}
+.transaction-hero-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 1rem;
+    align-items: center;
+}
+.transaction-eyebrow {
+    display: inline-flex;
+    gap: .45rem;
+    align-items: center;
+    color: rgba(255, 255, 255, .72);
+    font-size: .72rem;
+    font-weight: 800;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+}
+.transaction-title {
+    margin: .25rem 0 .25rem;
+    color: #fff;
+    font-size: 1.85rem;
+    line-height: 1.15;
+}
+.transaction-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .55rem;
+    align-items: center;
+    color: rgba(255, 255, 255, .76);
+    font-size: .88rem;
+}
+.transaction-status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    border: 1px solid rgba(212, 175, 55, .34);
+    border-radius: 999px;
+    background: rgba(212, 175, 55, .16);
+    color: #fff;
+    padding: .35rem .65rem;
+    font-size: .78rem;
+    font-weight: 800;
+}
+.transaction-hero-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .5rem;
+    justify-content: flex-end;
+}
+.transaction-hero-actions .btn {
+    border-radius: 10px;
+    white-space: nowrap;
+}
+.transaction-kpis {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: .75rem;
+}
+.transaction-kpi {
+    border: 1px solid rgba(17, 17, 17, .08);
+    border-radius: 14px;
+    background: #fff;
+    padding: .85rem .95rem;
+    min-width: 0;
+    box-shadow: 0 8px 24px rgba(17, 17, 17, .06);
+}
+.transaction-kpi span {
+    display: block;
+    color: #6c6c6c;
+    font-size: .7rem;
+    font-weight: 800;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+}
+.transaction-kpi strong {
+    display: block;
+    margin-top: .25rem;
+    color: #191919;
+    font-size: 1.05rem;
+    overflow-wrap: anywhere;
+}
+.transaction-note {
+    border: 1px solid rgba(17, 17, 17, .08);
+    border-left: 4px solid #d4af37;
+    border-radius: 12px;
+    background: #fffdf7;
+    padding: .8rem .95rem;
+    color: #383838;
+}
+.transaction-step-card {
+    border: 1px solid rgba(17, 17, 17, .08);
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 10px 28px rgba(17, 17, 17, .06);
+}
+.transaction-step-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .75rem;
+    border-bottom: 1px solid rgba(17, 17, 17, .08);
+    background: #f8f8f8;
+    color: #191919;
+    padding: .85rem 1rem;
+}
+.transaction-step-title {
+    display: inline-flex;
+    align-items: center;
+    gap: .55rem;
+    margin: 0;
+    color: #191919;
+    font-size: .95rem;
+    font-weight: 800;
+}
+.step-number {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.7rem;
+    height: 1.7rem;
+    border-radius: 999px;
+    background: #191919;
+    color: #d4af37;
+    font-size: .78rem;
+    font-weight: 900;
+}
+.transaction-empty {
+    padding: 2rem 1rem;
+    color: #6c6c6c;
+    text-align: center;
+}
+.transaction-empty .bi {
+    display: block;
+    margin-bottom: .5rem;
+    color: #8f7a2d;
+    font-size: 2rem;
+}
+.transaction-list-item {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    align-items: center;
+}
+.transaction-list-item .btn-group {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+.transaction-mini-card {
+    border: 1px solid rgba(17, 17, 17, .08);
+    border-radius: 12px;
+    background: #fafafa;
+    padding: .9rem;
+    height: 100%;
+}
+.transaction-mini-card small {
+    display: block;
+    color: #6c6c6c;
+    font-weight: 800;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+}
+.transaction-mini-card strong {
+    display: block;
+    margin-top: .25rem;
+    color: #191919;
+}
+@media (max-width: 991.98px) {
+    .transaction-hero-grid,
+    .transaction-kpis {
+        grid-template-columns: 1fr;
+    }
+    .transaction-hero-actions {
+        justify-content: flex-start;
+    }
+    .transaction-list-item {
+        align-items: stretch;
+        flex-direction: column;
+    }
+    .transaction-list-item .btn-group .btn {
+        flex: 1 1 auto;
+    }
+}
+</style>
+{% endblock %}
 
-    <div class="d-flex justify-content-between align-items-center mb-3">
+{% block content %}
+<div class="container-fluid transaction-workspace">
+
+    <section class="transaction-hero">
+        <div class="transaction-hero-grid">
         <div>
-            <h2 class="mb-1"><i class="bi bi-diagram-3"></i> {{ transaction.transaction_id }}</h2>
-            <div class="d-flex flex-wrap align-items-center gap-2 text-muted small">
-                <strong class="text-dark">{{ transaction.customer.name }}</strong>
-                <span class="badge {{ transaction.list_status_class|default:'bg-primary' }}">{{ transaction.list_status_display|default:transaction.get_status_display }}</span>
-                {% if transaction.estimated_delivery %}<span>ETA {{ transaction.estimated_delivery|date:"Y-m-d" }}</span>{% endif %}
+                <span class="transaction-eyebrow"><i class="bi bi-diagram-3"></i> Transaction Workspace</span>
+                <h1 class="transaction-title">{{ transaction.transaction_id }}</h1>
+                <div class="transaction-meta">
+                    <strong>{{ transaction.customer.name }}</strong>
+                    <span class="transaction-status-pill"><i class="bi bi-activity"></i>{{ transaction.list_status_display|default:transaction.get_status_display }}</span>
+                    {% if transaction.estimated_delivery %}<span><i class="bi bi-calendar2-check me-1"></i>ETA {{ transaction.estimated_delivery|date:"d M Y" }}</span>{% endif %}
+                    {% if transaction.source_loading %}<span><i class="bi bi-truck me-1"></i>Logistics-linked trade</span>{% else %}<span><i class="bi bi-globe2 me-1"></i>Sourcing / trade</span>{% endif %}
+                </div>
+            </div>
+            <div class="transaction-hero-actions">
+                <a href="{% url 'transaction_update' transaction.id %}" class="btn btn-warning {% if transaction.is_closed %}disabled{% endif %}">
+                    <i class="bi bi-pencil"></i> Edit
+                </a>
             </div>
         </div>
-        <a href="{% url 'transaction_update' transaction.id %}" class="btn btn-warning {% if transaction.is_closed %}disabled{% endif %}">
-            <i class="bi bi-pencil"></i> Edit
-        </a>
-    </div>
+    </section>
+
+    <section class="transaction-kpis">
+        <div class="transaction-kpi"><span>Documents</span><strong>{{ documents.count }}</strong></div>
+        <div class="transaction-kpi"><span>Proformas</span><strong>{{ proformas|length }}</strong></div>
+        <div class="transaction-kpi"><span>Final Invoices</span><strong>{{ final_invoices|length }}</strong></div>
+        <div class="transaction-kpi"><span>Payment Balance</span><strong>{% if latest_invoice %}{{ trade_balance }} {{ latest_invoice.currency }}{% else %}Pending invoice{% endif %}</strong></div>
+    </section>
 
     {% url 'close_transaction' transaction.id as close_url_x %}
     {% url 'reopen_transaction' transaction.id as reopen_url_x %}
     {% include "logistics/partials/closure_card.html" with lane_label="Trade" close_url=close_url_x reopen_url=reopen_url_x object_is_closed=transaction.is_closed closed_at=transaction.closed_at closed_by_name=transaction.closed_by.get_full_name closure_notes=transaction.closure_notes %}
 
     {% if transaction.description %}
-    <div class="alert alert-secondary py-2 mb-3 small">
+    <div class="transaction-note small">
         <strong>Description:</strong> {{ transaction.description }}
         {% if transaction.notes %}<br><strong>Notes:</strong> {{ transaction.notes }}{% endif %}
     </div>
     {% endif %}
 
-    <div class="row g-3">
+    <div class="row g-3 align-items-stretch">
 
         {% if proformas or final_invoices %}
         <div class="col-12">
-            <details class="card border-0 shadow-sm">
-                <summary class="card-header bg-light fw-semibold" style="cursor:pointer;">
+            <details class="card transaction-step-card border-0">
+                <summary class="transaction-step-header fw-semibold" style="cursor:pointer;">
                     <i class="bi bi-folder2-open me-1"></i> Intake documents and PI review
                     <span class="badge bg-secondary ms-2">{{ documents.count }} file(s)</span>
                 </summary>
@@ -46,9 +258,9 @@
 
         <!-- STEP 1: Upload Client PI -->
         <div class="col-lg-6">
-            <div class="card h-100">
-                <div class="card-header d-flex justify-content-between align-items-center bg-primary text-white">
-                    <span><strong>Step 1 — Client PI Upload</strong></span>
+            <div class="card h-100 transaction-step-card">
+                <div class="transaction-step-header">
+                    <h3 class="transaction-step-title"><span class="step-number">1</span> Client PI Upload</h3>
                     <span class="badge bg-light text-dark">{{ documents.count }} file(s)</span>
                 </div>
                 <div class="card-body">
@@ -74,7 +286,7 @@
                             <input class="form-control form-control-sm" type="file" name="original_file"
                                    accept=".pdf,.docx,.doc,.txt" required>
                         </div>
-                        <button class="btn btn-primary btn-sm w-100" type="submit">
+                        <button class="btn btn-dark btn-sm w-100" type="submit">
                             <i class="bi bi-cloud-upload"></i> Upload &amp; Extract
                         </button>
                     </form>
@@ -102,9 +314,9 @@
 
         <!-- STEP 2: Extracted / Structured PI Preview (Editable) -->
         <div class="col-lg-6">
-            <div class="card h-100">
-                <div class="card-header bg-info text-white d-flex justify-content-between align-items-center">
-                    <strong>Step 2 — Review PI Content</strong>
+            <div class="card h-100 transaction-step-card">
+                <div class="transaction-step-header">
+                    <h3 class="transaction-step-title"><span class="step-number">2</span> Review PI Content</h3>
                     {% if pi_documents and pi_documents.first.structured_data %}
                     <span class="badge bg-white text-info" style="font-size:0.72rem;">Auto-extracted — edit if needed</span>
                     {% endif %}
@@ -173,7 +385,7 @@
                                         <i class="bi bi-arrow-right"></i> Skip Worksheet &amp; Create Proforma
                                     </button>
                                     <button type="submit" name="next_step" value="sourcing" class="btn btn-sm btn-outline-secondary flex-fill">
-                                        <i class="bi bi-table"></i> Optional Sourcing Worksheet
+                                        <i class="bi bi-table"></i> Optional Q-Worksheet
                                     </button>
                                 </div>
                                 <div class="form-text mt-1">The worksheet is optional. Use it only when supplier quote comparison is needed before the proforma.</div>
@@ -203,7 +415,7 @@
                                         <i class="bi bi-arrow-right"></i> Create Proforma Invoice
                                     </a>
                                     <a href="{% url 'sourcing_create' %}?from_doc={{ latest_pi.pk }}" class="btn btn-sm btn-outline-secondary">
-                                        <i class="bi bi-table"></i> Optional Worksheet
+                                        <i class="bi bi-table"></i> Optional Q-Worksheet
                                     </a>
                                 </div>
                                 {% endif %}
@@ -219,7 +431,7 @@
                                         Create Proforma Manually
                                     </a>
                                     <a href="{% url 'sourcing_create' %}?transaction={{ transaction.pk }}" class="btn btn-sm btn-outline-secondary">
-                                        Optional Worksheet
+                                        Optional Q-Worksheet
                                     </a>
                                 </div>
                                 {% endif %}
@@ -227,8 +439,8 @@
                         {% endif %}
                         {% endwith %}
                     {% else %}
-                        <div class="text-muted text-center py-4">
-                            <i class="bi bi-file-earmark-arrow-up fs-2 d-block mb-2"></i>
+                        <div class="transaction-empty">
+                            <i class="bi bi-file-earmark-arrow-up"></i>
                             Upload a Client PI to see extracted content here.
                         </div>
                     {% endif %}
@@ -245,11 +457,11 @@
 
         <!-- STEP 3: Proforma / Quotation -->
         <div class="col-lg-6">
-            <div class="card h-100">
-                <div class="card-header d-flex justify-content-between align-items-center bg-success text-white">
-                    <strong>Step 3 — Create Quotation (Proforma)</strong>
+            <div class="card h-100 transaction-step-card">
+                <div class="transaction-step-header">
+                    <h3 class="transaction-step-title"><span class="step-number">3</span> Create Quotation</h3>
                     {% if not trade_documents_locked or can_edit_closed_trade_documents %}
-                    <a href="{% if transaction.source_loading %}{% url 'logistics_proforma_create' %}{% else %}{% url 'sourcing_proforma_create' %}{% endif %}?transaction={{ transaction.pk }}" class="btn btn-sm btn-light">
+                    <a href="{% if transaction.source_loading %}{% url 'logistics_proforma_create' %}{% else %}{% url 'sourcing_proforma_create' %}{% endif %}?transaction={{ transaction.pk }}" class="btn btn-sm btn-dark">
                         <i class="bi bi-plus"></i> New Proforma
                     </a>
                     {% endif %}
@@ -258,7 +470,7 @@
                     {% if proformas %}
                     <ul class="list-group list-group-flush">
                         {% for pi in proformas %}
-                        <li class="list-group-item d-flex justify-content-between align-items-center px-3">
+                        <li class="list-group-item transaction-list-item px-3 py-3">
                             <div>
                                 <strong>{{ pi|doc_number:"PI" }} — {{ pi.subtotal }}</strong>
                                 <span class="badge {% if pi.status == 'SENT' %}bg-success{% else %}bg-secondary{% endif %} ms-1">{{ pi.status }}</span>
@@ -277,8 +489,8 @@
                         {% endfor %}
                     </ul>
                     {% else %}
-                    <div class="text-muted text-center py-4">
-                        <i class="bi bi-file-earmark-text fs-2 d-block mb-2"></i>
+                    <div class="transaction-empty">
+                        <i class="bi bi-file-earmark-text"></i>
                         No proforma invoices yet.
                     </div>
                     {% endif %}
@@ -288,8 +500,8 @@
 
         {% if document_archives %}
         <div class="col-12">
-            <details class="card border-0 shadow-sm">
-                <summary class="card-header bg-light fw-semibold" style="cursor:pointer;">
+            <details class="card transaction-step-card border-0">
+                <summary class="transaction-step-header fw-semibold" style="cursor:pointer;">
                     Extracted document archive <span class="badge bg-secondary ms-2">{{ document_archives|length }}</span>
                 </summary>
                 <div class="card-body p-0">
@@ -326,27 +538,29 @@
         {% endif %}
 
         <!-- STEP 4: Final Invoice -->
-        {% if final_invoices %}
         <div class="col-12">
-            <div class="card">
-                <div class="card-header bg-dark text-white d-flex justify-content-between">
-                    <strong>Step 4 — Final Invoice (after client PO)</strong>
+            <div class="card transaction-step-card">
+                <div class="transaction-step-header">
+                    <h3 class="transaction-step-title"><span class="step-number">4</span> Final Invoice</h3>
                     {% if not trade_documents_locked or can_edit_closed_trade_documents %}
-                    <a href="{% if transaction.source_loading %}{% url 'logistics_final_invoice_create' %}{% else %}{% url 'sourcing_final_invoice_create' %}{% endif %}?transaction={{ transaction.pk }}" class="btn btn-sm btn-light">
+                    <a href="{% if transaction.source_loading %}{% url 'logistics_final_invoice_create' %}{% else %}{% url 'sourcing_final_invoice_create' %}{% endif %}?transaction={{ transaction.pk }}" class="btn btn-sm btn-dark">
                         <i class="bi bi-plus"></i> New Final Invoice
                     </a>
                     {% endif %}
                 </div>
                 <div class="card-body p-0">
+                    {% if final_invoices %}
                     <ul class="list-group list-group-flush">
                         {% for fi in final_invoices %}
-                        <li class="list-group-item d-flex justify-content-between align-items-center px-3">
+                        <li class="list-group-item transaction-list-item px-3 py-3">
                             <div>
                                 <strong>{{ fi|doc_number:"FI" }} — {{ fi.subtotal }}</strong>
                                 <span class="badge {% if fi.is_confirmed %}bg-success{% else %}bg-warning text-dark{% endif %} ms-1">
                                     {% if fi.is_confirmed %}Confirmed{% else %}Draft{% endif %}
                                 </span>
+                                <span class="badge {{ fi.payment_status_class }} ms-1">{{ fi.payment_status_label }}</span>
                                 <small class="text-muted d-block">{% if fi.loading %}Port/Clearance{% else %}Sourcing{% endif %}: {{ fi.sourcing_fee }} | Handling: {{ fi.service_fee }} | Shipping: {{ fi.shipping_cost }} | Total: {{ fi.total_amount }} {{ fi.currency }}</small>
+                                <small class="text-muted d-block">Paid: {{ fi.total_paid_for_display }} {{ fi.currency }} | Balance: {{ fi.balance_for_display }} {{ fi.currency }}</small>
                             </div>
                             <div class="btn-group btn-group-sm">
                                 {% if not trade_documents_locked or can_edit_closed_trade_documents %}
@@ -359,34 +573,52 @@
                                 <button type="button" class="btn btn-outline-secondary" disabled title="Closed trade documents are restricted to Director or System Admin.">Locked</button>
                                 {% endif %}
                                 <a href="{% if fi.loading %}{% url 'logistics_final_invoice_pdf' fi.pk %}{% else %}{% url 'sourcing_final_invoice_pdf' fi.pk %}{% endif %}" class="btn btn-outline-primary">PDF</a>
-                                <a href="{% url 'sourcing_payment_create_for' transaction.pk %}" class="btn btn-outline-success">Record Trade Payment</a>
+                                {% if fi.can_record_payment %}
+                                <a href="{% url 'sourcing_payment_create_for' transaction.pk %}?invoice={{ fi.pk }}" class="btn btn-outline-success">Record Trade Payment</a>
+                                {% else %}
+                                <button type="button" class="btn btn-outline-success" disabled>Paid</button>
+                                {% endif %}
                             </div>
                         </li>
                         {% endfor %}
                     </ul>
+                    {% else %}
+                    <div class="transaction-empty">
+                        <i class="bi bi-receipt"></i>
+                        No final invoices yet. Create one after the client PO is confirmed.
+                    </div>
+                    {% endif %}
                 </div>
             </div>
         </div>
-        {% endif %}
 
         <!-- STEP 5: Trade Payments -->
         <div class="col-lg-6">
-            <div class="card h-100">
-                <div class="card-header bg-warning text-dark d-flex justify-content-between align-items-center">
-                    <strong>Step 5 — Client Payment</strong>
+            <div class="card h-100 transaction-step-card">
+                <div class="transaction-step-header">
+                    <h3 class="transaction-step-title"><span class="step-number">5</span> Client Payment</h3>
+                    {% if latest_invoice and latest_payment_snapshot.can_record_payment %}
                     <a href="{% url 'sourcing_payment_create_for' transaction.pk %}" class="btn btn-sm btn-dark">
                         <i class="bi bi-cash-coin"></i> Record Payment
                     </a>
+                    {% elif latest_invoice %}
+                    <span class="btn btn-sm btn-outline-success disabled"><i class="bi bi-check2-circle"></i> Paid</span>
+                    {% else %}
+                    <span class="btn btn-sm btn-outline-secondary disabled"><i class="bi bi-receipt"></i> Awaiting Invoice</span>
+                    {% endif %}
                 </div>
                 <div class="card-body">
                     {% if latest_invoice %}
+                    <div class="mb-2"><span class="badge {{ latest_payment_snapshot.invoice_class }}">{{ latest_payment_snapshot.invoice_label }}</span></div>
                     <div class="small mb-2"><strong>Invoice Total:</strong> {{ latest_invoice.total_amount }} {{ latest_invoice.currency }}</div>
                     <div class="small mb-2"><strong>Paid:</strong> {{ trade_total_paid }} {{ latest_invoice.currency }}</div>
                     <div class="small"><strong>Balance:</strong> {{ trade_balance }} {{ latest_invoice.currency }}</div>
-                    {% if trade_balance > 0 %}
+                    {% if latest_payment_snapshot.invoice_label == 'Post Pay' %}
+                    <div class="alert alert-info py-2 mt-3 mb-0">Item funds are covered. Remaining balance is handled as post pay.</div>
+                    {% elif trade_balance > 0 %}
                     <div class="alert alert-warning py-2 mt-3 mb-0">Partial payment allowed until full settlement.</div>
                     {% else %}
-                    <div class="alert alert-success py-2 mt-3 mb-0">Fully paid. Procurement can proceed.</div>
+                    <div class="alert alert-success py-2 mt-3 mb-0">Paid in full. Payment recording is closed.</div>
                     {% endif %}
                     {% else %}
                     <div class="text-muted">Create the final invoice first before recording payment.</div>
@@ -397,8 +629,8 @@
 
         <!-- Step 6: Shipping Charge Rule -->
         <div class="col-lg-6">
-            <details class="card h-100">
-                <summary class="card-header bg-light fw-semibold" style="cursor:pointer;">Billing rule</summary>
+            <details class="card h-100 transaction-step-card">
+                <summary class="transaction-step-header fw-semibold" style="cursor:pointer;"><span class="transaction-step-title"><span class="step-number">6</span> Billing Rule</span></summary>
                 <div class="card-body small">
                     {% if latest_invoice %}
                         {% if shipping_charge_included %}
@@ -420,18 +652,18 @@
         </div>
 
         <div class="col-12">
-            <div class="card">
-                <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
-                    <strong>Step 7 — Fulfillment Workflow</strong>
+            <div class="card transaction-step-card">
+                <div class="transaction-step-header">
+                    <h3 class="transaction-step-title"><span class="step-number">7</span> Fulfillment Workflow</h3>
                     {% if fulfillment_order %}
-                    <div class="d-flex gap-2">
-                        <a href="{% url 'fulfillment_line_create' fulfillment_order.pk %}" class="btn btn-sm btn-light">
+                    <div class="d-flex gap-2 flex-wrap justify-content-end">
+                        <a href="{% url 'fulfillment_line_create' fulfillment_order.pk %}" class="btn btn-sm btn-dark">
                             <i class="bi bi-box-seam"></i> Allocate Stock
                         </a>
-                        <a href="{% url 'shipment_leg_create' fulfillment_order.pk %}" class="btn btn-sm btn-outline-light">
+                        <a href="{% url 'shipment_leg_create' fulfillment_order.pk %}" class="btn btn-sm btn-outline-secondary">
                             <i class="bi bi-signpost-split"></i> Add Leg
                         </a>
-                        <a href="{% url 'fulfillment_timeline' fulfillment_order.pk %}" class="btn btn-sm btn-outline-light">
+                        <a href="{% url 'fulfillment_timeline' fulfillment_order.pk %}" class="btn btn-sm btn-outline-secondary">
                             <i class="bi bi-clock-history"></i> Timeline
                         </a>
                         {% if fulfillment_order.proof_of_delivery %}
@@ -448,41 +680,56 @@
                         </a>
                     </div>
                     {% else %}
-                    <a href="{% url 'fulfillment_order_create' transaction.pk %}" class="btn btn-sm btn-light">
+                    {% if latest_invoice and latest_payment_snapshot.procurement_ready %}
+                    <a href="{% url 'fulfillment_order_create' transaction.pk %}?final_invoice={{ latest_invoice.pk }}" class="btn btn-sm btn-dark">
                         <i class="bi bi-plus-circle"></i> Start Fulfillment
                     </a>
+                    {% else %}
+                    <span class="btn btn-sm btn-outline-secondary disabled"><i class="bi bi-lock"></i> Awaiting Paid/Post Pay</span>
+                    {% endif %}
                     {% endif %}
                 </div>
                 <div class="card-body">
                     {% if fulfillment_order %}
                     <div class="row g-3 mb-3">
                         <div class="col-md-3">
-                            <div class="border rounded p-3 h-100 bg-light">
+                            <div class="transaction-mini-card">
                                 <small class="text-muted d-block">Status</small>
                                 <strong>{{ fulfillment_order.get_status_display }}</strong>
                             </div>
                         </div>
                         <div class="col-md-3">
-                            <div class="border rounded p-3 h-100 bg-light">
+                            <div class="transaction-mini-card">
                                 <small class="text-muted d-block">Final Invoice</small>
                                 <strong>{{ fulfillment_order.source_reference }}</strong>
                                 <div class="text-muted small">Receipt: {{ fulfillment_receipt_numbers_display }}</div>
                             </div>
                         </div>
                         <div class="col-md-3">
-                            <div class="border rounded p-3 h-100 bg-light">
+                            <div class="transaction-mini-card">
+                                <small class="text-muted d-block">Payment</small>
+                                {% if fulfillment_order.payment_snapshot %}
+                                <strong><span class="badge {{ fulfillment_order.payment_snapshot.invoice_class }}">{{ fulfillment_order.payment_snapshot.invoice_label }}</span></strong>
+                                <div class="text-muted small">Balance: {{ fulfillment_order.payment_snapshot.invoice_balance }} {{ fulfillment_order.final_invoice.currency }}</div>
+                                {% else %}
+                                <strong><span class="badge bg-secondary">No Invoice</span></strong>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="transaction-mini-card">
                                 <small class="text-muted d-block">Port Of Loading</small>
                                 <strong>{{ fulfillment_order.port_of_loading|default:"-" }}</strong>
                             </div>
                         </div>
                         <div class="col-md-3">
-                            <div class="border rounded p-3 h-100 bg-light">
+                            <div class="transaction-mini-card">
                                 <small class="text-muted d-block">Destination Port</small>
                                 <strong>{{ fulfillment_order.destination_port|default:"-" }}</strong>
                             </div>
                         </div>
                         <div class="col-md-3">
-                            <div class="border rounded p-3 h-100 bg-light">
+                            <div class="transaction-mini-card">
                                 <small class="text-muted d-block">Inland Destination</small>
                                 <strong>{{ fulfillment_order.inland_destination|default:"-" }}</strong>
                             </div>
