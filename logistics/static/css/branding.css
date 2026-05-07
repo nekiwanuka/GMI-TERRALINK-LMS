@@ -1967,7 +1967,7 @@ input:focus {
 
   .content-surface {
     padding: 0.8rem;
-    border-radius: 20px;
+    border-radius: 10px;
   }
 
   .workspace-stack {

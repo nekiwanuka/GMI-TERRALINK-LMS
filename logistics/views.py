@@ -6,6 +6,7 @@ import mimetypes
 import os
 from datetime import date, datetime, timedelta
 from decimal import Decimal
+from html import escape
 from io import BytesIO
 from urllib.parse import quote
 
@@ -5185,19 +5186,53 @@ def _pdf_report_response(filename, title, headers, rows):
     elements.append(Paragraph(f"<b>GMI TERRALINK - {title}</b>", title_style))
     elements.append(Spacer(1, 10))
 
-    table_data = [headers] + [
-        [str(cell) if cell is not None else "" for cell in row] for row in rows
+    header_style = styles["BodyText"].clone("GMIReportHeader")
+    header_style.fontName = "Helvetica-Bold"
+    header_style.fontSize = 6.8
+    header_style.leading = 8
+    header_style.textColor = PDF_BRAND_BLACK
+    body_style = styles["BodyText"].clone("GMIReportCell")
+    body_style.fontName = "Helvetica"
+    body_style.fontSize = 6.4
+    body_style.leading = 7.5
+    body_style.wordWrap = "CJK"
+
+    def cell_paragraph(value, style):
+        if value is None:
+            value = ""
+        text = escape(str(value)).replace("\n", "<br/>")
+        return Paragraph(text, style)
+
+    table_data = [[cell_paragraph(header, header_style) for header in headers]] + [
+        [cell_paragraph(cell, body_style) for cell in row] for row in rows
     ]
     col_count = len(headers)
-    col_width = (landscape(A4)[0] - 60) / max(col_count, 1)
-    table = Table(table_data, colWidths=[col_width] * max(col_count, 1), repeatRows=1)
+    page_width = landscape(A4)[0] - 60
+    weights = []
+    for index, header in enumerate(headers):
+        values = [
+            str(row[index] if index < len(row) and row[index] is not None else "")
+            for row in rows[:25]
+        ]
+        sample_length = max([len(str(header))] + [len(value) for value in values])
+        weights.append(max(0.75, min(2.6, sample_length / 12)))
+    total_weight = sum(weights) or 1
+    col_widths = [page_width * (weight / total_weight) for weight in weights]
+    table = Table(
+        table_data,
+        colWidths=col_widths,
+        repeatRows=1,
+        splitByRow=1,
+        hAlign="LEFT",
+    )
     table.setStyle(
         TableStyle(
             [
                 ("TEXTCOLOR", (0, 0), (-1, 0), PDF_BRAND_BLACK),
                 ("BACKGROUND", (0, 0), (-1, 0), PDF_BRAND_GOLD),
                 ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-                ("FONTSIZE", (0, 0), (-1, -1), 8),
+                ("FONTSIZE", (0, 0), (-1, 0), 6.8),
+                ("FONTSIZE", (0, 1), (-1, -1), 6.4),
                 (
                     "ROWBACKGROUNDS",
                     (0, 1),
@@ -5205,8 +5240,11 @@ def _pdf_report_response(filename, title, headers, rows):
                     [colors.white, PDF_SOFT_GREY],
                 ),
                 ("GRID", (0, 0), (-1, -1), 0.4, PDF_BORDER),
-                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                ("PADDING", (0, 0), (-1, -1), 4),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 3),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 3),
+                ("TOPPADDING", (0, 0), (-1, -1), 3),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
             ]
         )
     )

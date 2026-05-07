@@ -66,22 +66,11 @@ class DirectorReportingService:
 
     @staticmethod
     def total_revenue():
-        return (
-            FinalInvoice.objects.filter(is_confirmed=True, transaction__status="PAID")
-            .aggregate(total=Sum("total_amount"))
-            .get("total")
-            or 0
-        )
+        return DirectorReportingService.financial_totals()["total_revenue"]
 
     @staticmethod
     def outstanding_balances():
-        return (
-            FinalInvoice.objects.filter(is_confirmed=True)
-            .exclude(transaction__status="PAID")
-            .aggregate(total=Sum("total_amount"))
-            .get("total")
-            or 0
-        )
+        return DirectorReportingService.financial_totals()["outstanding_balance"]
 
     @staticmethod
     def transactions_per_status():
@@ -170,9 +159,10 @@ class DirectorReportingService:
 
     @staticmethod
     def profit_estimate():
-        revenue = FinalInvoice.objects.filter(is_confirmed=True).aggregate(
-            total=Sum("total_amount")
-        ).get("total") or Decimal("0")
+        revenue = sum(
+            DirectorReportingService._invoice_paid_total(invoice)
+            for invoice in FinalInvoice.objects.select_related("transaction", "loading")
+        )
 
         cost_total = Decimal("0")
         for record in Sourcing.objects.only("unit_prices"):
@@ -212,11 +202,7 @@ class DirectorReportingService:
     @staticmethod
     def financial_totals():
         """Aggregated invoice statement summary for reports dashboard."""
-        invoices = list(
-            FinalInvoice.objects.filter(is_confirmed=True).select_related(
-                "transaction", "loading"
-            )
-        )
+        invoices = list(FinalInvoice.objects.select_related("transaction", "loading"))
         total_billed = sum(
             (invoice.total_amount or Decimal("0")) for invoice in invoices
         )
@@ -233,30 +219,25 @@ class DirectorReportingService:
 
     @staticmethod
     def revenue_trend(months=6):
-        """Returns (labels, values) lists for a monthly revenue bar chart."""
-        from datetime import date
+        """Returns (labels, values) lists for recorded monthly payment revenue."""
         import calendar
 
         today = timezone.now().date()
         labels = []
         values = []
         for i in range(months - 1, -1, -1):
-            # calculate year/month for offset i months back
             month = (today.month - i - 1) % 12 + 1
-            year = today.year - ((today.month - i - 1) // 12)
+            year = today.year + ((today.month - i - 1) // 12)
             labels.append(f"{calendar.month_abbr[month]} {year}")
-            total = (
-                FinalInvoice.objects.filter(
-                    is_confirmed=True,
-                    transaction__status="PAID",
-                    created_at__year=year,
-                    created_at__month=month,
-                )
-                .aggregate(total=Sum("total_amount"))
-                .get("total")
-                or 0
-            )
-            values.append(float(total))
+            trade_total = TransactionPaymentRecord.objects.filter(
+                payment_date__year=year,
+                payment_date__month=month,
+            ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
+            logistics_total = Payment.objects.filter(
+                payment_date__year=year,
+                payment_date__month=month,
+            ).aggregate(total=Sum("amount_paid"))["total"] or Decimal("0")
+            values.append(float(trade_total + logistics_total))
         return labels, values
 
     @staticmethod
