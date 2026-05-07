@@ -218,12 +218,25 @@
                 </div>
             </div>
             <div class="transaction-hero-actions">
-                <a href="{% url 'transaction_update' transaction.id %}" class="btn btn-warning {% if transaction.is_closed %}disabled{% endif %}">
+                {% if not transaction.is_closed or can_edit_closed_trade_documents %}
+                <a href="{% url 'transaction_update' transaction.id %}" class="btn btn-warning">
                     <i class="bi bi-pencil"></i> Edit
                 </a>
+                {% else %}
+                <span class="btn btn-outline-secondary disabled">
+                    <i class="bi bi-eye"></i> View Only
+                </span>
+                {% endif %}
             </div>
         </div>
     </section>
+
+    {% if transaction.is_closed and not can_edit_closed_trade_documents %}
+    <div class="alert alert-secondary small">
+        <i class="bi bi-lock-fill"></i>
+        This trade is closed. You can view the record, but edits and reopening require permission from the Director or System Admin.
+    </div>
+    {% endif %}
 
     <section class="transaction-kpis">
         <div class="transaction-kpi"><span>Documents</span><strong>{{ documents.count }}</strong></div>
@@ -234,7 +247,7 @@
 
     {% url 'close_transaction' transaction.id as close_url_x %}
     {% url 'reopen_transaction' transaction.id as reopen_url_x %}
-    {% include "logistics/partials/closure_card.html" with lane_label="Trade" close_url=close_url_x reopen_url=reopen_url_x object_is_closed=transaction.is_closed closed_at=transaction.closed_at closed_by_name=transaction.closed_by.get_full_name closure_notes=transaction.closure_notes %}
+    {% include "logistics/partials/closure_card.html" with lane_label="Trade" close_url=close_url_x reopen_url=reopen_url_x object_is_closed=transaction.is_closed closed_at=transaction.closed_at closed_by_name=transaction.closed_by.get_full_name closure_notes=transaction.closure_notes require_reopen_reason=True %}
 
     {% if transaction.description %}
     <div class="transaction-note small">
@@ -271,6 +284,15 @@
                     {% else %}
                     <form method="post" action="{% url 'transaction_document_upload' transaction.id %}" enctype="multipart/form-data">
                         {% csrf_token %}
+                        {% if trade_documents_locked %}
+                        <div class="alert alert-warning small py-2">
+                            Closed trade edit. Add a reason before uploading or changing documents.
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label fw-semibold">Reason</label>
+                            <textarea name="closed_edit_reason" class="form-control form-control-sm" rows="2" required></textarea>
+                        </div>
+                        {% endif %}
                         <div class="mb-2">
                             <label class="form-label fw-semibold">Document Type</label>
                             <select class="form-select form-select-sm" name="document_type">
@@ -333,6 +355,15 @@
                             {# ─── Editable structured form ─── #}
                             <form method="post" action="{% url 'document_edit_pi' latest_pi.pk %}">
                                 {% csrf_token %}
+                                {% if trade_documents_locked %}
+                                <div class="alert alert-warning small py-2">
+                                    Closed trade edit. Add a reason before changing PI content.
+                                </div>
+                                <div class="mb-2">
+                                    <label class="form-label mb-0 fw-semibold">Reason</label>
+                                    <textarea name="closed_edit_reason" class="form-control form-control-sm" rows="2" required></textarea>
+                                </div>
+                                {% endif %}
                                 <div class="row g-2 mb-2" style="font-size:0.82rem;">
                                     <div class="col-12">
                                         <label class="form-label mb-0 text-muted">Entry Number</label>

@@ -274,28 +274,29 @@
     margin-bottom: 18px;
 }
 .worksheet-table th {
-    font-size: 0.74rem;
+    font-size: 0.68rem;
     text-transform: uppercase;
-    letter-spacing: .05em;
+    letter-spacing: .03em;
     white-space: nowrap;
     background: #eef1f4;
     border: 1px solid #c9d1d9;
 }
 .worksheet-table td,
 .worksheet-table th {
-    font-size: 0.83rem;
-    vertical-align: middle;
+    font-size: 0.78rem;
+    vertical-align: top;
     border: 1px solid #c9d1d9;
+    padding: 0.42rem;
 }
 .worksheet-table .readonly-cell {
     background: #f8fafc;
 }
 .worksheet-table .capture-input {
-    min-width: 190px;
+    min-width: 0;
 }
 .worksheet-table .quote-stack {
     display: grid;
-    gap: 0.35rem;
+    gap: 0.25rem;
 }
 .worksheet-table .quote-mini-label {
     display: inline-flex;
@@ -327,12 +328,32 @@
 .worksheet-table .capture-input input {
     border-radius: 2px;
     border-color: #aeb8c2;
-    font-size: 0.8rem;
+    font-size: 0.76rem;
+    min-height: 30px;
+    padding: 0.26rem 0.36rem;
 }
 .worksheet-table .capture-input select {
     border-radius: 2px;
     border-color: #aeb8c2;
-    font-size: 0.8rem;
+    font-size: 0.76rem;
+    min-height: 30px;
+    padding: 0.26rem 0.36rem;
+}
+.worksheet-table-wrap {
+    overflow-x: auto;
+}
+.worksheet-table {
+    table-layout: fixed;
+    min-width: 1120px;
+}
+.worksheet-form-card {
+    border-radius: 8px;
+    border: 1px solid #ddd7c9;
+}
+.worksheet-form-card .card-header {
+    background: #f7f4ec !important;
+    color: #2d2930;
+    border-bottom: 1px solid #ddd7c9;
 }
 .worksheet-table .quote-cheapest {
     background: #eef1f4;
@@ -462,6 +483,7 @@
     </div>
 
     <div class="row g-3">
+        {% if pi_document %}
         <div class="col-lg-5 pi-print-root">
             <div class="no-print d-flex justify-content-between align-items-center mb-2">
                 <span class="text-muted small">
@@ -580,8 +602,8 @@
                     <pre style="font-size:0.76rem;white-space:pre-wrap;max-height:450px;overflow-y:auto;">{{ pi_document.extracted_text|truncatechars:2500 }}</pre>
                     {% else %}
                     <div class="text-muted text-center py-4">
-                        <i class="bi bi-file-earmark-x fs-2 d-block mb-2"></i>
-                        No PI document attached to this Q-Worksheet.
+                        <i class="bi bi-pencil-square fs-2 d-block mb-2"></i>
+                        Manual Q-Worksheet. Enter sourcing items directly and attach them to the selected customer transaction.
                     </div>
                     {% endif %}
 
@@ -591,12 +613,19 @@
                 </div>
             </div>
         </div>
+        {% endif %}
 
-        <div class="col-lg-7 no-print">
-            <div class="card">
+        <div class="{% if pi_document %}col-lg-7{% else %}col-12{% endif %} no-print">
+            <div class="card worksheet-form-card">
                 <div class="card-header bg-warning d-flex justify-content-between align-items-center">
-                    <strong><i class="bi bi-table"></i> Optional Q-Worksheet</strong>
+                    <strong><i class="bi bi-table"></i> Q-Worksheet</strong>
                     <div class="d-flex gap-2 align-items-center flex-wrap">
+                        {% if generated_proforma %}
+                        <a href="{% if generated_proforma.loading %}{% url 'logistics_proforma_detail' generated_proforma.pk %}{% else %}{% url 'sourcing_proforma_detail' generated_proforma.pk %}{% endif %}" class="btn btn-sm btn-dark">
+                            <i class="bi bi-receipt"></i> Open Proforma
+                        </a>
+                        <span class="badge bg-success" style="font-size:0.72rem;">Converted</span>
+                        {% else %}
                         {% if pi_document %}
                         <a href="{% if transaction.source_loading %}{% url 'logistics_proforma_create' %}{% else %}{% url 'sourcing_proforma_create' %}{% endif %}?from_doc={{ pi_document.pk }}" class="btn btn-sm btn-dark">
                             <i class="bi bi-arrow-right-circle"></i> Skip &amp; Create Proforma
@@ -605,6 +634,7 @@
                         <a href="{% if transaction.source_loading %}{% url 'logistics_proforma_create' %}{% else %}{% url 'sourcing_proforma_create' %}{% endif %}?transaction={{ transaction.pk }}" class="btn btn-sm btn-dark">
                             <i class="bi bi-arrow-right-circle"></i> Skip &amp; Create Proforma
                         </a>
+                        {% endif %}
                         {% endif %}
                         {% if record %}
                         <a href="{% url 'sourcing_pdf' record.pk %}" class="btn btn-sm btn-dark">
@@ -616,7 +646,7 @@
                         <button type="button" class="btn btn-sm btn-outline-dark" onclick="window.print()">
                             <i class="bi bi-printer"></i> Print Q-Worksheet
                         </button>
-                        <span class="badge bg-dark" style="font-size:0.72rem;">Optional</span>
+                        <span class="badge bg-dark" style="font-size:0.72rem;">Manual or document-based</span>
                     </div>
                 </div>
                 <div class="card-body">
@@ -655,39 +685,38 @@
                             <div class="d-flex justify-content-between align-items-start mb-3 gap-2 flex-wrap">
                                 <div>
                                     <div class="section-title">Q-Worksheet</div>
-                                    <div class="section-sub">Simple spreadsheet-style sheet for supplier quote comparison. It can be filled online, saved blank, or printed. It is not required before creating a proforma.</div>
+                                    <div class="section-sub">Start from a blank sheet or a scanned PI. Add the customer transaction, item lines, supplier quotes and preferred price, then convert this worksheet into a proforma.</div>
                                 </div>
+                                <button type="button" class="btn btn-sm btn-outline-dark" id="add-worksheet-row">
+                                    <i class="bi bi-plus-lg"></i> Add Item
+                                </button>
                             </div>
 
-                            {% if form.item_rows %}
-                            <div class="table-responsive">
-                                <table class="table table-bordered align-middle mb-0 worksheet-table">
+                            <div class="table-responsive worksheet-table-wrap">
+                                <table class="table table-bordered align-middle mb-0 worksheet-table" id="worksheet-table">
                                     <thead>
                                         <tr>
-                                            <th style="width:4%;">#</th>
-                                            <th style="width:14%;">Item</th>
+                                            <th style="width:3%;">#</th>
+                                            <th style="width:18%;">Item</th>
                                             <th style="width:6%;">Qty</th>
                                             <th style="width:6%;">Unit</th>
-                                            <th style="width:19%;">Quote A</th>
-                                            <th style="width:19%;">Quote B</th>
-                                            <th style="width:19%;">Quote C</th>
+                                            <th style="width:16%;">Quote A</th>
+                                            <th style="width:16%;">Quote B</th>
+                                            <th style="width:16%;">Quote C</th>
                                             <th style="width:7%;">Preferred</th>
                                             <th style="width:12%;">Notes</th>
                                         </tr>
                                     </thead>
                                     <tbody>
+                                        {% if form.item_rows %}
                                         {% for item in form.item_rows %}
                                         <tr>
-                                            <input type="hidden" name="item_name[]" value="{{ item.name }}">
-                                            <input type="hidden" name="item_quantity[]" value="{{ item.quantity }}">
-                                            <input type="hidden" name="item_unit[]" value="{{ item.unit }}">
-                                            <input type="hidden" name="item_notes[]" value="{{ item.notes }}">
                                             <td>{{ forloop.counter }}</td>
-                                            <td class="readonly-cell">
-                                                <div class="fw-semibold">{{ item.name }}</div>
+                                            <td class="capture-input">
+                                                <input type="text" name="item_name[]" value="{{ item.name }}" class="form-control" placeholder="Item or service">
                                             </td>
-                                            <td class="readonly-cell">{{ item.quantity|default:"1" }}</td>
-                                            <td class="readonly-cell">{{ item.unit|default:"-" }}</td>
+                                            <td class="capture-input"><input type="text" name="item_quantity[]" value="{{ item.quantity|default:'1' }}" class="form-control" placeholder="Qty"></td>
+                                            <td class="capture-input"><input type="text" name="item_unit[]" value="{{ item.unit }}" class="form-control" placeholder="Unit"></td>
                                             <td class="capture-input {% if item.cheapest_quote == '1' %}quote-cheapest{% endif %} {% if item.preferred_quote == '1' %}quote-preferred{% endif %}"><div class="quote-stack"><span class="quote-mini-label">A</span><input type="text" name="item_quote_1_supplier_name[]" value="{{ item.quote_1_supplier_name }}" class="form-control" placeholder="Supplier"><input type="text" name="item_quote_1_supplier_contact[]" value="{{ item.quote_1_supplier_contact }}" class="form-control" placeholder="Contact"><input type="number" step="0.01" min="0" name="item_quote_1_unit_price[]" value="{{ item.quote_1_unit_price }}" class="form-control" placeholder="Unit cost"></div></td>
                                             <td class="capture-input {% if item.cheapest_quote == '2' %}quote-cheapest{% endif %} {% if item.preferred_quote == '2' %}quote-preferred{% endif %}"><div class="quote-stack"><span class="quote-mini-label">B</span><input type="text" name="item_quote_2_supplier_name[]" value="{{ item.quote_2_supplier_name }}" class="form-control" placeholder="Supplier"><input type="text" name="item_quote_2_supplier_contact[]" value="{{ item.quote_2_supplier_contact }}" class="form-control" placeholder="Contact"><input type="number" step="0.01" min="0" name="item_quote_2_unit_price[]" value="{{ item.quote_2_unit_price }}" class="form-control" placeholder="Unit cost"></div></td>
                                             <td class="capture-input {% if item.cheapest_quote == '3' %}quote-cheapest{% endif %} {% if item.preferred_quote == '3' %}quote-preferred{% endif %}"><div class="quote-stack"><span class="quote-mini-label">C</span><input type="text" name="item_quote_3_supplier_name[]" value="{{ item.quote_3_supplier_name }}" class="form-control" placeholder="Supplier"><input type="text" name="item_quote_3_supplier_contact[]" value="{{ item.quote_3_supplier_contact }}" class="form-control" placeholder="Contact"><input type="number" step="0.01" min="0" name="item_quote_3_unit_price[]" value="{{ item.quote_3_unit_price }}" class="form-control" placeholder="Unit cost"></div></td>
@@ -699,17 +728,25 @@
                                                     <option value="3" {% if item.preferred_quote == '3' %}selected{% endif %}>C</option>
                                                 </select>
                                             </td>
-                                            <td class="readonly-cell">{{ item.notes|default:"-" }}</td>
+                                            <td class="capture-input"><input type="text" name="item_notes[]" value="{{ item.notes }}" class="form-control" placeholder="Notes"></td>
                                         </tr>
                                         {% endfor %}
+                                        {% else %}
+                                        <tr>
+                                            <td>1</td>
+                                            <td class="capture-input"><input type="text" name="item_name[]" class="form-control" placeholder="Item or service"></td>
+                                            <td class="capture-input"><input type="text" name="item_quantity[]" value="1" class="form-control" placeholder="Qty"></td>
+                                            <td class="capture-input"><input type="text" name="item_unit[]" class="form-control" placeholder="Unit"></td>
+                                            <td class="capture-input"><div class="quote-stack"><span class="quote-mini-label">A</span><input type="text" name="item_quote_1_supplier_name[]" class="form-control" placeholder="Supplier"><input type="text" name="item_quote_1_supplier_contact[]" class="form-control" placeholder="Contact"><input type="number" step="0.01" min="0" name="item_quote_1_unit_price[]" class="form-control" placeholder="Unit cost"></div></td>
+                                            <td class="capture-input"><div class="quote-stack"><span class="quote-mini-label">B</span><input type="text" name="item_quote_2_supplier_name[]" class="form-control" placeholder="Supplier"><input type="text" name="item_quote_2_supplier_contact[]" class="form-control" placeholder="Contact"><input type="number" step="0.01" min="0" name="item_quote_2_unit_price[]" class="form-control" placeholder="Unit cost"></div></td>
+                                            <td class="capture-input"><div class="quote-stack"><span class="quote-mini-label">C</span><input type="text" name="item_quote_3_supplier_name[]" class="form-control" placeholder="Supplier"><input type="text" name="item_quote_3_supplier_contact[]" class="form-control" placeholder="Contact"><input type="number" step="0.01" min="0" name="item_quote_3_unit_price[]" class="form-control" placeholder="Unit cost"></div></td>
+                                            <td class="capture-input"><select name="item_preferred_quote[]" class="form-select form-select-sm"><option value="">Auto</option><option value="1">A</option><option value="2">B</option><option value="3">C</option></select></td>
+                                            <td class="capture-input"><input type="text" name="item_notes[]" class="form-control" placeholder="Notes"></td>
+                                        </tr>
+                                        {% endif %}
                                     </tbody>
                                 </table>
                             </div>
-                            {% else %}
-                                <div class="alert alert-light border text-muted mb-0">
-                                    No PI items were captured for this Q-Worksheet.
-                                </div>
-                            {% endif %}
 
                             <div class="sourcing-items-helper mt-2">
                                 <i class="bi bi-info-circle"></i>
@@ -746,9 +783,15 @@
                                 <button type="submit" name="submit_action" value="save" class="btn btn-outline-dark">
                                     <i class="bi bi-floppy"></i> Save Q-Worksheet
                                 </button>
+                                {% if generated_proforma %}
+                                <a href="{% if generated_proforma.loading %}{% url 'logistics_proforma_detail' generated_proforma.pk %}{% else %}{% url 'sourcing_proforma_detail' generated_proforma.pk %}{% endif %}" class="btn btn-dark">
+                                    <i class="bi bi-receipt"></i> Open Converted Proforma
+                                </a>
+                                {% else %}
                                 <button type="submit" name="submit_action" value="open_proforma" class="btn btn-dark">
                                     <i class="bi bi-arrow-right-circle"></i> Save &amp; Create Proforma
                                 </button>
+                                {% endif %}
                             </div>
                         </div>
                     </form>
@@ -757,7 +800,7 @@
 
             <div class="alert alert-info mt-3 small">
                 <i class="bi bi-info-circle"></i>
-                This worksheet is optional. Print it before entering prices, save it blank for later, or skip it and create the proforma directly.
+                This worksheet can start blank, from a scanned PI, or from an existing customer transaction. Once converted, it routes into the normal proforma workflow.
             </div>
         </div>
     </div>
@@ -765,4 +808,35 @@
 {% endblock %}
 
 {% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const addButton = document.getElementById('add-worksheet-row');
+    const tableBody = document.querySelector('#worksheet-table tbody');
+    if (!addButton || !tableBody) return;
+
+    function renumberRows() {
+        tableBody.querySelectorAll('tr').forEach(function (row, index) {
+            row.querySelector('td').textContent = index + 1;
+        });
+    }
+
+    addButton.addEventListener('click', function () {
+        const sourceRow = tableBody.querySelector('tr');
+        if (!sourceRow) return;
+        const newRow = sourceRow.cloneNode(true);
+        newRow.querySelectorAll('input').forEach(function (input) {
+            input.value = input.name === 'item_quantity[]' ? '1' : '';
+        });
+        newRow.querySelectorAll('select').forEach(function (select) {
+            select.value = '';
+        });
+        newRow.classList.remove('quote-cheapest', 'quote-preferred');
+        newRow.querySelectorAll('.quote-cheapest, .quote-preferred').forEach(function (cell) {
+            cell.classList.remove('quote-cheapest', 'quote-preferred');
+        });
+        tableBody.appendChild(newRow);
+        renumberRows();
+    });
+});
+</script>
 {% endblock %}

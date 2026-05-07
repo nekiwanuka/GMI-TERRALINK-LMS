@@ -5,8 +5,11 @@
 {% block content %}
 <div class="container-fluid">
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <h1><i class="bi bi-table"></i> Q-Worksheets</h1>
-        <a href="{% url 'sourcing_create' %}" class="btn btn-primary">New Q-Worksheet</a>
+        <div>
+            <h1 class="mb-1"><i class="bi bi-table"></i> Q-Worksheets</h1>
+            <p class="text-muted mb-0">Manual or document-based sourcing worksheets attached to customer entries.</p>
+        </div>
+        <a href="{% url 'sourcing_create' %}" class="btn btn-primary">New Blank Q-Worksheet</a>
     </div>
 
     <div class="card">
@@ -18,6 +21,7 @@
                         <th>Transaction</th>
                         <th>Supplier</th>
                         <th>Contact</th>
+                        <th>Status</th>
                         <th>Created By</th>
                         <th>Created</th>
                         <th></th>
@@ -26,15 +30,30 @@
                 <tbody>
                     {% for rec in records %}
                     <tr>
-                        <td>{{ rec.transaction.transaction_id }}</td>
+                        <td>
+                            <div class="fw-semibold">{{ rec.transaction.transaction_id }}</div>
+                            <div class="small text-muted">{{ rec.transaction.customer.name }}</div>
+                        </td>
                         <td>{{ rec.supplier_name }}</td>
                         <td>{{ rec.supplier_contact|default:'-' }}</td>
+                        <td>
+                            {% if rec.generated_proforma %}
+                            <span class="badge bg-success">Converted</span>
+                            {% else %}
+                            <span class="badge bg-warning text-dark">Worksheet</span>
+                            {% endif %}
+                        </td>
                         <td>{{ rec.created_by.username }}</td>
                         <td>{{ rec.created_at|date:"Y-m-d" }}</td>
-                        <td><a class="btn btn-sm btn-warning" href="{% url 'sourcing_update' rec.id %}">Edit</a></td>
+                        <td class="text-end">
+                            <a class="btn btn-sm btn-warning" href="{% url 'sourcing_update' rec.id %}">Open</a>
+                            {% if rec.generated_proforma %}
+                            <a class="btn btn-sm btn-outline-dark" href="{% if rec.generated_proforma.loading %}{% url 'logistics_proforma_detail' rec.generated_proforma.pk %}{% else %}{% url 'sourcing_proforma_detail' rec.generated_proforma.pk %}{% endif %}">Proforma</a>
+                            {% endif %}
+                        </td>
                     </tr>
                     {% empty %}
-                    <tr><td colspan="6" class="text-center text-muted py-4">No Q-Worksheets</td></tr>
+                    <tr><td colspan="7" class="text-center text-muted py-4">No Q-Worksheets</td></tr>
                     {% endfor %}
                 </tbody>
             </table>

@@ -94,6 +94,11 @@
             <form method="post" class="card shadow-sm">
                 {% csrf_token %}
                 <div class="card-body p-4">
+                    <div id="closed-trade-reason-panel" class="alert alert-warning border-warning rounded-3 mb-4 {% if not closed_trade_edit %}d-none{% endif %}">
+                        <label class="form-label fw-semibold mb-1" for="closed-edit-reason">Reason for editing this closed trade</label>
+                        <textarea name="closed_edit_reason" id="closed-edit-reason" class="form-control" rows="3" {% if closed_trade_edit %}required{% else %}disabled{% endif %} placeholder="Explain why this closed trade document must be changed."></textarea>
+                        <div class="form-text">This reason is saved in the audit trail for Director/System Admin review.</div>
+                    </div>
 
                     {# ── Cargo reference panel (freight only) ─────────────── #}
                     {% if is_freight and loading %}
@@ -131,10 +136,10 @@
                                 <input type="text" class="form-control bg-light" readonly
                                     value="{{ proforma.transaction.transaction_id }} – {{ proforma.transaction.customer.name }}">
                             {% else %}
-                                <select name="transaction" class="form-select" required>
+                                <select name="transaction" id="transaction-select" class="form-select" required>
                                     <option value="">Select transaction</option>
                                     {% for tx in transactions %}
-                                    <option value="{{ tx.pk }}"
+                                    <option value="{{ tx.pk }}" data-locked="{{ tx.documents_locked|yesno:'true,false' }}"
                                         {% if proforma and proforma.transaction.pk == tx.pk or initial_transaction and initial_transaction.pk == tx.pk %}selected{% endif %}>
                                         {{ tx.transaction_id }} - {{ tx.customer.name }}
                                     </option>
@@ -393,6 +398,18 @@
     const grandTotal = document.getElementById('grand-total');
     const feeInputs = document.querySelectorAll('.fee-input');
     const isFreight = {{ is_freight|yesno:"true,false" }};
+    const transactionSelect = document.getElementById('transaction-select');
+    const reasonPanel = document.getElementById('closed-trade-reason-panel');
+    const reasonField = document.getElementById('closed-edit-reason');
+
+    function updateClosedTradeReason() {
+        if (!transactionSelect || !reasonPanel || !reasonField) return;
+        const selected = transactionSelect.options[transactionSelect.selectedIndex];
+        const isLocked = selected && selected.dataset.locked === 'true';
+        reasonPanel.classList.toggle('d-none', !isLocked);
+        reasonField.disabled = !isLocked;
+        reasonField.required = isLocked;
+    }
 
     function numberValue(input) {
         const value = parseFloat(input.value);
@@ -477,6 +494,8 @@
 
     tableBody.querySelectorAll('tr').forEach(bindRow);
     feeInputs.forEach((input) => input.addEventListener('input', updateTotals));
+    if (transactionSelect) transactionSelect.addEventListener('change', updateClosedTradeReason);
+    updateClosedTradeReason();
     updateTotals();
 })();
 </script>

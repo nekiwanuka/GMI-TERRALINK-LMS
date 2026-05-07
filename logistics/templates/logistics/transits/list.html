@@ -4,26 +4,40 @@
 
 {% block content %}
 <div class="container-fluid">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h1><i class="bi bi-ship"></i> Transit Management</h1>
+    <div class="d-flex justify-content-between align-items-start mb-4 gap-3 flex-wrap">
+        <div>
+            <h1 class="mb-1"><i class="bi bi-ship"></i> Transit Management</h1>
+            <p class="text-muted mb-0">Track ongoing and completed vessel movements with paginated status history.</p>
+        </div>
         <a href="{% url 'transit_create' %}" class="btn btn-primary">
             <i class="bi bi-plus-circle"></i> Add Transit
         </a>
     </div>
 
-    <div class="card mb-4">
+    <div class="card mb-3">
         <div class="card-body">
-            <form method="get" class="form-inline">
-                <select name="status" class="form-select me-2">
-                    <option value="">All Status</option>
-                    {% for value, label in status_choices %}
-                    <option value="{{ value }}" {% if status_filter == value %}selected{% endif %}>{{ label }}</option>
-                    {% endfor %}
-                </select>
-                <button type="submit" class="btn btn-primary">Filter</button>
-                {% if status_filter %}
-                <a href="{% url 'transit_list' %}" class="btn btn-secondary ms-2">Clear</a>
-                {% endif %}
+            <div class="d-flex gap-2 flex-wrap mb-3">
+                <a href="{% url 'transit_list' %}" class="btn btn-sm {% if not group_filter %}btn-dark{% else %}btn-outline-dark{% endif %}">All</a>
+                <a href="{% url 'transit_list' %}?group=ongoing" class="btn btn-sm {% if group_filter == 'ongoing' %}btn-dark{% else %}btn-outline-dark{% endif %}">Ongoing</a>
+                <a href="{% url 'transit_list' %}?group=completed" class="btn btn-sm {% if group_filter == 'completed' %}btn-dark{% else %}btn-outline-dark{% endif %}">Completed</a>
+            </div>
+            <form method="get" class="row g-2 align-items-end">
+                <input type="hidden" name="group" value="{{ group_filter }}">
+                <div class="col-md-8">
+                    <label class="form-label small text-muted">Transit Status</label>
+                    <select name="status" class="form-select">
+                        <option value="">All statuses</option>
+                        {% for value, label in status_choices %}
+                        <option value="{{ value }}" {% if status_filter == value %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2 d-grid">
+                    <button type="submit" class="btn btn-primary">Filter</button>
+                </div>
+                <div class="col-md-2 d-grid">
+                    <a href="{% url 'transit_list' %}" class="btn btn-secondary">Clear</a>
+                </div>
             </form>
         </div>
     </div>
@@ -35,6 +49,7 @@
                     <tr>
                         <th>Vessel Name</th>
                         <th>Loading ID</th>
+                        <th>Client</th>
                         <th>Boarding Date</th>
                         <th>ETA Kampala</th>
                         <th>Status</th>
@@ -46,6 +61,7 @@
                     <tr>
                         <td><strong>{{ transit.vessel_name }}</strong></td>
                         <td><a href="{% url 'loading_detail' transit.loading.id %}">{{ transit.loading.loading_id }}</a></td>
+                        <td>{{ transit.loading.client.name }}</td>
                         <td>{{ transit.boarding_date|date:"Y-m-d" }}</td>
                         <td>{{ transit.eta_kampala|date:"Y-m-d" }}</td>
                         <td>
@@ -70,7 +86,7 @@
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="6" class="text-center text-muted py-4">No transit records found</td>
+                        <td colspan="7" class="text-center text-muted py-4">No transit records found</td>
                     </tr>
                     {% endfor %}
                 </tbody>

@@ -1116,6 +1116,7 @@ class SourcingForm(NormalizedTextMixin, forms.ModelForm):
     """Form for overseas sourcing records."""
 
     item_details = forms.CharField(
+        required=False,
         widget=forms.Textarea(
             attrs={
                 "class": "form-control",
@@ -1294,11 +1295,48 @@ class SourcingForm(NormalizedTextMixin, forms.ModelForm):
         for index, name in enumerate(item_names, start=1):
             cleaned_name = str(name or "").strip()
             if not cleaned_name:
-                raise forms.ValidationError(f"Item {index}: item name is required.")
+                row_values = [
+                    (
+                        item_quantities[index - 1]
+                        if index - 1 < len(item_quantities)
+                        else ""
+                    ),
+                    item_units[index - 1] if index - 1 < len(item_units) else "",
+                    item_notes[index - 1] if index - 1 < len(item_notes) else "",
+                ]
+                for quote_index in range(3):
+                    row_values.extend(
+                        [
+                            (
+                                quote_supplier_names[quote_index][index - 1]
+                                if index - 1 < len(quote_supplier_names[quote_index])
+                                else ""
+                            ),
+                            (
+                                quote_supplier_contacts[quote_index][index - 1]
+                                if index - 1 < len(quote_supplier_contacts[quote_index])
+                                else ""
+                            ),
+                            (
+                                quote_unit_prices[quote_index][index - 1]
+                                if index - 1 < len(quote_unit_prices[quote_index])
+                                else ""
+                            ),
+                        ]
+                    )
+                if any(str(value or "").strip() for value in row_values):
+                    raise forms.ValidationError(f"Item {index}: item name is required.")
+                continue
             item = {"name": cleaned_name}
-            quantity = str(item_quantities[index - 1] or "").strip()
-            unit = str(item_units[index - 1] or "").strip()
-            notes = str(item_notes[index - 1] or "").strip()
+            quantity = str(
+                item_quantities[index - 1] if index - 1 < len(item_quantities) else ""
+            ).strip()
+            unit = str(
+                item_units[index - 1] if index - 1 < len(item_units) else ""
+            ).strip()
+            notes = str(
+                item_notes[index - 1] if index - 1 < len(item_notes) else ""
+            ).strip()
             if quantity:
                 item["quantity"] = quantity
             if unit:
@@ -1309,13 +1347,19 @@ class SourcingForm(NormalizedTextMixin, forms.ModelForm):
             quote_options = []
             for quote_index in range(3):
                 supplier_name = str(
-                    quote_supplier_names[quote_index][index - 1] or ""
+                    quote_supplier_names[quote_index][index - 1]
+                    if index - 1 < len(quote_supplier_names[quote_index])
+                    else ""
                 ).strip()
                 supplier_contact = str(
-                    quote_supplier_contacts[quote_index][index - 1] or ""
+                    quote_supplier_contacts[quote_index][index - 1]
+                    if index - 1 < len(quote_supplier_contacts[quote_index])
+                    else ""
                 ).strip()
                 unit_price = str(
-                    quote_unit_prices[quote_index][index - 1] or ""
+                    quote_unit_prices[quote_index][index - 1]
+                    if index - 1 < len(quote_unit_prices[quote_index])
+                    else ""
                 ).strip()
 
                 if not supplier_name and not supplier_contact and not unit_price:
@@ -1337,7 +1381,9 @@ class SourcingForm(NormalizedTextMixin, forms.ModelForm):
                     item["supplier_name"] = first_quote["supplier_name"]
                 if first_quote.get("supplier_contact"):
                     item["supplier_contact"] = first_quote["supplier_contact"]
-            preferred_quote = str(preferred_quotes[index - 1] or "").strip()
+            preferred_quote = str(
+                preferred_quotes[index - 1] if index - 1 < len(preferred_quotes) else ""
+            ).strip()
             if preferred_quote in {"1", "2", "3"}:
                 item["preferred_quote"] = preferred_quote
             items.append(item)
@@ -1363,7 +1409,9 @@ class SourcingForm(NormalizedTextMixin, forms.ModelForm):
 
             parsed_prices = {}
             for quote_index, quote_prices in enumerate(quote_price_columns, start=1):
-                cleaned_price = str(quote_prices[index - 1] or "").strip()
+                cleaned_price = str(
+                    quote_prices[index - 1] if index - 1 < len(quote_prices) else ""
+                ).strip()
                 if not cleaned_price:
                     continue
                 try:
@@ -1373,7 +1421,9 @@ class SourcingForm(NormalizedTextMixin, forms.ModelForm):
                         f"Item {index}, quote {quote_index}: unit price must be a number."
                     ) from exc
 
-            preferred_quote = str(preferred_quotes[index - 1] or "").strip()
+            preferred_quote = str(
+                preferred_quotes[index - 1] if index - 1 < len(preferred_quotes) else ""
+            ).strip()
             if preferred_quote in parsed_prices:
                 prices[cleaned_name] = parsed_prices[preferred_quote]
             elif parsed_prices:

@@ -19,10 +19,19 @@
                 <div><strong>Validity:</strong> {{ proforma.validity_date|date:"d M Y" }}</div>
             </div>
 
-            <form method="post" class="d-flex justify-content-between align-items-center">
+            <form method="post">
                 {% csrf_token %}
-                <a href="{% if proforma.loading %}{% url 'logistics_proforma_detail' proforma.pk %}{% else %}{% url 'sourcing_proforma_detail' proforma.pk %}{% endif %}" class="btn btn-outline-secondary">Back</a>
-                <button type="submit" class="btn btn-success">Create Final Invoice</button>
+                {% if closed_trade_edit %}
+                <div class="alert alert-warning border-warning rounded-3 mb-3">
+                    <label class="form-label fw-semibold mb-1" for="closed-edit-reason">Reason for editing this closed trade</label>
+                    <textarea name="closed_edit_reason" id="closed-edit-reason" class="form-control" rows="3" required placeholder="Explain why this closed trade should be converted to a final invoice."></textarea>
+                    <div class="form-text">This reason is saved in the audit trail for Director/System Admin review.</div>
+                </div>
+                {% endif %}
+                <div class="d-flex justify-content-between align-items-center">
+                    <a href="{% if proforma.loading %}{% url 'logistics_proforma_detail' proforma.pk %}{% else %}{% url 'sourcing_proforma_detail' proforma.pk %}{% endif %}" class="btn btn-outline-secondary">Back</a>
+                    <button type="submit" class="btn btn-success">Create Final Invoice</button>
+                </div>
             </form>
         </div>
     </div>

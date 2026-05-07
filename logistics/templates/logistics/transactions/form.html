@@ -9,6 +9,17 @@
             <div class="card">
                 <div class="card-header"><h4 class="mb-0">{{ title }}</h4></div>
                 <div class="card-body">
+                    {% if not transaction %}
+                    <div class="alert alert-light border mb-3">
+                        <strong>Choose the entry path after saving:</strong>
+                        upload and extract a client PI, or start directly with a Q-Worksheet when there is no document to scan.
+                    </div>
+                    {% elif closed_trade_edit %}
+                    <div class="alert alert-warning border mb-3">
+                        <strong>Closed trade edit:</strong>
+                        Only the Director or System Admin can edit a closed trade. A reason is required and will be recorded.
+                    </div>
+                    {% endif %}
                     <form method="post">
                         {% csrf_token %}
                         <div class="mb-3">
@@ -29,9 +40,24 @@
                             <label class="form-label">Estimated Delivery</label>
                             {{ form.estimated_delivery }}
                         </div>
-                        <div class="d-flex justify-content-end gap-2">
+                        {% if closed_trade_edit %}
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Reason for editing this closed trade</label>
+                            <textarea name="closed_edit_reason" class="form-control" rows="3" required placeholder="Explain why this closed trade must be changed."></textarea>
+                        </div>
+                        {% endif %}
+                        <div class="d-flex justify-content-end gap-2 flex-wrap">
                             <a href="{% url 'transaction_list' %}" class="btn btn-secondary">Cancel</a>
+                            {% if transaction %}
                             <button class="btn btn-primary" type="submit">Save</button>
+                            {% else %}
+                            <button class="btn btn-outline-dark" type="submit" name="submit_action" value="upload">
+                                <i class="bi bi-cloud-upload"></i> Save &amp; Upload/Extract
+                            </button>
+                            <button class="btn btn-primary" type="submit" name="submit_action" value="worksheet">
+                                <i class="bi bi-table"></i> Save &amp; Use Q-Worksheet
+                            </button>
+                            {% endif %}
                         </div>
                     </form>
                 </div>

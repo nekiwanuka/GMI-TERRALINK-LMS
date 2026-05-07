@@ -105,13 +105,18 @@
             <form method="post" class="card shadow-sm">
                 {% csrf_token %}
                 <div class="card-body p-4">
+                    <div id="closed-trade-reason-panel" class="alert alert-warning border-warning rounded-3 mb-4 {% if not closed_trade_edit %}d-none{% endif %}">
+                        <label class="form-label fw-semibold mb-1" for="closed-edit-reason">Reason for editing this closed trade</label>
+                        <textarea name="closed_edit_reason" id="closed-edit-reason" class="form-control" rows="3" {% if closed_trade_edit %}required{% else %}disabled{% endif %} placeholder="Explain why this closed trade invoice must be changed."></textarea>
+                        <div class="form-text">This reason is saved in the audit trail for Director/System Admin review.</div>
+                    </div>
                     <div class="row g-3 mb-4" id="invoice-settings">
                         <div class="col-md-4">
                             <label class="form-label fw-semibold">Transaction</label>
-                            <select name="transaction" class="form-select" required>
+                            <select name="transaction" id="transaction-select" class="form-select" required>
                                 <option value="">Select transaction</option>
                                 {% for tx in transactions %}
-                                <option value="{{ tx.pk }}" {% if form_values.transaction_id|stringformat:'s' == tx.pk|stringformat:'s' %}selected{% endif %}>
+                                <option value="{{ tx.pk }}" data-locked="{{ tx.documents_locked|yesno:'true,false' }}" {% if form_values.transaction_id|stringformat:'s' == tx.pk|stringformat:'s' %}selected{% endif %}>
                                     {{ tx.transaction_id }} - {{ tx.customer.name }}
                                 </option>
                                 {% endfor %}
@@ -234,6 +239,18 @@
     const currencyField = document.querySelector('input[name="currency"]');
     const grandTotalCurrency = document.getElementById('grand-total-currency');
     const totalInputs = document.querySelectorAll('.total-input');
+    const transactionSelect = document.getElementById('transaction-select');
+    const reasonPanel = document.getElementById('closed-trade-reason-panel');
+    const reasonField = document.getElementById('closed-edit-reason');
+
+    function updateClosedTradeReason() {
+        if (!transactionSelect || !reasonPanel || !reasonField) return;
+        const selected = transactionSelect.options[transactionSelect.selectedIndex];
+        const isLocked = selected && selected.dataset.locked === 'true';
+        reasonPanel.classList.toggle('d-none', !isLocked);
+        reasonField.disabled = !isLocked;
+        reasonField.required = isLocked;
+    }
 
     function numberValue(input) {
         const value = parseFloat(input.value);
@@ -293,6 +310,8 @@
     tableBody.querySelectorAll('tr').forEach(bindRow);
     totalInputs.forEach((input) => input.addEventListener('input', updateTotals));
     currencyField.addEventListener('input', updateTotals);
+    if (transactionSelect) transactionSelect.addEventListener('change', updateClosedTradeReason);
+    updateClosedTradeReason();
     updateTotals();
 })();
 </script>

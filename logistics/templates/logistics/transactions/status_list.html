@@ -1,0 +1,94 @@
+{% extends "logistics/base.html" %}
+
+{% block title %}Transaction Status - GMI TERRALINK Logistics Portal{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-start mb-4 gap-3 flex-wrap">
+        <div>
+            <h1 class="mb-1"><i class="bi bi-list-check"></i> Transaction Status</h1>
+            <p class="text-muted mb-0">Paginated workflow board showing each customer entry, current status, and the next operational step.</p>
+        </div>
+        <div class="d-flex gap-2 flex-wrap">
+            <a href="{% url 'transaction_list' %}" class="btn btn-outline-dark">
+                <i class="bi bi-diagram-3"></i> Open Entries
+            </a>
+            <a href="{% url 'transaction_create' %}" class="btn btn-primary">
+                <i class="bi bi-plus-circle"></i> Open New Entry
+            </a>
+        </div>
+    </div>
+
+    <div class="card mb-3">
+        <div class="card-body">
+            {% include "logistics/components/lane_switcher.html" %}
+            <form method="get" class="row g-2 align-items-end">
+                <div class="col-md-6">
+                    <label class="form-label small text-muted">Search</label>
+                    <input type="text" class="form-control" name="search" value="{{ search }}" placeholder="Entry number, customer or client ID">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label small text-muted">Status</label>
+                    <select class="form-select" name="status">
+                        <option value="">All statuses</option>
+                        {% for value, label in status_choices %}
+                        <option value="{{ value }}" {% if status_filter == value %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2 d-grid">
+                    <button class="btn btn-primary" type="submit">Filter</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th style="width:15%;">Entry</th>
+                        <th style="width:18%;">Customer</th>
+                        <th style="width:15%;">Status</th>
+                        <th style="width:30%;">Next Step</th>
+                        <th style="width:12%;">Updated</th>
+                        <th class="text-end" style="width:10%;">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for tx in transactions %}
+                    <tr>
+                        <td>
+                            <div class="fw-semibold">{{ tx.transaction_id }}</div>
+                            <div class="small text-muted">Opened {{ tx.created_at|date:"Y-m-d" }}</div>
+                        </td>
+                        <td>
+                            <div>{{ tx.customer.name }}</div>
+                            <div class="small text-muted">{{ tx.customer.client_id }}</div>
+                        </td>
+                        <td>
+                            <span class="badge {{ tx.list_status_class|default:'bg-dark' }}">{{ tx.list_status_display|default:tx.get_status_display }}</span>
+                        </td>
+                        <td>
+                            <div class="fw-semibold">{{ tx.next_step_label }}</div>
+                            <div class="small text-muted">{{ tx.next_step_description }}</div>
+                        </td>
+                        <td>{{ tx.updated_at|date:"Y-m-d H:i" }}</td>
+                        <td class="text-end">
+                            <a class="btn btn-sm btn-outline-dark" href="{{ tx.next_step_url }}">Open</a>
+                            <a class="btn btn-sm btn-outline-primary" href="{% url 'transaction_detail' tx.pk %}">Details</a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="6" class="text-center text-muted py-4">No transactions found</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% include "logistics/components/pagination.html" %}
+    </div>
+</div>
+{% endblock %}

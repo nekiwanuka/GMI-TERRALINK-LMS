@@ -130,6 +130,11 @@ urlpatterns = [
         name="payment_receipt",
     ),
     # Transactions
+    path(
+        "transactions/status/",
+        views.transaction_status_list,
+        name="transaction_status_list",
+    ),
     path("transactions/", views.transaction_list, name="transaction_list"),
     path("transactions/create/", views.transaction_create, name="transaction_create"),
     path("transactions/<int:pk>/", views.transaction_detail, name="transaction_detail"),

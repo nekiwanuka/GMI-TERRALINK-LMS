@@ -399,9 +399,14 @@
                     {% if shell_active_lane != 'logistics' %}
                     <li class="sidebar-section-label"><i class="bi bi-globe2"></i> Sourcing / Trade</li>
                     <li class="nav-item">
-                        <a class="nav-link {% if 'transaction' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'transaction_list' %}" data-bs-toggle="tooltip" data-bs-placement="right" title="Inquiry, confirmation, sourcing and delivery workflow">
+                        <a class="nav-link {% if 'transaction' in request.resolver_match.url_name and request.resolver_match.url_name != 'transaction_status_list' %}active{% endif %}" href="{% url 'transaction_list' %}" data-bs-toggle="tooltip" data-bs-placement="right" title="Inquiry, confirmation, sourcing and delivery workflow">
                             <i class="bi bi-diagram-3-fill"></i> Open Entry
                             {% if shell_module_notification_counts.transactions %}<span class="sidebar-count-badge ms-auto">{{ shell_module_notification_counts.transactions }}</span>{% endif %}
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.resolver_match.url_name == 'transaction_status_list' %}active{% endif %}" href="{% url 'transaction_status_list' %}" data-bs-toggle="tooltip" data-bs-placement="right" title="Transaction status board and next workflow actions">
+                            <i class="bi bi-list-check"></i> Transaction Status
                         </a>
                     </li>
                     <li class="nav-item">
@@ -412,7 +417,7 @@
                     </li>
                     {% if user.is_superuser or user.role == 'ADMIN' or user.role == 'PROCUREMENT' %}
                     <li class="nav-item">
-                        <a class="nav-link {% if 'sourcing' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'sourcing_list' %}" data-bs-toggle="tooltip" data-bs-placement="right" title="Optional supplier quote comparison worksheets created from extracted trade documents">
+                        <a class="nav-link {% if 'sourcing' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'sourcing_list' %}" data-bs-toggle="tooltip" data-bs-placement="right" title="Manual or document-based supplier quote worksheets attached to customer entries">
                             <i class="bi bi-table"></i> Q-Worksheets
                             {% if shell_module_notification_counts.sourcing %}<span class="sidebar-count-badge ms-auto">{{ shell_module_notification_counts.sourcing }}</span>{% endif %}
                         </a>

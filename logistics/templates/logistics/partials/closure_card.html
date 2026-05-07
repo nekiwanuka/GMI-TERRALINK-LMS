@@ -41,11 +41,21 @@
         Closed on {{ closed_at|date:"d M Y H:i" }}{% if closed_by_name %} by <strong>{{ closed_by_name }}</strong>{% endif %}.
         {% if closure_notes %}<div class="mt-1">{{ closure_notes|linebreaksbr }}</div>{% endif %}
       </div>
-      {% if user.is_superuser or user.role in 'ADMIN,DIRECTOR' %}
+      {% if user.is_superuser or user.role == 'ADMIN' or user.role == 'DIRECTOR' %}
         <form method="post" action="{{ reopen_url }}" onsubmit="return confirm('Reopen this {{ lane_label|lower }}?');">
           {% csrf_token %}
+          {% if require_reopen_reason %}
+          <div class="mb-2">
+            <label class="form-label small mb-1">Reason for reopening <span class="text-danger">*</span></label>
+            <textarea name="reopen_reason" class="form-control form-control-sm" rows="2" required></textarea>
+          </div>
+          {% endif %}
           <button type="submit" class="btn btn-outline-warning btn-sm"><i class="bi bi-unlock"></i> Reopen</button>
         </form>
+      {% else %}
+        <div class="alert alert-secondary small mb-0">
+          You have view-only access. Reopening requires permission from the Director or System Admin.
+        </div>
       {% endif %}
     {% else %}
       <form method="post" action="{{ close_url }}" onsubmit="return confirm('Close this {{ lane_label|lower }}? Future edits will be blocked.');">

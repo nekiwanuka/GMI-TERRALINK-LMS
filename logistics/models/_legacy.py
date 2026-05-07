@@ -1373,6 +1373,13 @@ class ProformaInvoice(models.Model):
     transaction = models.ForeignKey(
         Transaction, on_delete=models.PROTECT, related_name="proforma_invoices"
     )
+    source_sourcing = models.OneToOneField(
+        Sourcing,
+        on_delete=models.SET_NULL,
+        related_name="generated_proforma",
+        null=True,
+        blank=True,
+    )
     loading = models.ForeignKey(
         "Loading",
         on_delete=models.PROTECT,

@@ -25,7 +25,7 @@ class AuthenticationRequiredMiddleware:
         "/logout/",
         "/track/",
         "/static/",
-        "/admin/",
+        "/administrator/",
     )
 
     def __init__(self, get_response):

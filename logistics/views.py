@@ -409,6 +409,24 @@ def _can_edit_closed_trade_documents(user):
     return user.is_superuser or getattr(user, "role", "") in {"ADMIN", "DIRECTOR"}
 
 
+def _closed_trade_edit_reason(request):
+    return (
+        request.POST.get("closed_edit_reason")
+        or request.POST.get("reopen_reason")
+        or request.POST.get("edit_reason")
+        or ""
+    ).strip()
+
+
+def _append_trade_note(existing_notes, heading, reason, actor):
+    timestamp = timezone.now().strftime("%Y-%m-%d %H:%M")
+    actor_name = actor.get_full_name() or actor.username
+    note = f"{heading} by {actor_name} on {timestamp}: {reason}"
+    if existing_notes:
+        return f"{existing_notes}\n\n{note}"
+    return note
+
+
 def _closed_trade_filter_q():
     return Q(status__in=["CLOSED", "DELIVERED"]) | Q(closed_at__isnull=False)
 
@@ -420,15 +438,38 @@ def _trade_documents_locked(transaction):
     )
 
 
+def _transactions_with_lock_status(queryset):
+    transactions = list(queryset)
+    for transaction in transactions:
+        transaction.documents_locked = _trade_documents_locked(transaction)
+    return transactions
+
+
 def _locked_trade_document_response(request, transaction):
-    if _trade_documents_locked(transaction) and not _can_edit_closed_trade_documents(
-        request.user
-    ):
+    if not _trade_documents_locked(transaction):
+        return None
+    if not _can_edit_closed_trade_documents(request.user):
         messages.error(
             request,
-            "This trade is closed. Only the Director or System Admin can edit documents.",
+            "This trade is closed. Only the Director or System Admin can edit it. Request permission before making changes.",
         )
         return redirect("transaction_detail", pk=transaction.pk)
+    if request.method == "POST":
+        reason = _closed_trade_edit_reason(request)
+        if not reason:
+            messages.error(
+                request,
+                "Add a reason before editing a closed trade.",
+            )
+            return redirect("transaction_detail", pk=transaction.pk)
+        log_audit(
+            "transaction",
+            "update",
+            transaction.pk,
+            transaction.transaction_id,
+            request.user,
+            changes={"closed_trade_edit_reason": reason},
+        )
     return None
 
 
@@ -732,6 +773,134 @@ def _apply_transaction_status_badge(transaction, *, sourcing_entry_count=0):
         else:
             transaction.list_status_display = "Awaiting Sourcing Intake"
             transaction.list_status_class = "bg-warning text-dark"
+    return transaction
+
+
+def _transaction_next_step(transaction):
+    status = transaction.status
+    has_documents = getattr(transaction, "document_count", 0) > 0
+    has_sourcing = getattr(transaction, "sourcing_entry_count", 0) > 0
+    has_proforma = getattr(transaction, "proforma_count", 0) > 0
+    has_final_invoice = getattr(transaction, "final_invoice_count", 0) > 0
+    has_payments = getattr(transaction, "payment_record_count", 0) > 0
+    has_fulfillment = getattr(transaction, "fulfillment_count", 0) > 0
+
+    if transaction.is_closed:
+        return (
+            "Closed",
+            "Review history or reopen if further action is needed.",
+            "transaction_detail",
+        )
+    if status in {"RECEIVED", "CLEANED"}:
+        if has_documents:
+            return (
+                "Review extracted PI",
+                "Confirm extracted details, then send the entry to sourcing.",
+                "transaction_detail",
+            )
+        return (
+            "Upload or create worksheet",
+            "Upload and extract a client PI, or start a Q-Worksheet if there is no document.",
+            "transaction_detail",
+        )
+    if status == "SENT_TO_SOURCING":
+        if has_sourcing:
+            return (
+                "Complete Q-Worksheet",
+                "Compare supplier quotes and create the customer proforma.",
+                "sourcing_list",
+            )
+        return (
+            "Start sourcing intake",
+            "Create a Q-Worksheet for supplier quote comparison.",
+            "sourcing_create",
+        )
+    if status == "QUOTED":
+        return (
+            "Create proforma",
+            "Turn the approved sourcing quote into a customer proforma.",
+            "sourcing_proforma_create",
+        )
+    if status in {"PROFORMA_CREATED", "PROFORMA_SENT"}:
+        if has_proforma:
+            return (
+                "Confirm order",
+                "Follow up with the customer and confirm the proforma.",
+                "sourcing_proforma_list",
+            )
+        return (
+            "Prepare proforma",
+            "Create and send the proforma for customer approval.",
+            "sourcing_proforma_create",
+        )
+    if status == "CONFIRMED":
+        return (
+            "Create final invoice",
+            "Issue the final invoice and prepare payment follow-up.",
+            "sourcing_final_invoice_create",
+        )
+    if status == "FINAL_INVOICE_CREATED":
+        if has_payments:
+            return (
+                "Review payment",
+                "Confirm payment allocation and move the entry toward shipment.",
+                "sourcing_payment_create",
+            )
+        return (
+            "Record payment",
+            "Post customer payment against the final invoice.",
+            "sourcing_payment_create",
+        )
+    if status == "PAID":
+        if has_fulfillment:
+            return (
+                "Track fulfillment",
+                "Follow warehouse and delivery movement until shipment is delivered.",
+                "fulfillment_list",
+            )
+        return (
+            "Start fulfillment",
+            "Create the fulfillment/shipping record for delivery tracking.",
+            "fulfillment_order_create",
+        )
+    if status == "SHIPPED":
+        return (
+            "Track delivery",
+            "Monitor shipment movement and proof of delivery.",
+            "fulfillment_list",
+        )
+    if status == "DELIVERED":
+        return (
+            "Close entry",
+            "Confirm delivery evidence and close the transaction.",
+            "transaction_detail",
+        )
+    return (
+        "Review entry",
+        "Open the transaction and confirm the current workflow position.",
+        "transaction_detail",
+    )
+
+
+def _apply_transaction_next_step(transaction):
+    label, description, route_name = _transaction_next_step(transaction)
+    transaction.next_step_label = label
+    transaction.next_step_description = description
+    transaction.next_step_route_name = route_name
+    if route_name == "transaction_detail":
+        transaction.next_step_url = reverse(
+            "transaction_detail", kwargs={"pk": transaction.pk}
+        )
+    elif route_name == "sourcing_create":
+        transaction.next_step_url = (
+            f"{reverse('sourcing_create')}?transaction={transaction.pk}"
+        )
+    elif route_name == "fulfillment_order_create":
+        transaction.next_step_url = reverse(
+            "fulfillment_order_create", kwargs={"transaction_pk": transaction.pk}
+        )
+    else:
+        transaction.next_step_url = reverse(route_name)
     return transaction
 
 
@@ -1532,8 +1701,13 @@ def loading_delete(request, pk):
 
 @login_required
 def transit_list(request):
-    transits = Transit.objects.select_related("loading")
+    transits = Transit.objects.select_related("loading", "loading__client")
+    group_filter = request.GET.get("group", "").strip()
     status = request.GET.get("status", "")
+    if group_filter == "ongoing":
+        transits = transits.filter(status__in=["awaiting", "in_transit"])
+    elif group_filter == "completed":
+        transits = transits.filter(status="arrived")
     if status:
         transits = transits.filter(status=status)
     page_obj, query_string, page_range = paginate_queryset(request, transits)
@@ -1542,6 +1716,7 @@ def transit_list(request):
         "logistics/transits/list.html",
         {
             "transits": page_obj,
+            "group_filter": group_filter,
             "status_filter": status,
             "status_choices": Transit.STATUS_CHOICES,
             "page_obj": page_obj,
@@ -2302,6 +2477,56 @@ def container_return_update(request, pk):
 
 
 @login_required
+def transaction_status_list(request):
+    lane = _resolve_lane(request)
+    transactions = _apply_transaction_lane(
+        Transaction.objects.select_related("customer", "created_by")
+        .annotate(
+            document_count=Count("documents", distinct=True),
+            sourcing_entry_count=Count("sourcing_entries", distinct=True),
+            proforma_count=Count("proforma_invoices", distinct=True),
+            final_invoice_count=Count("final_invoices", distinct=True),
+            payment_record_count=Count("payment_records", distinct=True),
+            fulfillment_count=Count("fulfillment_order", distinct=True),
+        )
+        .order_by("-updated_at", "-created_at"),
+        lane,
+    )
+    search = request.GET.get("search", "").strip()
+    status = request.GET.get("status", "").strip()
+    if search:
+        transactions = transactions.filter(
+            _text_search_q("transaction_id", search)
+            | _text_search_q("customer__name", search)
+            | _text_search_q("customer__client_id", search)
+        )
+    if status:
+        transactions = transactions.filter(status=status)
+    page_obj, query_string, page_range = paginate_queryset(request, transactions)
+    for transaction in page_obj:
+        _apply_transaction_status_badge(
+            transaction, sourcing_entry_count=transaction.sourcing_entry_count
+        )
+        _apply_transaction_next_step(transaction)
+    return render(
+        request,
+        "logistics/transactions/status_list.html",
+        {
+            "transactions": page_obj,
+            "search": search,
+            "status_filter": status,
+            "status_choices": Transaction.STATUS_CHOICES,
+            "page_obj": page_obj,
+            "query_string": query_string,
+            "page_range": page_range,
+            "active_lane": lane,
+            "active_lane_label": _lane_label(lane),
+            "can_switch_lane": _can_switch_lane(request.user),
+        },
+    )
+
+
+@login_required
 def transaction_list(request):
     closed_filter = request.GET.get("closed", "").strip()
     lane = "sourcing" if closed_filter == "1" else _resolve_lane(request)
@@ -2358,6 +2583,7 @@ def transaction_create(request):
             transaction = form.save(commit=False)
             transaction.created_by = request.user
             transaction.save()
+            submit_action = request.POST.get("submit_action")
             messages.success(
                 request, f"Transaction {transaction.transaction_id} created"
             )
@@ -2368,13 +2594,17 @@ def transaction_create(request):
                 category="trading",
                 roles=["ADMIN", "DIRECTOR", "FINANCE", "PROCUREMENT"],
             )
+            if submit_action == "worksheet":
+                return redirect(
+                    f"{reverse('sourcing_create')}?transaction={transaction.pk}"
+                )
             return redirect("transaction_detail", pk=transaction.pk)
     else:
         form = TransactionForm()
     return render(
         request,
         "logistics/transactions/form.html",
-        {"form": form, "title": "Create Transaction", "transaction": None},
+        {"form": form, "title": "Open New Entry", "transaction": None},
     )
 
 
@@ -2520,13 +2750,31 @@ def document_archive_list(request):
 @login_required
 def transaction_update(request, pk):
     transaction = get_object_or_404(Transaction, pk=pk)
-    if transaction.is_closed:
-        messages.error(request, "This transaction is closed and cannot be edited.")
+    closed_trade_edit = transaction.is_closed
+    if closed_trade_edit and not _can_edit_closed_trade_documents(request.user):
+        messages.error(
+            request,
+            "This trade is closed. Only the Director or System Admin can edit it. Request permission before making changes.",
+        )
         return redirect("transaction_detail", pk=transaction.pk)
     if request.method == "POST":
+        if closed_trade_edit:
+            reason = _closed_trade_edit_reason(request)
+            if not reason:
+                messages.error(request, "Add a reason before editing a closed trade.")
+                return redirect("transaction_update", pk=transaction.pk)
         form = TransactionForm(request.POST, instance=transaction)
         if form.is_valid():
             form.save()
+            if closed_trade_edit:
+                log_audit(
+                    "transaction",
+                    "update",
+                    transaction.pk,
+                    transaction.transaction_id,
+                    request.user,
+                    changes={"closed_trade_edit_reason": reason},
+                )
             messages.success(request, "Transaction updated")
             return redirect("transaction_detail", pk=transaction.pk)
     else:
@@ -2534,7 +2782,12 @@ def transaction_update(request, pk):
     return render(
         request,
         "logistics/transactions/form.html",
-        {"form": form, "title": "Update Transaction", "transaction": transaction},
+        {
+            "form": form,
+            "title": "Update Transaction",
+            "transaction": transaction,
+            "closed_trade_edit": closed_trade_edit,
+        },
     )
 
 
@@ -2699,6 +2952,14 @@ def _prefill_proforma_items_from_sourcing(sourcing):
     return prefill_items
 
 
+def _generated_proforma_for_sourcing(sourcing):
+    """Return the proforma already generated from a Q-Worksheet, if any."""
+    try:
+        return sourcing.generated_proforma
+    except ProformaInvoice.DoesNotExist:
+        return None
+
+
 def _parse_quote_fees(
     post_data, *, shipping_key="shipping_fee", handling_key="handling_fee"
 ):
@@ -2759,7 +3020,10 @@ def _build_proforma_form_values(*, post_data=None, proforma=None):
 def sourcing_list(request):
     lane = _resolve_lane(request)
     sourcing_records = _apply_sourcing_lane(
-        Sourcing.objects.select_related("transaction", "created_by"), lane
+        Sourcing.objects.select_related(
+            "transaction__customer", "created_by", "generated_proforma"
+        ),
+        lane,
     )
     page_obj, query_string, page_range = paginate_queryset(request, sourcing_records)
     return render(
@@ -3301,7 +3565,11 @@ def supplier_product_delete(request, supplier_pk, product_pk):
 @login_required
 @procurement_required
 def sourcing_update(request, pk):
-    sourcing = get_object_or_404(Sourcing, pk=pk)
+    sourcing = get_object_or_404(
+        Sourcing.objects.select_related("transaction__customer", "generated_proforma"),
+        pk=pk,
+    )
+    generated_proforma = _generated_proforma_for_sourcing(sourcing)
     pi_document = (
         sourcing.transaction.documents.filter(document_type="CLIENT_PI")
         .order_by("-timestamp")
@@ -3315,6 +3583,22 @@ def sourcing_update(request, pk):
             updated.save()
             action = request.POST.get("submit_action")
             if action == "open_proforma":
+                generated_proforma = _generated_proforma_for_sourcing(sourcing)
+                if generated_proforma:
+                    messages.info(
+                        request,
+                        "This Q-Worksheet has already been converted to a proforma.",
+                    )
+                    return redirect(
+                        _proforma_route_name(generated_proforma, "detail"),
+                        pk=generated_proforma.pk,
+                    )
+                if not updated.item_details:
+                    messages.error(
+                        request,
+                        "Add at least one item before creating a proforma.",
+                    )
+                    return redirect("sourcing_update", pk=sourcing.pk)
                 validity_date = (request.POST.get("validity_date") or "").strip()
                 messages.success(request, "Q-Worksheet updated. Opening proforma form.")
                 target = f"{reverse('proforma_create')}?from_sourcing={sourcing.pk}"
@@ -3332,6 +3616,7 @@ def sourcing_update(request, pk):
             "form": form,
             "title": "Update Q-Worksheet",
             "record": sourcing,
+            "generated_proforma": generated_proforma,
             "pi_document": pi_document,
             "transaction": sourcing.transaction,
         },
@@ -3521,6 +3806,12 @@ def sourcing_create(request):
             sourcing.save()
             action = request.POST.get("submit_action")
             if action == "open_proforma":
+                if not sourcing.item_details:
+                    messages.error(
+                        request,
+                        "Add at least one item before creating a proforma.",
+                    )
+                    return redirect("sourcing_update", pk=sourcing.pk)
                 validity_date = (request.POST.get("validity_date") or "").strip()
                 messages.success(request, "Q-Worksheet saved. Opening proforma form.")
                 target = f"{reverse('proforma_create')}?from_sourcing={sourcing.pk}"
@@ -3546,6 +3837,7 @@ def sourcing_create(request):
             "title": "Create Q-Worksheet",
             "pi_document": pi_document,
             "transaction": transaction,
+            "generated_proforma": None,
         },
     )
 
@@ -3620,10 +3912,20 @@ def proforma_create(request):
     elif from_sourcing_pk:
         sourcing_record = (
             Sourcing.objects.filter(pk=from_sourcing_pk)
-            .select_related("transaction__customer")
+            .select_related("transaction__customer", "generated_proforma")
             .first()
         )
         if sourcing_record:
+            generated_proforma = _generated_proforma_for_sourcing(sourcing_record)
+            if generated_proforma:
+                messages.info(
+                    request,
+                    "This Q-Worksheet has already been converted to a proforma.",
+                )
+                return redirect(
+                    _proforma_route_name(generated_proforma, "detail"),
+                    pk=generated_proforma.pk,
+                )
             initial_transaction = sourcing_record.transaction
             prefill_items = _prefill_proforma_items_from_sourcing(sourcing_record)
             initial_notes = sourcing_record.notes or ""
@@ -3709,6 +4011,7 @@ def proforma_create(request):
         if not errors:
             proforma = ProformaInvoice.objects.create(
                 transaction=txn,
+                source_sourcing=sourcing_record,
                 items=items,
                 subtotal=subtotal,
                 sourcing_fee=fee_values["sourcing_fee"],
@@ -3743,8 +4046,8 @@ def proforma_create(request):
             for e in errors:
                 messages.error(request, e)
 
-    transactions = Transaction.objects.select_related("customer").order_by(
-        "-created_at"
+    transactions = _transactions_with_lock_status(
+        Transaction.objects.select_related("customer").order_by("-created_at")
     )
     return render(
         request,
@@ -3759,6 +4062,9 @@ def proforma_create(request):
             "form_values": form_values,
             "transactions": transactions,
             "title": "Create Proforma Invoice",
+            "closed_trade_edit": bool(
+                initial_transaction and _trade_documents_locked(initial_transaction)
+            ),
         },
     )
 
@@ -3900,8 +4206,8 @@ def proforma_update(request, pk):
             for e in errors:
                 messages.error(request, e)
 
-    transactions = Transaction.objects.select_related("customer").order_by(
-        "-created_at"
+    transactions = _transactions_with_lock_status(
+        Transaction.objects.select_related("customer").order_by("-created_at")
     )
     return render(
         request,
@@ -3914,6 +4220,7 @@ def proforma_update(request, pk):
             "title": "Edit Proforma Invoice",
             "is_freight": is_freight,
             "loading": proforma.loading,
+            "closed_trade_edit": _trade_documents_locked(proforma.transaction),
         },
     )
 
@@ -3981,7 +4288,10 @@ def proforma_confirm(request, pk):
     return render(
         request,
         "logistics/invoicing/proforma_confirm.html",
-        {"proforma": proforma},
+        {
+            "proforma": proforma,
+            "closed_trade_edit": _trade_documents_locked(proforma.transaction),
+        },
     )
 
 
@@ -4042,8 +4352,8 @@ def _build_final_invoice_items(post_data):
 def _build_final_invoice_form_context(
     *, invoice=None, post_data=None, title, initial_transaction_id=""
 ):
-    transactions = Transaction.objects.select_related("customer").order_by(
-        "-created_at"
+    transactions = _transactions_with_lock_status(
+        Transaction.objects.select_related("customer").order_by("-created_at")
     )
 
     if post_data is not None:
@@ -4123,6 +4433,9 @@ def _build_final_invoice_form_context(
         "line_items": line_items,
         "form_values": form_values,
         "is_freight_invoice": is_freight_invoice,
+        "closed_trade_edit": bool(
+            selected_transaction and _trade_documents_locked(selected_transaction)
+        ),
         "shipping_mode_choices": FinalInvoice.SHIPPING_MODE_CHOICES,
     }
 
@@ -6213,13 +6526,14 @@ def paginate_queryset(request, queryset, per_page=DEFAULT_PAGE_SIZE):
     return page_obj, query_string, page_range
 
 
-def log_audit(model_type, action, object_id, object_str, user):
+def log_audit(model_type, action, object_id, object_str, user, changes=None):
     AuditLog.objects.create(
         user=user,
         model_type=model_type,
         action=action,
         object_id=object_id,
         object_str=object_str,
+        changes=changes,
     )
 
 
@@ -7960,10 +8274,28 @@ def reopen_transaction(request, pk):
         messages.info(request, "Transaction is not closed.")
         return redirect("transaction_detail", pk=pk)
     if request.method == "POST":
+        reason = _closed_trade_edit_reason(request)
+        if not reason:
+            messages.error(request, "Add a reason before reopening a closed trade.")
+            return redirect("transaction_detail", pk=pk)
         transaction.status = "DELIVERED"
+        transaction.closure_notes = _append_trade_note(
+            transaction.closure_notes,
+            "Reopened",
+            reason,
+            request.user,
+        )
         transaction.closed_at = None
         transaction.closed_by = None
         transaction.save()
+        log_audit(
+            "transaction",
+            "update",
+            transaction.pk,
+            transaction.transaction_id,
+            request.user,
+            changes={"reopen_reason": reason},
+        )
         messages.success(request, "Transaction reopened.")
     return redirect("transaction_detail", pk=pk)
 
