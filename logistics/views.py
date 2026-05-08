@@ -934,13 +934,13 @@ def _resolve_sourcing_owner(preferred_user=None):
         and preferred_user.is_active
         and (
             preferred_user.is_superuser
-            or preferred_user.role in {"PROCUREMENT", "ADMIN"}
+            or preferred_user.role in {"PROCUREMENT", "DIRECTOR", "ADMIN"}
         )
     ):
         return preferred_user
     return (
         CustomUser.objects.filter(is_active=True)
-        .filter(Q(is_superuser=True) | Q(role__in=["PROCUREMENT", "ADMIN"]))
+        .filter(Q(is_superuser=True) | Q(role__in=["PROCUREMENT", "DIRECTOR", "ADMIN"]))
         .order_by("is_superuser", "id")
         .first()
     )

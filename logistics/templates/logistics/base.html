@@ -418,7 +418,7 @@
                             {% if shell_module_notification_counts.documents %}<span class="sidebar-count-badge ms-auto">{{ shell_module_notification_counts.documents }}</span>{% endif %}
                         </a>
                     </li>
-                    {% if user.is_superuser or user.role == 'ADMIN' or user.role == 'PROCUREMENT' %}
+                    {% if user.is_superuser or user.role == 'ADMIN' or user.role == 'DIRECTOR' or user.role == 'PROCUREMENT' %}
                     <li class="nav-item">
                         <a class="nav-link {% if 'sourcing' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'sourcing_list' %}" data-bs-toggle="tooltip" data-bs-placement="right" title="Manual or document-based supplier quote worksheets attached to customer entries">
                             <i class="bi bi-table"></i> Q-Worksheets

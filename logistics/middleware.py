@@ -76,7 +76,11 @@ class ModuleRoleMiddleware:
         if request.user.is_superuser:
             return self.get_response(request)
 
-        if path.startswith("/sourcing/") and role not in {"PROCUREMENT", "ADMIN"}:
+        if path.startswith("/sourcing/") and role not in {
+            "PROCUREMENT",
+            "DIRECTOR",
+            "ADMIN",
+        }:
             return HttpResponseForbidden(
                 "Procurement role required for sourcing module."
             )

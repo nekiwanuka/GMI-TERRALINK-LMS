@@ -1351,10 +1351,11 @@ class Sourcing(models.Model):
         return f"Sourcing - {self.transaction.transaction_id}"
 
     def clean(self):
-        allowed_roles = {"PROCUREMENT", "ADMIN"}
+        allowed_roles = {"PROCUREMENT", "DIRECTOR", "ADMIN"}
         if self.created_by_id and self.created_by.role not in allowed_roles:
             raise ValidationError(
-                "Only Procurement Officer can create or update sourcing records."
+                "Only Procurement Officer, Director or System Admin can create or "
+                "update sourcing records."
             )
 
     def save(self, *args, **kwargs):
