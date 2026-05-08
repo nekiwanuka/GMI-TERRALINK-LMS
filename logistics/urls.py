@@ -44,6 +44,7 @@ urlpatterns = [
     path("", views.dashboard, name="dashboard"),
     # Users
     path("users/", views.user_list, name="user_list"),
+    path("settings/", views.user_list, name="settings"),
     # Clients
     path("clients/", views.client_list, name="client_list"),
     path("clients/create/", views.client_create, name="client_create"),

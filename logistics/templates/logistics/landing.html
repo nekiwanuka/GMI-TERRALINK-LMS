@@ -32,7 +32,10 @@
             </div>
             <div class="col-lg-5 d-flex justify-content-lg-end">
                 <div class="hero-brand-mark landing-colorway-b">
-                    <img src="{% static 'images/gmi_logo.png' %}" alt="GMI Terralink mark" class="img-fluid mb-3">
+                    <span class="landing-logo-frame mb-3">
+                        <img src="{% static 'images/gmi_logo.png' %}" alt="GMI Terralink mark" class="img-fluid" onerror="this.classList.add('d-none'); this.nextElementSibling.classList.remove('d-none');">
+                        <span class="brand-logo-fallback d-none">GMI TERRALINK</span>
+                    </span>
                     <div class="small text-uppercase fw-bold text-muted mb-2" style="letter-spacing: .18em;">Operational promise</div>
                     <h3 class="mb-3">Fast visibility. Clean approvals. Professional client-facing output.</h3>
                     <p class="mb-0 text-muted">From cargo intake to supplier payment reconciliation, every stage is presented in a clean, executive-ready interface designed to reduce friction and improve control.</p>

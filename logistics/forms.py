@@ -56,6 +56,14 @@ _UPPERCASE_TEXT_FIELD_NAMES = {
     "reference",
 }
 
+CONTAINER_NUMBER_RE = re.compile(r"^[A-Z]{4}\d{7}$")
+
+
+def normalize_container_number(value):
+    if not isinstance(value, str):
+        return value
+    return re.sub(r"[^A-Za-z0-9]", "", value).upper()
+
 
 def _smart_title_token(match):
     token = match.group(0)
@@ -427,6 +435,10 @@ from .models import (
 class UserRegistrationForm(NormalizedTextMixin, UserCreationForm):
     """Form for creating new users"""
 
+    ROLE_CHOICES_WITHOUT_ADMIN = tuple(
+        (value, label) for value, label in CustomUser.ROLE_CHOICES if value != "ADMIN"
+    )
+
     username = forms.CharField(
         max_length=150,
         widget=forms.TextInput(
@@ -456,7 +468,7 @@ class UserRegistrationForm(NormalizedTextMixin, UserCreationForm):
         ),
     )
     role = forms.ChoiceField(
-        choices=CustomUser.ROLE_CHOICES,
+        choices=ROLE_CHOICES_WITHOUT_ADMIN,
         widget=forms.Select(attrs={"class": "form-control"}),
     )
     password1 = forms.CharField(
@@ -475,6 +487,14 @@ class UserRegistrationForm(NormalizedTextMixin, UserCreationForm):
     class Meta:
         model = CustomUser
         fields = ("username", "email", "first_name", "last_name", "phone", "role")
+
+    def clean_role(self):
+        role = self.cleaned_data.get("role")
+        if role == "ADMIN":
+            raise forms.ValidationError(
+                "Accounts cannot be promoted to System Admin here."
+            )
+        return role
 
 
 class SignatureProfileForm(NormalizedTextMixin, forms.ModelForm):
@@ -655,7 +675,15 @@ class LoadingForm(NormalizedTextMixin, forms.ModelForm):
                 }
             ),
             "container_number": forms.TextInput(
-                attrs={"class": "form-control", "placeholder": "Container Number"}
+                attrs={
+                    "class": "form-control text-uppercase",
+                    "placeholder": "ABCD1234567",
+                    "pattern": "[A-Za-z]{4}[0-9]{7}",
+                    "title": "Enter 4 letters followed by 7 numbers, for example ABCD1234567.",
+                    "autocomplete": "off",
+                    "autocapitalize": "characters",
+                    "inputmode": "text",
+                }
             ),
             "container_size": forms.Select(attrs={"class": "form-control"}),
             "warehouse_location": forms.TextInput(
@@ -718,6 +746,16 @@ class LoadingForm(NormalizedTextMixin, forms.ModelForm):
         self.fields["container_size"].choices = [
             ("", "Select size (optional)")
         ] + size_choices
+
+    def clean_container_number(self):
+        container_number = normalize_container_number(
+            self.cleaned_data.get("container_number") or ""
+        )
+        if container_number and not CONTAINER_NUMBER_RE.match(container_number):
+            raise forms.ValidationError(
+                "Enter a valid container number: 4 letters followed by 7 numbers, for example ABCD1234567."
+            )
+        return container_number
 
     def clean(self):
         cleaned_data = super().clean()
@@ -1023,7 +1061,15 @@ class ContainerReturnForm(NormalizedTextMixin, forms.ModelForm):
         )
         widgets = {
             "container_number": forms.TextInput(
-                attrs={"class": "form-control", "placeholder": "Container Number"}
+                attrs={
+                    "class": "form-control text-uppercase",
+                    "placeholder": "ABCD1234567",
+                    "pattern": "[A-Za-z]{4}[0-9]{7}",
+                    "title": "Enter 4 letters followed by 7 numbers, for example ABCD1234567.",
+                    "autocomplete": "off",
+                    "autocapitalize": "characters",
+                    "inputmode": "text",
+                }
             ),
             "container_size": forms.Select(attrs={"class": "form-control"}),
             "loading": forms.Select(attrs={"class": "form-control"}),
@@ -1045,6 +1091,16 @@ class ContainerReturnForm(NormalizedTextMixin, forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.fields["container_size"].required = False
         self.fields["remarks"].required = False
+
+    def clean_container_number(self):
+        container_number = normalize_container_number(
+            self.cleaned_data.get("container_number") or ""
+        )
+        if container_number and not CONTAINER_NUMBER_RE.match(container_number):
+            raise forms.ValidationError(
+                "Enter a valid container number: 4 letters followed by 7 numbers, for example ABCD1234567."
+            )
+        return container_number
 
     def clean(self):
         cleaned_data = super().clean()

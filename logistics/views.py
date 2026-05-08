@@ -238,6 +238,30 @@ def _notify_roles(*, title, message, link="", category="system", roles=None):
     )
 
 
+def _can_record_payment_entry(user):
+    return bool(
+        user.is_authenticated
+        and (user.is_superuser or getattr(user, "role", "") in {"ADMIN", "FINANCE"})
+    )
+
+
+def _request_finance_payment_permission(request, *, payment_label, link=""):
+    _notify_roles(
+        title="Payment recording permission requested",
+        message=(
+            f"{request.user.get_full_name() or request.user.username} needs Finance approval "
+            f"to record {payment_label}."
+        ),
+        link=link or request.META.get("HTTP_REFERER", ""),
+        category="finance",
+        roles=["ADMIN", "FINANCE"],
+    )
+    messages.info(
+        request,
+        "Payment recording requires Finance Officer approval. A permission request has been sent to Finance.",
+    )
+
+
 def _redirect_back(request, default="dashboard"):
     """Redirect to the referring page when possible, else use a safe fallback."""
     target = request.META.get("HTTP_REFERER")
@@ -1076,13 +1100,47 @@ def protected_media(request, path):
 
 @login_required
 def user_list(request):
-    """List all users (superusers only)."""
+    """List users and allow controlled role changes for owner/admin accounts."""
     if not request.user.is_superuser and request.user.role not in {
         "ADMIN",
         "superuser",
     }:
         messages.error(request, "Permission denied")
         return redirect("dashboard")
+
+    role_choices = [
+        (value, label) for value, label in CustomUser.ROLE_CHOICES if value != "ADMIN"
+    ]
+    if request.method == "POST":
+        user_id = request.POST.get("user_id")
+        new_role = request.POST.get("role")
+        target = CustomUser.objects.filter(pk=user_id).first()
+        allowed_roles = {value for value, _label in role_choices}
+        if not target:
+            messages.error(request, "User account not found.")
+        elif new_role not in allowed_roles:
+            messages.error(request, "Accounts cannot be promoted to System Admin here.")
+        elif target.is_superuser or target.role == "ADMIN":
+            messages.error(
+                request, "System Admin accounts are protected from role changes here."
+            )
+        elif target.role == new_role:
+            messages.info(request, "No role change was needed.")
+        else:
+            old_role = target.role
+            target.role = new_role
+            target.save(update_fields=["role"])
+            log_audit(
+                "user",
+                "update",
+                target.id,
+                str(target),
+                request.user,
+                changes={"role": {"from": old_role, "to": new_role}},
+            )
+            messages.success(request, f"Updated {target.username}'s role.")
+        return redirect(request.resolver_match.url_name or "user_list")
+
     users = CustomUser.objects.all()
     page_obj, query_string, page_range = paginate_queryset(request, users)
     return render(
@@ -1093,6 +1151,8 @@ def user_list(request):
             "page_obj": page_obj,
             "query_string": query_string,
             "page_range": page_range,
+            "role_choices": role_choices,
+            "settings_mode": request.resolver_match.url_name == "settings",
         },
     )
 
@@ -1930,28 +1990,89 @@ def transit_update(request, pk):
 def payment_list(request):
     lane = _resolve_lane(request)
     payments = _apply_payment_lane(
-        Payment.objects.select_related("loading__client"), lane
+        Payment.objects.select_related("loading__client", "final_invoice"), lane
     )
     filter_type = request.GET.get("filter", "")
     if filter_type == "outstanding":
         payments = payments.filter(balance__gt=0)
     elif filter_type == "paid":
         payments = payments.filter(balance=0)
-    page_obj, query_string, page_range = paginate_queryset(request, payments)
-    payment_totals_qs = _apply_payment_lane(Payment.objects.all(), lane)
+    ledger_rows = []
+    for payment in payments:
+        ledger_rows.append(
+            {
+                "source": "logistics",
+                "invoice": payment.final_invoice,
+                "reference": payment.invoice_number,
+                "entry_number": payment.loading.loading_id,
+                "client": payment.loading.client.name,
+                "entry_type": "Logistics",
+                "amount_charged": payment.amount_charged,
+                "amount_paid": payment.amount_paid,
+                "balance": payment.balance,
+                "currency": "USD",
+                "payment_date": payment.payment_date,
+                "method": payment.get_payment_method_display() or "-",
+                "created_by": payment.created_by.username,
+                "detail_url": reverse("payment_detail", kwargs={"pk": payment.pk}),
+                "document_url": reverse("payment_invoice", kwargs={"pk": payment.pk}),
+                "created_at": payment.created_at,
+            }
+        )
+
+    trade_payments = TransactionPaymentRecord.objects.select_related(
+        "transaction__customer", "final_invoice__loading", "created_by", "receipt"
+    )
+    if lane == "logistics":
+        trade_payments = trade_payments.filter(final_invoice__loading__isnull=False)
+    elif lane == "sourcing":
+        trade_payments = trade_payments.filter(final_invoice__loading__isnull=True)
+    if filter_type == "outstanding":
+        trade_payments = trade_payments.filter(balance_after__gt=0)
+    elif filter_type == "paid":
+        trade_payments = trade_payments.filter(balance_after=0)
+    for record in trade_payments:
+        receipt = getattr(record, "receipt", None)
+        is_cargo_invoice = bool(
+            record.final_invoice_id and record.final_invoice.loading_id
+        )
+        ledger_rows.append(
+            {
+                "source": "trade",
+                "invoice": record.final_invoice,
+                "reference": getattr(receipt, "receipt_number", "")
+                or record.reference
+                or "-",
+                "entry_number": record.transaction.transaction_id,
+                "client": record.transaction.customer.name,
+                "entry_type": "Cargo" if is_cargo_invoice else "Sourcing",
+                "amount_charged": record.amount_due_snapshot,
+                "amount_paid": record.amount,
+                "balance": record.balance_after,
+                "currency": record.currency,
+                "payment_date": record.payment_date,
+                "method": record.get_payment_method_display(),
+                "created_by": record.created_by.username,
+                "detail_url": reverse(
+                    "sourcing_payment_list",
+                    kwargs={"transaction_pk": record.transaction.pk},
+                ),
+                "document_url": (
+                    reverse("receipt_detail", kwargs={"pk": receipt.pk})
+                    if receipt
+                    else ""
+                ),
+                "created_at": record.created_at,
+            }
+        )
+    ledger_rows.sort(
+        key=lambda row: row["payment_date"] or row["created_at"], reverse=True
+    )
+    page_obj, query_string, page_range = paginate_queryset(request, ledger_rows)
     totals = {
-        "total_charged": payment_totals_qs.aggregate(Sum("amount_charged"))[
-            "amount_charged__sum"
-        ]
-        or 0,
-        "total_paid": payment_totals_qs.aggregate(Sum("amount_paid"))[
-            "amount_paid__sum"
-        ]
-        or 0,
-        "total_outstanding": payment_totals_qs.filter(balance__gt=0).aggregate(
-            Sum("balance")
-        )["balance__sum"]
-        or 0,
+        "total_charged": sum((row["amount_charged"] or 0) for row in ledger_rows),
+        "total_paid": sum((row["amount_paid"] or 0) for row in ledger_rows),
+        "total_outstanding": sum((row["balance"] or 0) for row in ledger_rows),
     }
     can_view_financial_totals = request.user.role != "OFFICE_ADMIN"
     if not can_view_financial_totals:
@@ -1961,6 +2082,7 @@ def payment_list(request):
         "filter_type": filter_type,
         **totals,
         "can_view_financial_totals": can_view_financial_totals,
+        "can_record_payment_entry": _can_record_payment_entry(request.user),
         "page_obj": page_obj,
         "query_string": query_string,
         "page_range": page_range,
@@ -1971,11 +2093,19 @@ def payment_list(request):
     return render(request, "logistics/payments/list.html", context)
 
 
-@finance_required
 @login_required
 def payment_create(request, loading_id=None):
-    if request.user.role == "OFFICE_ADMIN":
-        messages.error(request, "You cannot create payments")
+    if not _can_record_payment_entry(request.user):
+        link = reverse("payment_list")
+        if loading_id:
+            link = reverse(
+                "payment_create_with_loading", kwargs={"loading_id": loading_id}
+            )
+        _request_finance_payment_permission(
+            request,
+            payment_label="a freight payment",
+            link=link,
+        )
         return redirect("payment_list")
 
     target_invoice = None
@@ -2066,7 +2196,7 @@ def dashboard(request):
     return render(request, "logistics/dashboard.html", context)
 
 
-@finance_required
+@role_required("FINANCE", "DIRECTOR", "ADMIN")
 @login_required
 def payment_update(request, pk):
     payment = get_object_or_404(
@@ -2079,7 +2209,7 @@ def payment_update(request, pk):
     return redirect("payment_detail", pk=payment.pk)
 
 
-@finance_required
+@role_required("FINANCE", "DIRECTOR", "ADMIN")
 @login_required
 def payment_detail(request, pk):
     payment = get_object_or_404(
@@ -2151,7 +2281,7 @@ def payment_detail(request, pk):
     return render(request, "logistics/payments/detail.html", context)
 
 
-@finance_required
+@role_required("FINANCE", "DIRECTOR", "ADMIN")
 @login_required
 def payment_invoice(request, pk):
     payment = get_object_or_404(
@@ -2706,6 +2836,7 @@ def transaction_detail(request, pk):
         "trade_total_paid": total_paid,
         "trade_balance": invoice_balance,
         "latest_payment_snapshot": latest_payment_snapshot,
+        "can_record_payment_entry": _can_record_payment_entry(request.user),
         "shipping_charge_included": shipping_charge_included,
         "purchase_orders": transaction.purchase_orders.select_related("created_by")[:5],
         "trade_payments": transaction.payment_records.select_related("created_by")[:10],
@@ -3211,21 +3342,24 @@ def fulfillment_list(request):
         orders = orders.filter(final_invoice_id=invoice_filter)
     page_obj, query_string, page_range = paginate_queryset(request, orders)
     for order in page_obj:
+        receipt_numbers = []
         if order.final_invoice_id:
             order.payment_snapshot = _final_invoice_payment_snapshot(
                 order.final_invoice
             )
-        scoped_payments = []
-        if order.final_invoice_id:
-            scoped_payments = list(order.final_invoice.payment_records.all())
-        payments = scoped_payments or list(order.transaction.payment_records.all())
-        receipt_numbers = sorted(
-            {
-                payment.receipt.receipt_number
-                for payment in payments
-                if getattr(payment, "receipt", None) and payment.receipt.receipt_number
-            }
-        )
+            invoice_payments = list(order.final_invoice.payment_records.all())
+            if not invoice_payments:
+                invoice_payments = list(order.transaction.payment_records.all())
+            receipt_numbers = sorted(
+                {
+                    payment.receipt.receipt_number
+                    for payment in invoice_payments
+                    if getattr(payment, "receipt", None)
+                    and payment.receipt.receipt_number
+                }
+            )
+        else:
+            order.payment_snapshot = None
         order.receipt_numbers_display = (
             ", ".join(receipt_numbers) if receipt_numbers else "No Receipt"
         )
@@ -4607,6 +4741,7 @@ def final_invoice_detail(request, pk):
             "payment_status_class": payment_status_class,
             "can_edit_invoice": can_edit_invoice,
             "can_record_payment": payment_snapshot["can_record_payment"],
+            "can_record_payment_entry": _can_record_payment_entry(request.user),
             "purchase_order": purchase_order,
             "split_purchase_orders": split_purchase_orders,
             "can_generate_po": can_generate_po,
@@ -7180,9 +7315,26 @@ def receipt_reverse(request, pk):
 
 
 @login_required
-@finance_required
 def sourcing_payment_create(request, transaction_pk=None):
     """Record a payment against a sourcing Transaction."""
+    if not _can_record_payment_entry(request.user):
+        if transaction_pk:
+            link = reverse(
+                "sourcing_payment_create_for", kwargs={"transaction_pk": transaction_pk}
+            )
+            redirect_target = reverse(
+                "transaction_detail", kwargs={"pk": transaction_pk}
+            )
+        else:
+            link = reverse("sourcing_payment_create")
+            redirect_target = reverse("transaction_list")
+        _request_finance_payment_permission(
+            request,
+            payment_label="a client trade payment",
+            link=link,
+        )
+        return redirect(redirect_target)
+
     initial = {}
     requested_mode = (request.GET.get("mode") or "").strip().lower()
     requested_invoice_pk = (
@@ -7413,6 +7565,7 @@ def sourcing_payment_list(request, transaction_pk):
             "records": records,
             "latest_invoice": latest_invoice,
             "payment_snapshot": payment_snapshot,
+            "can_record_payment_entry": _can_record_payment_entry(request.user),
         },
     )
 
@@ -8447,6 +8600,16 @@ def record_supplier_payment(request, po_pk):
     purchase_order = get_object_or_404(
         PurchaseOrder.objects.select_related("transaction"), pk=po_pk
     )
+    if not _can_record_payment_entry(request.user):
+        _request_finance_payment_permission(
+            request,
+            payment_label=f"a supplier payment for {purchase_order.po_number}",
+            link=reverse(
+                "record_supplier_payment", kwargs={"po_pk": purchase_order.pk}
+            ),
+        )
+        return redirect("purchase_order_detail", pk=purchase_order.pk)
+
     if purchase_order.transaction.is_closed:
         messages.error(
             request,

@@ -377,7 +377,8 @@
   <div class="gmi-auth-card" role="region" aria-label="Sign in">
     <aside class="gmi-auth-brand">
       <div class="gmi-auth-logo">
-        <img src="{% static 'images/gmi_logo.png' %}" alt="GMI Terralink logo">
+        <img src="{% static 'images/gmi_logo.png' %}" alt="GMI Terralink logo" onerror="this.classList.add('d-none'); this.nextElementSibling.classList.remove('d-none');">
+        <span class="brand-logo-fallback d-none">GMI</span>
       </div>
       <div class="gmi-auth-wordmark">GMI <span>Terralink</span></div>
 

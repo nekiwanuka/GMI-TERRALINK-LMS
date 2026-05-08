@@ -52,9 +52,13 @@
             <a href="{% url 'final_invoice_sign' invoice.pk %}" class="btn btn-sm {% if document_signature %}btn-outline-success{% else %}btn-outline-dark{% endif %} me-1">
                 <i class="bi bi-pen"></i> {% if document_signature %}Signed{% else %}Sign{% endif %}
             </a>
-            {% if can_record_payment %}
+            {% if can_record_payment and can_record_payment_entry %}
             <a href="{% if invoice.loading %}{% url 'payment_create_with_loading' invoice.loading.pk %}{% else %}{% url 'sourcing_payment_create_for' invoice.transaction.pk %}?invoice={{ invoice.pk }}{% endif %}" class="btn btn-sm btn-success me-1">
                 <i class="bi bi-cash-coin"></i> Record Payment
+            </a>
+            {% elif can_record_payment %}
+            <a href="{% if invoice.loading %}{% url 'payment_create_with_loading' invoice.loading.pk %}{% else %}{% url 'sourcing_payment_create_for' invoice.transaction.pk %}?invoice={{ invoice.pk }}{% endif %}" class="btn btn-sm btn-outline-success me-1">
+                <i class="bi bi-shield-check"></i> Request Finance Permission
             </a>
             {% else %}
             <button type="button" class="btn btn-sm btn-outline-success me-1" disabled>

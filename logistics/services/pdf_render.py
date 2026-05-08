@@ -142,6 +142,13 @@ def _render_minimal_pdf(html: str) -> bytes:
     from reportlab.lib.pagesizes import A4
     from reportlab.pdfgen import canvas
 
+    html = re.sub(
+        r"<style\b[^>]*>.*?</style>", " ", html, flags=re.IGNORECASE | re.DOTALL
+    )
+    html = re.sub(
+        r"<script\b[^>]*>.*?</script>", " ", html, flags=re.IGNORECASE | re.DOTALL
+    )
+    html = re.sub(r"<!--.*?-->", " ", html, flags=re.DOTALL)
     text = re.sub(r"<br\s*/?>", "\n", html, flags=re.IGNORECASE)
     text = re.sub(r"</(p|tr|div|h[1-6]|li|table)>", "\n", text, flags=re.IGNORECASE)
     text = re.sub(r"<[^>]+>", " ", text)

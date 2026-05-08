@@ -604,8 +604,10 @@
                                 <button type="button" class="btn btn-outline-secondary" disabled title="Closed trade documents are restricted to Director or System Admin.">Locked</button>
                                 {% endif %}
                                 <a href="{% if fi.loading %}{% url 'logistics_final_invoice_pdf' fi.pk %}{% else %}{% url 'sourcing_final_invoice_pdf' fi.pk %}{% endif %}" class="btn btn-outline-primary">PDF</a>
-                                {% if fi.can_record_payment %}
+                                {% if fi.can_record_payment and can_record_payment_entry %}
                                 <a href="{% url 'sourcing_payment_create_for' transaction.pk %}?invoice={{ fi.pk }}" class="btn btn-outline-success">Record Trade Payment</a>
+                                {% elif fi.can_record_payment %}
+                                <a href="{% url 'sourcing_payment_create_for' transaction.pk %}?invoice={{ fi.pk }}" class="btn btn-outline-success">Request Finance Permission</a>
                                 {% else %}
                                 <button type="button" class="btn btn-outline-success" disabled>Paid</button>
                                 {% endif %}
@@ -628,9 +630,13 @@
             <div class="card h-100 transaction-step-card">
                 <div class="transaction-step-header">
                     <h3 class="transaction-step-title"><span class="step-number">5</span> Client Payment</h3>
-                    {% if latest_invoice and latest_payment_snapshot.can_record_payment %}
+                    {% if latest_invoice and latest_payment_snapshot.can_record_payment and can_record_payment_entry %}
                     <a href="{% url 'sourcing_payment_create_for' transaction.pk %}" class="btn btn-sm btn-dark">
                         <i class="bi bi-cash-coin"></i> Record Payment
+                    </a>
+                    {% elif latest_invoice and latest_payment_snapshot.can_record_payment %}
+                    <a href="{% url 'sourcing_payment_create_for' transaction.pk %}" class="btn btn-sm btn-outline-dark">
+                        <i class="bi bi-shield-check"></i> Request Finance Permission
                     </a>
                     {% elif latest_invoice %}
                     <span class="btn btn-sm btn-outline-success disabled"><i class="bi bi-check2-circle"></i> Paid</span>

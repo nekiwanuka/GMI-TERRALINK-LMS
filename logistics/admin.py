@@ -63,6 +63,14 @@ admin.site.has_permission = _admin_dashboard_has_permission
 class CustomUserAdmin(UserAdmin):
     """Custom user admin"""
 
+    protected_admin_fields = (
+        "is_staff",
+        "is_superuser",
+        "role",
+        "groups",
+        "user_permissions",
+    )
+
     fieldsets = (
         (None, {"fields": ("username", "password")}),
         ("Personal info", {"fields": ("first_name", "last_name", "email", "phone")}),
@@ -102,6 +110,40 @@ class CustomUserAdmin(UserAdmin):
     list_display = ("username", "email", "first_name", "last_name", "role", "is_staff")
     list_filter = ("role", "is_staff", "is_active")
     search_fields = ("username", "first_name", "last_name", "email")
+
+    def get_readonly_fields(self, request, obj=None):
+        readonly_fields = list(super().get_readonly_fields(request, obj))
+        if obj and (obj.is_superuser or obj.role == "ADMIN"):
+            readonly_fields.extend(
+                field
+                for field in self.protected_admin_fields
+                if field not in readonly_fields
+            )
+        return readonly_fields
+
+    def get_form(self, request, obj=None, **kwargs):
+        form = super().get_form(request, obj, **kwargs)
+        role_field = form.base_fields.get("role")
+        if role_field:
+            role_field.choices = [
+                (value, label)
+                for value, label in role_field.choices
+                if value != "ADMIN"
+            ]
+        return form
+
+    def save_model(self, request, obj, form, change):
+        original = CustomUser.objects.filter(pk=obj.pk).first() if obj.pk else None
+        if original and (original.is_superuser or original.role == "ADMIN"):
+            obj.is_staff = original.is_staff
+            obj.is_superuser = original.is_superuser
+            obj.role = original.role
+        elif obj.role == "ADMIN" or obj.is_superuser:
+            messages.error(request, "Accounts cannot be promoted to System Admin here.")
+            obj.is_superuser = False
+            obj.is_staff = False
+            obj.role = original.role if original else "OFFICE_ADMIN"
+        super().save_model(request, obj, form, change)
 
 
 @admin.register(SignatureProfile)

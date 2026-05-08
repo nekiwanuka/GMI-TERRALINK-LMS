@@ -60,18 +60,32 @@ class ModuleRoleMiddleware:
         if not request.user.is_authenticated:
             return self.get_response(request)
 
-        if request.user.is_superuser:
-            return self.get_response(request)
-
         role = _normalized_role(request.user)
         path = request.path
+
+        if path.startswith("/administrator/") and role != "ADMIN":
+            return HttpResponseForbidden("System Admin access required.")
+
+        if path.startswith("/api/") and role != "ADMIN":
+            if request.headers.get("accept", "").startswith("application/json"):
+                return JsonResponse(
+                    {"detail": "System Admin access required."}, status=403
+                )
+            return HttpResponseForbidden("System Admin access required.")
+
+        if request.user.is_superuser:
+            return self.get_response(request)
 
         if path.startswith("/sourcing/") and role not in {"PROCUREMENT", "ADMIN"}:
             return HttpResponseForbidden(
                 "Procurement role required for sourcing module."
             )
 
-        if path.startswith("/payments/") and role not in {"FINANCE", "ADMIN"}:
+        if path.startswith("/payments/") and role not in {
+            "FINANCE",
+            "DIRECTOR",
+            "ADMIN",
+        }:
             return HttpResponseForbidden("Finance role required for finance module.")
 
         if path.startswith("/reports/") and role not in {"DIRECTOR", "ADMIN"}:

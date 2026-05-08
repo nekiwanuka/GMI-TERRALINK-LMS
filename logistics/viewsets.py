@@ -4,7 +4,7 @@ import uuid
 
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import BasePermission
 from rest_framework.response import Response
 
 from logistics.models import BillingInvoice, CargoItemWorkflow, ShipmentWorkflow
@@ -24,10 +24,22 @@ from logistics.services import (
 )
 
 
+class IsSystemAdmin(BasePermission):
+    def has_permission(self, request, view):
+        return bool(
+            request.user
+            and request.user.is_authenticated
+            and (
+                request.user.is_superuser
+                or getattr(request.user, "role", "") == "ADMIN"
+            )
+        )
+
+
 class ShipmentWorkflowViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = ShipmentWorkflow.objects.select_related("client").all()
     serializer_class = ShipmentWorkflowSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsSystemAdmin]
 
     @action(detail=True, methods=["post"])
     def transition(self, request, pk=None):
@@ -53,7 +65,7 @@ class ShipmentWorkflowViewSet(viewsets.ReadOnlyModelViewSet):
 class CargoItemWorkflowViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = CargoItemWorkflow.objects.select_related("shipment").all()
     serializer_class = CargoItemWorkflowSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsSystemAdmin]
 
     @action(detail=True, methods=["post"])
     def transition(self, request, pk=None):
@@ -80,7 +92,7 @@ class CargoItemWorkflowViewSet(viewsets.ReadOnlyModelViewSet):
 class BillingInvoiceViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = BillingInvoice.objects.select_related("shipment", "client").all()
     serializer_class = BillingInvoiceSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsSystemAdmin]
 
     @action(detail=True, methods=["post"])
     def register_payment(self, request, pk=None):
