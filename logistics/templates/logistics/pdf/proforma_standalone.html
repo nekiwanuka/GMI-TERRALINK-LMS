@@ -539,5 +539,15 @@ p { margin: 0 0 3px 0; }
         <div class="validation">This is a system-generated document and is valid with the accompanying authorised signatory mark.</div>
     </div>
 </div>
+{% if auto_print_pdf %}
+<script>
+window.addEventListener('load', function () {
+    setTimeout(function () {
+        window.focus();
+        window.print();
+    }, 350);
+});
+</script>
+{% endif %}
 </body>
 </html>

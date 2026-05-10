@@ -1,12 +1,13 @@
 """HTML-to-PDF rendering helper.
 
-Browser rendering is preferred so downloads match print previews. Some shared
-hosts cannot build optional HTML-to-PDF packages such as xhtml2pdf/pycairo, so
-this module must not require them just to import the Django app.
+Browser rendering is preferred so downloads match print previews. Shared hosts
+often cannot run Chromium or install native HTML-to-PDF libraries, so this
+module must keep every server-side renderer optional at import time.
 """
 
 from __future__ import annotations
 
+import importlib
 from io import BytesIO
 from pathlib import Path
 import re
@@ -17,40 +18,21 @@ import tempfile
 from django.conf import settings
 from django.template.loader import render_to_string
 
-try:  # pragma: no cover - depends on optional deployment package
-    from xhtml2pdf import pisa
-except ImportError:  # pragma: no cover - production fallback path
-    pisa = None
+_WEASYPRINT_HTML = None
+_WEASYPRINT_CHECKED = False
 
 
-def _link_callback(uri: str, rel: str) -> str:  # pragma: no cover - thin
-    """Map static/media URIs used in the rendered HTML back to disk paths.
-
-    xhtml2pdf calls this for every ``<img src>`` and CSS url(...) it sees.
-    """
-    static_url = settings.STATIC_URL or "/static/"
-    media_url = settings.MEDIA_URL or "/media/"
-
-    if uri.startswith(static_url):
-        path = Path(settings.STATIC_ROOT or "") / uri[len(static_url) :]
-        if path.exists():
-            return str(path)
-        # Fallback: search app static dirs in development
-        for app_static in (Path(settings.BASE_DIR) / "logistics" / "static",):
-            candidate = app_static / uri[len(static_url) :]
-            if candidate.exists():
-                return str(candidate)
-    if uri.startswith(media_url):
-        path = Path(settings.MEDIA_ROOT) / uri[len(media_url) :]
-        if path.exists():
-            return str(path)
-    if uri.startswith(("http://", "https://", "file://")):
-        return uri
-    # Bare relative path
-    candidate = Path(settings.BASE_DIR) / uri.lstrip("/")
-    if candidate.exists():
-        return str(candidate)
-    return uri
+def _weasyprint_html_class():
+    """Return WeasyPrint's HTML class when the host has its runtime libraries."""
+    global _WEASYPRINT_CHECKED, _WEASYPRINT_HTML
+    if _WEASYPRINT_CHECKED:
+        return _WEASYPRINT_HTML
+    _WEASYPRINT_CHECKED = True
+    try:  # pragma: no cover - depends on host system libraries
+        _WEASYPRINT_HTML = importlib.import_module("weasyprint").HTML
+    except (ImportError, OSError):  # pragma: no cover - production fallback path
+        _WEASYPRINT_HTML = None
+    return _WEASYPRINT_HTML
 
 
 def _resolve_local_asset(uri: str) -> str:
@@ -113,26 +95,17 @@ def _chromium_executable() -> str | None:
 
 def render_to_pdf(template_name: str, context: dict) -> bytes:
     """Render the given Django template to a PDF byte string."""
-    html = render_to_string(template_name, context)
-    if pisa is None:
-        return _render_minimal_pdf(html)
-
-    buffer = BytesIO()
-    pisa_status = pisa.CreatePDF(
-        src=html,
-        dest=buffer,
-        encoding="utf-8",
-        link_callback=_link_callback,
-    )
-    if pisa_status.err:
-        # Fall back to a minimal error page instead of crashing the request.
-        buffer = BytesIO()
-        pisa.CreatePDF(
-            src=f"<html><body><pre>PDF render error: {pisa_status.err}</pre></body></html>",
-            dest=buffer,
-            encoding="utf-8",
-        )
-    return buffer.getvalue()
+    html = _rewrite_assets_for_browser(render_to_string(template_name, context))
+    HTML = _weasyprint_html_class()
+    if HTML is not None:
+        try:
+            return HTML(
+                string=html,
+                base_url=Path(settings.BASE_DIR).resolve().as_uri(),
+            ).write_pdf()
+        except Exception:  # noqa: BLE001
+            pass
+    return _render_minimal_pdf(html)
 
 
 def _render_minimal_pdf(html: str) -> bytes:
@@ -182,7 +155,7 @@ def render_to_browser_pdf(template_name: str, context: dict) -> bytes:
 
     This is used for documents where the downloadable PDF must closely match
     the browser print preview. If Chromium is unavailable or rendering fails,
-    callers still receive the xhtml2pdf output.
+    callers still receive the optional server-side fallback output.
     """
     browser = _chromium_executable()
     if not browser:

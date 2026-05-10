@@ -141,7 +141,7 @@
                 <i class="bi bi-pencil"></i> Edit
             </a>
             {% endif %}
-            <a href="{% if proforma.loading %}{% url 'logistics_proforma_pdf' proforma.pk %}{% else %}{% url 'sourcing_proforma_pdf' proforma.pk %}{% endif %}?v={% now 'U' %}" class="btn btn-sm btn-outline-danger me-1" target="_blank">
+            <a href="{% if proforma.loading %}{% url 'logistics_proforma_html_preview' proforma.pk %}{% else %}{% url 'sourcing_proforma_html_preview' proforma.pk %}{% endif %}?download=1&amp;v={% now 'U' %}" class="btn btn-sm btn-outline-danger me-1" target="_blank">
                 <i class="bi bi-file-pdf"></i> Download PDF
             </a>
             <a href="{% url 'proforma_sign' proforma.pk %}" class="btn btn-sm {% if document_signature %}btn-outline-success{% else %}btn-outline-dark{% endif %} me-1">

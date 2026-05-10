@@ -514,7 +514,7 @@
                                 <a href="{% if pi.loading %}{% url 'logistics_proforma_confirm' pi.pk %}{% else %}{% url 'sourcing_proforma_confirm' pi.pk %}{% endif %}" class="btn btn-outline-success">Client PO Received</a>
                                 {% endif %}
                                 {% endif %}
-                                <a href="{% if pi.loading %}{% url 'logistics_proforma_pdf' pi.pk %}{% else %}{% url 'sourcing_proforma_pdf' pi.pk %}{% endif %}" class="btn btn-outline-primary">PDF</a>
+                                <a href="{% if pi.loading %}{% url 'logistics_proforma_html_preview' pi.pk %}{% else %}{% url 'sourcing_proforma_html_preview' pi.pk %}{% endif %}?download=1" class="btn btn-outline-primary" target="_blank">PDF</a>
                             </div>
                         </li>
                         {% endfor %}
@@ -603,7 +603,7 @@
                                 {% else %}
                                 <button type="button" class="btn btn-outline-secondary" disabled title="Closed trade documents are restricted to Director or System Admin.">Locked</button>
                                 {% endif %}
-                                <a href="{% if fi.loading %}{% url 'logistics_final_invoice_pdf' fi.pk %}{% else %}{% url 'sourcing_final_invoice_pdf' fi.pk %}{% endif %}" class="btn btn-outline-primary">PDF</a>
+                                <a href="{% if fi.loading %}{% url 'logistics_final_invoice_html_preview' fi.pk %}{% else %}{% url 'sourcing_final_invoice_html_preview' fi.pk %}{% endif %}?download=1" class="btn btn-outline-primary" target="_blank">PDF</a>
                                 {% if fi.can_record_payment and can_record_payment_entry %}
                                 <a href="{% url 'sourcing_payment_create_for' transaction.pk %}?invoice={{ fi.pk }}" class="btn btn-outline-success">Record Trade Payment</a>
                                 {% elif fi.can_record_payment %}

@@ -4583,39 +4583,10 @@ def proforma_pdf(request, pk):
         ),
         pk=pk,
     )
-    canonical = _canonical_route_redirect(
-        request, _proforma_route_name(proforma, "pdf"), pk=proforma.pk
+    preview_url = reverse(
+        _proforma_route_name(proforma, "html_preview"), kwargs={"pk": proforma.pk}
     )
-    if canonical:
-        return canonical
-    document_signature = _document_signature_for(proforma)
-    document_number = display_document_number(proforma, "PI")
-    pdf_data = render_to_browser_pdf(
-        "logistics/pdf/proforma_standalone.html",
-        {
-            "proforma": proforma,
-            "document_signature": document_signature,
-            "document_number": document_number,
-        },
-    )
-    response = HttpResponse(pdf_data, content_type="application/pdf")
-    _prevent_stale_pdf_cache(response)
-    document_slug = display_document_slug(proforma, "PI")
-    response["Content-Disposition"] = (
-        f'attachment; filename="{document_slug}_proforma_{proforma.transaction.transaction_id}.pdf"'
-    )
-    _notify_roles(
-        title="Proforma PDF generated",
-        message=(
-            f"A PDF was generated for proforma {document_number} on transaction "
-            f"{proforma.transaction.transaction_id}."
-        ),
-        link=reverse(
-            _proforma_route_name(proforma, "detail"), kwargs={"pk": proforma.pk}
-        ),
-        category="document",
-    )
-    return response
+    return redirect(f"{preview_url}?download=1")
 
 
 @login_required
@@ -4638,6 +4609,7 @@ def proforma_html_preview(request, pk):
             "proforma": proforma,
             "document_signature": document_signature,
             "document_number": document_number,
+            "auto_print_pdf": request.GET.get("download") == "1",
         },
     )
     return _prevent_stale_pdf_cache(response)
@@ -5006,6 +4978,7 @@ def final_invoice_html_preview(request, pk):
             "payment_status_label": payment_status_label,
             "payment_status_class": payment_status_class,
             "document_signature": _document_signature_for(invoice),
+            "auto_print_pdf": request.GET.get("download") == "1",
         },
     )
     _prevent_stale_pdf_cache(response)
@@ -5019,54 +4992,10 @@ def final_invoice_pdf(request, pk):
         FinalInvoice.objects.select_related("transaction__customer", "created_by"),
         pk=pk,
     )
-    canonical = _canonical_route_redirect(
-        request, _final_invoice_route_name(invoice, "pdf"), pk=invoice.pk
+    preview_url = reverse(
+        _final_invoice_route_name(invoice, "html_preview"), kwargs={"pk": invoice.pk}
     )
-    if canonical:
-        return canonical
-    total_paid = _final_invoice_total_paid(invoice) or 0
-    balance = max((invoice.total_amount or 0) - total_paid, 0)
-    if total_paid > 0 and balance <= 0:
-        payment_status_label = "Paid"
-        payment_status_class = "bg-success"
-    elif total_paid > 0:
-        payment_status_label = "Partial Payment"
-        payment_status_class = "bg-warning text-dark"
-    else:
-        payment_status_label = "Unpaid"
-        payment_status_class = "bg-secondary"
-    document_signature = _document_signature_for(invoice)
-    document_number = display_document_number(invoice, "FI")
-    pdf_data = render_to_browser_pdf(
-        "logistics/pdf/final_invoice_standalone.html",
-        {
-            "invoice": invoice,
-            "document_number": document_number,
-            "total_paid": total_paid,
-            "balance": balance,
-            "payment_status_label": payment_status_label,
-            "payment_status_class": payment_status_class,
-            "document_signature": document_signature,
-        },
-    )
-    response = HttpResponse(pdf_data, content_type="application/pdf")
-    _prevent_stale_pdf_cache(response)
-    document_slug = display_document_slug(invoice, "FI")
-    response["Content-Disposition"] = (
-        f'attachment; filename="{document_slug}_final_invoice_{invoice.transaction.transaction_id}.pdf"'
-    )
-    _notify_roles(
-        title="Final invoice PDF generated",
-        message=(
-            f"A PDF was generated for final invoice {document_number} on transaction "
-            f"{invoice.transaction.transaction_id}."
-        ),
-        link=reverse(
-            _final_invoice_route_name(invoice, "detail"), kwargs={"pk": invoice.pk}
-        ),
-        category="document",
-    )
-    return response
+    return redirect(f"{preview_url}?download=1")
 
 
 def _ensure_purchase_order_for_transaction(transaction, user, invoice=None):
@@ -7221,6 +7150,7 @@ def receipt_html_preview(request, pk):
             "client": client,
             "invoice_fully_paid": invoice_fully_paid,
             "document_signature": _document_signature_for(receipt),
+            "auto_print_pdf": request.GET.get("download") == "1",
         },
     )
     _prevent_stale_pdf_cache(response)
@@ -7229,56 +7159,10 @@ def receipt_html_preview(request, pk):
 
 @login_required
 def receipt_pdf(request, pk):
-    """Download a receipt as PDF (rendered from the print-preview template)."""
     receipt = get_object_or_404(Receipt, pk=pk)
-
-    # Resolve client + payment context (mirror what the HTML detail does).
-    client = None
-    if receipt.logistics_payment and receipt.logistics_payment.payment:
-        loading = receipt.logistics_payment.payment.loading
-        client = getattr(loading, "client", None)
-    elif receipt.sourcing_payment and receipt.sourcing_payment.transaction:
-        client = getattr(receipt.sourcing_payment.transaction, "customer", None)
-
-    invoice_fully_paid = False
-    try:
-        if receipt.sourcing_payment and receipt.sourcing_payment.final_invoice:
-            fi = receipt.sourcing_payment.final_invoice
-            invoice_fully_paid = (
-                fi.total_amount or 0
-            ) > 0 and _final_invoice_total_paid(fi) >= (fi.total_amount or 0)
-        elif receipt.logistics_payment and receipt.logistics_payment.payment:
-            p = receipt.logistics_payment.payment
-            p.refresh_totals()
-            invoice_fully_paid = (p.amount_charged or 0) > 0 and (
-                p.amount_paid or 0
-            ) >= (p.amount_charged or 0)
-    except Exception:
-        invoice_fully_paid = False
-
-    pdf_bytes = render_to_browser_pdf(
-        "logistics/pdf/receipt_standalone.html",
-        {
-            "receipt": receipt,
-            "receipt_display_number": display_document_number(receipt, "RCT"),
-            "client": client,
-            "invoice_fully_paid": invoice_fully_paid,
-            "document_signature": _document_signature_for(receipt),
-        },
+    return redirect(
+        f"{reverse('receipt_html_preview', kwargs={'pk': receipt.pk})}?download=1"
     )
-    response = HttpResponse(pdf_bytes, content_type="application/pdf")
-    _prevent_stale_pdf_cache(response)
-    response["Content-Disposition"] = (
-        f'attachment; filename="{display_document_slug(receipt, "RCT")}_receipt.pdf"'
-    )
-    _notify_roles(
-        title="Receipt PDF generated",
-        message=f"A PDF was generated for receipt {display_document_number(receipt, 'RCT')}.",
-        link=reverse("receipt_detail", kwargs={"pk": receipt.pk}),
-        category="document",
-        roles=["ADMIN", "DIRECTOR", "FINANCE"],
-    )
-    return response
 
 
 @login_required

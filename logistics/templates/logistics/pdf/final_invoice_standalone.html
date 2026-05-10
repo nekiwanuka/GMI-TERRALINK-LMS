@@ -97,5 +97,6 @@ p { margin: 0 0 3px 0; }
     </div>
     <div class="footer"><b>Invoice Terms:</b> Payment is due as agreed on the commercial invoice or transaction record. Any claims, missing items, or billing queries must be raised in writing within 7 business days.<table class="service-strip"><tr><td>Procurement | Freight Logistics | Fulfillment | Documentation | Payment Reconciliation</td></tr></table><div class="page-number"></div><div class="validation">This final invoice is system generated and valid with the accompanying authorised signatory mark.</div></div>
 </div>
+{% if auto_print_pdf %}<script>window.addEventListener('load', function () { setTimeout(function () { window.focus(); window.print(); }, 350); });</script>{% endif %}
 </body>
 </html>

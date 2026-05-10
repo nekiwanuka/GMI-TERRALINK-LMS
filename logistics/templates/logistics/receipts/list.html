@@ -144,8 +144,9 @@
                                    class="btn btn-sm btn-outline-primary">
                                     <i class="bi bi-eye"></i>
                                 </a>
-                                <a href="{% url 'receipt_pdf' receipt.pk %}"
-                                   class="btn btn-sm btn-outline-secondary">
+                                          <a href="{% url 'receipt_html_preview' receipt.pk %}?download=1"
+                                              class="btn btn-sm btn-outline-secondary"
+                                              target="_blank">
                                     <i class="bi bi-file-pdf"></i>
                                 </a>
                             </td>

@@ -33,7 +33,7 @@
                         <td><span class="badge bg-{% if pf.status == 'SENT' %}success{% else %}secondary{% endif %}">{{ pf.get_status_display }}</span></td>
                         <td>
                             <a class="btn btn-sm btn-outline-dark" href="{% if pf.loading %}{% url 'logistics_proforma_detail' pf.id %}{% else %}{% url 'sourcing_proforma_detail' pf.id %}{% endif %}">Open</a>
-                            <a class="btn btn-sm btn-outline-primary" href="{% if pf.loading %}{% url 'logistics_proforma_pdf' pf.id %}{% else %}{% url 'sourcing_proforma_pdf' pf.id %}{% endif %}">PDF</a>
+                            <a class="btn btn-sm btn-outline-primary" href="{% if pf.loading %}{% url 'logistics_proforma_html_preview' pf.id %}{% else %}{% url 'sourcing_proforma_html_preview' pf.id %}{% endif %}?download=1" target="_blank">PDF</a>
                             {% if pf.status != 'SENT' %}
                             <a class="btn btn-sm btn-warning" href="{% if pf.loading %}{% url 'logistics_proforma_update' pf.id %}{% else %}{% url 'sourcing_proforma_update' pf.id %}{% endif %}">Edit</a>
                             {% endif %}

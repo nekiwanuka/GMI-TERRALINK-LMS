@@ -78,5 +78,6 @@ td, th { padding: 0; vertical-align: top; }
     <table class="sign-table"><tr><td class="thanks"><b>Thank you for your business.</b><br>This receipt acknowledges payment received in good order. Please retain it for your records and quote the receipt number for any payment queries.</td><td class="signature">{% if document_signature and document_signature.signature_profile.signature_image %}<img class="sig-img" src="{{ document_signature.signature_profile.signature_image.url }}" alt="Signature"><div class="sig-line signed">{{ document_signature.signer_name }}</div><div class="sig-sub">For GMI Terralink Ltd</div>{% if document_signature.signed_at %}<div class="sig-sub">Signed {{ document_signature.signed_at|date:"d M Y H:i" }}</div>{% endif %}{% else %}<div class="sig-line">Authorised Signature</div><div class="sig-sub">For GMI Terralink Ltd</div>{% endif %}</td></tr></table>
     <div class="footer">GMI TERRALINK LTD | Guangzhou, China | Kampala, Uganda | gmiterralinkinfo@gmail.com | +256 768 049 940<div class="footer-band">Procurement | Logistics | Documentation | Trade Support</div></div>
 </div>
+{% if auto_print_pdf %}<script>window.addEventListener('load', function () { setTimeout(function () { window.focus(); window.print(); }, 350); });</script>{% endif %}
 </body>
 </html>

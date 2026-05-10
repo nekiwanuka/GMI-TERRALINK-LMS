@@ -59,7 +59,7 @@
             <button onclick="printReceiptDocument()" class="btn btn-outline-dark">
                 <i class="bi bi-printer"></i> Print preview
             </button>
-            <a href="{% url 'receipt_pdf' receipt.pk %}?v={% now 'U' %}" class="btn btn-primary">
+            <a href="{% url 'receipt_html_preview' receipt.pk %}?download=1&amp;v={% now 'U' %}" class="btn btn-primary" target="_blank">
                 <i class="bi bi-file-pdf"></i> Download PDF
             </a>
             <a href="{% url 'receipt_sign' receipt.pk %}" class="btn {% if document_signature %}btn-outline-success{% else %}btn-outline-dark{% endif %}">
