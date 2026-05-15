@@ -15,7 +15,10 @@ def normalized_role(user):
 
 
 def expand_allowed_roles(allowed_roles):
-    return set(allowed_roles)
+    roles = set(allowed_roles)
+    if "PROCUREMENT" in roles:
+        roles.add("OFFICE_ADMIN")
+    return roles
 
 
 def role_in_allowed_roles(user, allowed_roles):

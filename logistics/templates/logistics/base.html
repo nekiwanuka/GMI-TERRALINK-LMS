@@ -349,7 +349,7 @@
                             {% if shell_module_notification_counts.cargo %}<span class="sidebar-count-badge ms-auto">{{ shell_module_notification_counts.cargo }}</span>{% endif %}
                         </a>
                     </li>
-                    {% if user.is_superuser or user.role in 'ADMIN,DIRECTOR,FINANCE' %}
+                    {% if user.is_superuser or user.role in 'ADMIN,DIRECTOR,FINANCE,OFFICE_ADMIN' %}
                     <li class="nav-item">
                         <button class="nav-link nav-link-toggle {% if 'proforma' in request.resolver_match.url_name or 'final_invoice' in request.resolver_match.url_name %}active{% endif %}" type="button" data-bs-toggle="collapse" data-bs-target="#sidebarInvoicingMenuLogistics" aria-expanded="{% if 'proforma' in request.resolver_match.url_name or 'final_invoice' in request.resolver_match.url_name %}true{% else %}false{% endif %}" aria-controls="sidebarInvoicingMenuLogistics" title="Cargo proformas and cargo invoices">
                             <span class="nav-link-label"><i class="bi bi-receipt-cutoff"></i> Cargo Documents</span>
@@ -446,7 +446,7 @@
                         </a>
                     </li>
                     {% endif %}
-                    {% if user.is_superuser or user.role in 'ADMIN,DIRECTOR,FINANCE' %}
+                    {% if user.is_superuser or user.role in 'ADMIN,DIRECTOR,FINANCE,OFFICE_ADMIN' %}
                     <li class="nav-item">
                         <button class="nav-link nav-link-toggle {% if 'proforma' in request.resolver_match.url_name or 'final_invoice' in request.resolver_match.url_name %}active{% endif %}" type="button" data-bs-toggle="collapse" data-bs-target="#sidebarInvoicingMenuSourcing" aria-expanded="{% if 'proforma' in request.resolver_match.url_name or 'final_invoice' in request.resolver_match.url_name %}true{% else %}false{% endif %}" aria-controls="sidebarInvoicingMenuSourcing" title="Sourcing proformas and sourcing invoices">
                             <span class="nav-link-label"><i class="bi bi-receipt-cutoff"></i> Sourcing Billing</span>
@@ -516,7 +516,7 @@
                     {% endif %}
                     {% endif %}
 
-                    {% if user.is_superuser or user.role in 'ADMIN,DIRECTOR,FINANCE' %}
+                    {% if user.is_superuser or user.role in 'ADMIN,DIRECTOR,FINANCE,OFFICE_ADMIN' %}
                     <li class="sidebar-section-label"><i class="bi bi-bar-chart-line-fill"></i> Executive</li>
                     <li class="nav-item">
                         <a class="nav-link {% if 'report' in request.resolver_match.url_name and request.resolver_match.url_name != 'director_finance_summary' %}active{% endif %}" href="{% url 'reports_dashboard' %}" data-bs-toggle="tooltip" data-bs-placement="right" title="Revenue, activity and performance analytics">

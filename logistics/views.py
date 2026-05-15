@@ -394,7 +394,12 @@ def _sign_business_document(request, *, document, detail_route, document_label):
 
 def _user_default_lane(user):
     role = getattr(user, "role", "")
-    if getattr(user, "is_superuser", False) or role in {"ADMIN", "DIRECTOR", "FINANCE"}:
+    if getattr(user, "is_superuser", False) or role in {
+        "ADMIN",
+        "DIRECTOR",
+        "FINANCE",
+        "OFFICE_ADMIN",
+    }:
         return "all"
     if role in PROCUREMENT_STAFF_ROLES:
         return "sourcing"
@@ -405,11 +410,7 @@ def _resolve_lane(request):
     # Honour an explicit ?lane= override and persist it to the session
     requested_lane = (request.GET.get("lane") or "").strip().lower()
     default_lane = _user_default_lane(request.user)
-    privileged = request.user.is_superuser or getattr(request.user, "role", "") in {
-        "ADMIN",
-        "DIRECTOR",
-        "FINANCE",
-    }
+    privileged = _can_switch_lane(request.user)
     if requested_lane in {"all", "logistics", "sourcing"}:
         if privileged or requested_lane == default_lane:
             request.session["active_lane"] = requested_lane
@@ -476,6 +477,7 @@ def _can_switch_lane(user):
         "ADMIN",
         "DIRECTOR",
         "FINANCE",
+        "OFFICE_ADMIN",
     }
 
 
@@ -489,6 +491,7 @@ def _can_directly_edit_business_documents(user):
         "DIRECTOR",
         "FINANCE",
         "PROCUREMENT",
+        "OFFICE_ADMIN",
     }
 
 
@@ -3757,6 +3760,9 @@ def supplier_product_create(request, supplier_pk):
 @procurement_required
 def supplier_product_delete(request, supplier_pk, product_pk):
     supplier = get_object_or_404(Supplier, pk=supplier_pk)
+    if getattr(request.user, "role", "") == "OFFICE_ADMIN":
+        messages.error(request, "Uganda Intake cannot delete supplier products.")
+        return redirect("supplier_update", pk=supplier.pk)
     product = get_object_or_404(SupplierProduct, pk=product_pk, supplier=supplier)
     if request.method == "POST":
         product.delete()
@@ -5769,7 +5775,7 @@ def _count_collection(value):
 
 
 @login_required
-@role_required("DIRECTOR", "FINANCE", "ADMIN")
+@role_required("DIRECTOR", "FINANCE", "ADMIN", "OFFICE_ADMIN")
 def reports_dashboard(request):
     can_view_financial_totals = request.user.is_superuser or request.user.role in {
         "ADMIN",
@@ -6816,7 +6822,7 @@ def log_audit(model_type, action, object_id, object_str, user, changes=None):
 
 
 @login_required
-@role_required("DIRECTOR", "FINANCE", "ADMIN")
+@role_required("DIRECTOR", "FINANCE", "ADMIN", "OFFICE_ADMIN")
 def director_finance_summary(request):
     """Executive finance summary across lanes."""
     from .models import Commission

@@ -161,6 +161,7 @@ class ModuleRoleMiddleware:
             "FINANCE",
             "DIRECTOR",
             "ADMIN",
+            "OFFICE_ADMIN",
         }:
             return HttpResponseForbidden("Finance role required for finance module.")
 
@@ -168,6 +169,7 @@ class ModuleRoleMiddleware:
             "DIRECTOR",
             "FINANCE",
             "ADMIN",
+            "OFFICE_ADMIN",
         }:
             return HttpResponseForbidden("Director role required for reports module.")
 
