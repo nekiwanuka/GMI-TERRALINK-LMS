@@ -433,6 +433,15 @@ def _can_edit_closed_trade_documents(user):
     return user.is_superuser or getattr(user, "role", "") in {"ADMIN", "DIRECTOR"}
 
 
+def _can_manage_business_documents(user):
+    return user.is_superuser or getattr(user, "role", "") in {
+        "ADMIN",
+        "DIRECTOR",
+        "FINANCE",
+        "PROCUREMENT",
+    }
+
+
 def _closed_trade_edit_reason(request):
     return (
         request.POST.get("closed_edit_reason")
@@ -2281,7 +2290,6 @@ def payment_detail(request, pk):
     return render(request, "logistics/payments/detail.html", context)
 
 
-@role_required("FINANCE", "DIRECTOR", "ADMIN")
 @login_required
 def payment_invoice(request, pk):
     payment = get_object_or_404(
@@ -2438,7 +2446,6 @@ def payment_invoice(request, pk):
     return response
 
 
-@finance_required
 @login_required
 def payment_receipt(request, transaction_id):
     transaction = get_object_or_404(
@@ -3977,7 +3984,6 @@ def sourcing_create(request):
 
 
 @login_required
-@role_required("PROCUREMENT", "FINANCE", "DIRECTOR", "ADMIN")
 def proforma_list(request):
     lane = _resolve_lane_with_path(request)
     proformas = _apply_proforma_lane(
@@ -3998,6 +4004,9 @@ def proforma_list(request):
             "active_lane": lane,
             "active_lane_label": _lane_label(lane),
             "can_switch_lane": _can_switch_lane(request.user),
+            "can_manage_business_documents": _can_manage_business_documents(
+                request.user
+            ),
         },
     )
 
@@ -4204,7 +4213,6 @@ def proforma_create(request):
 
 
 @login_required
-@role_required("PROCUREMENT", "FINANCE", "DIRECTOR", "ADMIN")
 def proforma_detail(request, pk):
     proforma = get_object_or_404(
         ProformaInvoice.objects.select_related(
@@ -4226,6 +4234,9 @@ def proforma_detail(request, pk):
             "proforma": proforma,
             "final_invoice": final_invoice,
             "document_signature": document_signature,
+            "can_manage_business_documents": _can_manage_business_documents(
+                request.user
+            ),
         },
     )
 
@@ -4575,7 +4586,6 @@ def _build_final_invoice_form_context(
 
 
 @login_required
-@role_required("PROCUREMENT", "FINANCE", "DIRECTOR", "ADMIN")
 def proforma_pdf(request, pk):
     proforma = get_object_or_404(
         ProformaInvoice.objects.select_related(
@@ -4590,7 +4600,6 @@ def proforma_pdf(request, pk):
 
 
 @login_required
-@role_required("PROCUREMENT", "FINANCE", "DIRECTOR", "ADMIN")
 @xframe_options_sameorigin
 def proforma_html_preview(request, pk):
     """Render the proforma standalone template as plain HTML (for iframe embedding)."""
@@ -4616,7 +4625,6 @@ def proforma_html_preview(request, pk):
 
 
 @login_required
-@role_required("PROCUREMENT", "FINANCE", "DIRECTOR", "ADMIN")
 def final_invoice_list(request):
     lane = _resolve_lane_with_path(request)
     invoices = _apply_final_invoice_lane(
@@ -4649,12 +4657,14 @@ def final_invoice_list(request):
             "active_lane": lane,
             "active_lane_label": _lane_label(lane),
             "can_switch_lane": _can_switch_lane(request.user),
+            "can_manage_business_documents": _can_manage_business_documents(
+                request.user
+            ),
         },
     )
 
 
 @login_required
-@role_required("PROCUREMENT", "FINANCE", "DIRECTOR", "ADMIN")
 def final_invoice_detail(request, pk):
     invoice = get_object_or_404(
         FinalInvoice.objects.select_related(
@@ -4720,6 +4730,9 @@ def final_invoice_detail(request, pk):
             "payment_snapshot": payment_snapshot,
             "document_signature": document_signature,
             "is_logistics_invoice": is_logistics_invoice,
+            "can_manage_business_documents": _can_manage_business_documents(
+                request.user
+            ),
         },
     )
 
@@ -4942,7 +4955,6 @@ def final_invoice_update(request, pk):
 
 
 @login_required
-@role_required("PROCUREMENT", "FINANCE", "DIRECTOR", "ADMIN")
 @xframe_options_sameorigin
 def final_invoice_html_preview(request, pk):
     invoice = get_object_or_404(
@@ -4986,7 +4998,6 @@ def final_invoice_html_preview(request, pk):
 
 
 @login_required
-@role_required("PROCUREMENT", "FINANCE", "DIRECTOR", "ADMIN")
 def final_invoice_pdf(request, pk):
     invoice = get_object_or_404(
         FinalInvoice.objects.select_related("transaction__customer", "created_by"),
@@ -5227,7 +5238,6 @@ def purchase_order_split_create(request, pk):
 
 
 @login_required
-@role_required("PROCUREMENT", "FINANCE", "DIRECTOR", "ADMIN")
 def purchase_order_list(request):
     search = (request.GET.get("search") or "").strip()
     status_filter = (request.GET.get("status") or "").strip().upper()
@@ -5319,6 +5329,9 @@ def purchase_order_list(request):
             "lock_filter": lock_filter,
             "summary": summary,
             "status_choices": PurchaseOrder.STATUS_CHOICES,
+            "can_manage_business_documents": _can_manage_business_documents(
+                request.user
+            ),
         },
     )
 
@@ -5478,6 +5491,9 @@ def purchase_order_detail(request, pk):
             "supplier_balance_due": supplier_balance_due,
             "can_record_supplier_payment": can_record_supplier_payment,
             "can_split_purchase_order": can_split_purchase_order,
+            "can_manage_business_documents": _can_manage_business_documents(
+                request.user
+            ),
             "has_supplier_splits": has_supplier_splits,
             "supplier_payments_include_splits": not purchase_order.is_split
             and has_supplier_splits,

@@ -178,19 +178,19 @@
             <small class="text-muted">{{ purchase_order.po_number }} - {{ purchase_order.transaction.transaction_id }}</small>
         </div>
         <div class="d-flex gap-2">
-            {% if purchase_order.can_edit_purchase_order %}
+            {% if can_manage_business_documents and purchase_order.can_edit_purchase_order %}
             <a href="{% url 'purchase_order_update' purchase_order.pk %}" class="btn btn-outline-dark">Edit PO</a>
-            {% else %}
+            {% elif can_manage_business_documents %}
             <span class="btn btn-outline-secondary disabled"><i class="bi bi-lock-fill"></i> Locked</span>
             <button type="button" class="btn btn-dark" data-bs-toggle="modal" data-bs-target="#poCorrectionModal">Request Correction</button>
             {% endif %}
-            {% if can_split_purchase_order %}
+            {% if can_manage_business_documents and can_split_purchase_order %}
             <a href="{% url 'purchase_order_split_create' purchase_order.pk %}" class="btn btn-dark">Split to Supplier</a>
-            {% elif purchase_order.is_split %}
+            {% elif can_manage_business_documents and purchase_order.is_split %}
             <span class="btn btn-outline-secondary disabled">Split PO</span>
-            {% elif has_supplier_splits %}
+            {% elif can_manage_business_documents and has_supplier_splits %}
             <span class="btn btn-outline-secondary disabled">Already Split</span>
-            {% else %}
+            {% elif can_manage_business_documents %}
             <span class="btn btn-outline-secondary disabled">Split Unavailable</span>
             {% endif %}
             {% if purchase_order.final_invoice and purchase_order.transaction.fulfillment_order %}
@@ -303,7 +303,7 @@
             <div class="mt-4 card shadow-sm">
               <div class="card-header d-flex justify-content-between align-items-center">
                 <strong><i class="bi bi-cash-stack"></i> Supplier Payments</strong>
-                {% if user.is_superuser or user.role in 'ADMIN,DIRECTOR,FINANCE,PROCUREMENT' %}
+                {% if can_manage_business_documents %}
                                     {% if can_record_supplier_payment %}
                   <a href="{% url 'record_supplier_payment' purchase_order.pk %}" class="btn btn-sm btn-success"><i class="bi bi-plus-circle"></i> Record payment</a>
                                     {% elif has_supplier_splits and not purchase_order.is_split %}

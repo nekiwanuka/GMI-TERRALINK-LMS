@@ -121,6 +121,18 @@ class AuthenticationRequiredMiddleware:
 class ModuleRoleMiddleware:
     """Apply module-level role checks by URL prefix."""
 
+    DOCUMENT_READ_PREFIXES = (
+        "/sourcing/invoicing/proformas/",
+        "/sourcing/invoicing/final/",
+    )
+
+    DOCUMENT_READ_SUFFIXES = (
+        "/invoice/",
+        "/receipt/",
+        "/pdf/",
+        "/html-preview/",
+    )
+
     def __init__(self, get_response):
         self.get_response = get_response
 
@@ -130,6 +142,9 @@ class ModuleRoleMiddleware:
 
         role = _normalized_role(request.user)
         path = request.path
+
+        if self._is_document_read_path(request):
+            return self.get_response(request)
 
         if path.startswith("/administrator/") and role != "ADMIN":
             return HttpResponseForbidden("System Admin access required.")
@@ -168,6 +183,18 @@ class ModuleRoleMiddleware:
 
         return self.get_response(request)
 
+    def _is_document_read_path(self, request):
+        if request.method not in {"GET", "HEAD", "OPTIONS"}:
+            return False
+        path = request.path
+        if any(path.startswith(prefix) for prefix in self.DOCUMENT_READ_PREFIXES):
+            return True
+        if path.startswith("/payments/") and any(
+            path.endswith(suffix) for suffix in self.DOCUMENT_READ_SUFFIXES
+        ):
+            return True
+        return False
+
 
 class NotificationTargetReadMiddleware:
     """Clear unread notification badges when the linked target page is opened."""
@@ -203,9 +230,8 @@ class NotificationTargetReadMiddleware:
             link_full_path = link_path
             if link_parts.query:
                 link_full_path = f"{link_path}?{link_parts.query}"
-            if (
-                link_full_path == current_full_path
-                or _paths_match_notification_target(link_path, current_path)
+            if link_full_path == current_full_path or _paths_match_notification_target(
+                link_path, current_path
             ):
                 ids_to_mark.append(notification.id)
         if ids_to_mark:

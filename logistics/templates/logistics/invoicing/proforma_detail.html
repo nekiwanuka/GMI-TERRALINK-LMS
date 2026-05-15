@@ -136,7 +136,7 @@
                 <i class="bi bi-box-seam"></i> Open Cargo
             </a>
             {% endif %}
-            {% if proforma.status != 'SENT' %}
+            {% if can_manage_business_documents and proforma.status != 'SENT' %}
             <a href="{% if proforma.loading %}{% url 'logistics_proforma_update' proforma.pk %}{% else %}{% url 'sourcing_proforma_update' proforma.pk %}{% endif %}" class="btn btn-sm btn-outline-primary me-1">
                 <i class="bi bi-pencil"></i> Edit
             </a>
@@ -144,10 +144,12 @@
             <a href="{% if proforma.loading %}{% url 'logistics_proforma_html_preview' proforma.pk %}{% else %}{% url 'sourcing_proforma_html_preview' proforma.pk %}{% endif %}?download=1&amp;v={% now 'U' %}" class="btn btn-sm btn-outline-danger me-1" target="_blank">
                 <i class="bi bi-file-pdf"></i> Download PDF
             </a>
+            {% if can_manage_business_documents %}
             <a href="{% url 'proforma_sign' proforma.pk %}" class="btn btn-sm {% if document_signature %}btn-outline-success{% else %}btn-outline-dark{% endif %} me-1">
                 <i class="bi bi-pen"></i> {% if document_signature %}Signed{% else %}Sign{% endif %}
             </a>
-            {% if proforma.status != 'SENT' %}
+            {% endif %}
+            {% if can_manage_business_documents and proforma.status != 'SENT' %}
             <a href="{% if proforma.loading %}{% url 'logistics_proforma_confirm' proforma.pk %}{% else %}{% url 'sourcing_proforma_confirm' proforma.pk %}{% endif %}" class="btn btn-sm btn-success me-1">
                 <i class="bi bi-check2-circle"></i> Confirm to Invoice
             </a>
