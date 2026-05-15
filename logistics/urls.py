@@ -27,6 +27,12 @@ urlpatterns = [
     path("login/", views.login_view, name="login"),
     path("logout/", views.logout_view, name="logout"),
     path("set-lane/", views.set_lane, name="set_lane"),
+    path("noticeboard/", views.noticeboard, name="noticeboard"),
+    path(
+        "noticeboard/tasks/<int:pk>/done/",
+        views.noticeboard_task_done,
+        name="noticeboard_task_done",
+    ),
     path(
         "notifications/read-all/",
         views.notifications_mark_all_read,

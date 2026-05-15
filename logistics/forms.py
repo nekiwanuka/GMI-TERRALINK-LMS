@@ -111,6 +111,52 @@ class NormalizedTextMixin:
         return cleaned_data
 
 
+class NoticeboardTaskForm(NormalizedTextMixin, forms.ModelForm):
+    class Meta:
+        from .models import NoticeboardTask
+
+        model = NoticeboardTask
+        fields = ("title", "description", "assigned_to", "assigned_role")
+        widgets = {
+            "title": forms.TextInput(
+                attrs={"class": "form-control", "placeholder": "Task title"}
+            ),
+            "description": forms.Textarea(
+                attrs={
+                    "class": "form-control",
+                    "rows": 3,
+                    "placeholder": "What needs to be done?",
+                }
+            ),
+            "assigned_to": forms.Select(attrs={"class": "form-select"}),
+            "assigned_role": forms.Select(attrs={"class": "form-select"}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        from .models import CustomUser
+
+        self.fields["assigned_to"].queryset = CustomUser.objects.filter(
+            is_active=True
+        ).order_by("first_name", "last_name", "username")
+        self.fields["assigned_to"].required = False
+        self.fields["assigned_to"].empty_label = "Select staff member"
+        self.fields["assigned_role"].required = False
+        self.fields["assigned_role"].choices = (("", "Select department"),) + tuple(
+            CustomUser.ROLE_CHOICES
+        )
+
+    def clean(self):
+        cleaned_data = super().clean()
+        if not cleaned_data.get("assigned_to") and not cleaned_data.get(
+            "assigned_role"
+        ):
+            raise forms.ValidationError(
+                "Assign the task to a staff member or department."
+            )
+        return cleaned_data
+
+
 def _parse_line_items(raw_value):
     """Parse invoice line items from `description,amount[,quantity]` lines."""
     # Accept pasted JSON/Python-list payloads from older UI states, e.g.

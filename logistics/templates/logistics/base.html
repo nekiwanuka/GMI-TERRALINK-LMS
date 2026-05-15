@@ -202,6 +202,12 @@
                         <li class="nav-item d-none d-lg-block">
                             <a class="nav-link" href="{% url 'workflow_guide' %}"><i class="bi bi-map me-1"></i>Workflow</a>
                         </li>
+                        <li class="nav-item d-none d-lg-block">
+                            <a class="nav-link {% if request.resolver_match.url_name == 'noticeboard' %}active{% endif %}" href="{% url 'noticeboard' %}">
+                                <i class="bi bi-clipboard2-pulse me-1"></i>Noticeboard
+                                {% if shell_notifications_unread_count %}<span class="badge rounded-pill text-bg-danger ms-1">{{ shell_notifications_unread_count }}</span>{% endif %}
+                            </a>
+                        </li>
 
                         {% comment %}Department lane switcher{% endcomment %}
                         <li class="nav-item d-none d-lg-flex align-items-center">
@@ -319,6 +325,12 @@
                     <li class="nav-item">
                         <a class="nav-link {% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}" href="{% url 'dashboard' %}" data-bs-toggle="tooltip" data-bs-placement="right" title="Operations overview and key activity">
                             <i class="bi bi-grid-1x2-fill"></i> Dashboard
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.resolver_match.url_name == 'noticeboard' %}active{% endif %}" href="{% url 'noticeboard' %}" data-bs-toggle="tooltip" data-bs-placement="right" title="Noticeboard and alerts">
+                            <i class="bi bi-clipboard2-pulse-fill"></i> Noticeboard
+                            {% if shell_notifications_unread_count %}<span class="sidebar-count-badge ms-auto">{{ shell_notifications_unread_count }}</span>{% endif %}
                         </a>
                     </li>
 

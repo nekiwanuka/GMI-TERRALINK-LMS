@@ -92,6 +92,7 @@ from .forms import (
     FulfillmentOrderForm,
     InventoryItemForm,
     LoadingForm,
+    NoticeboardTaskForm,
     PaymentForm,
     PaymentTransactionForm,
     ProformaInvoiceForm,
@@ -135,6 +136,7 @@ from .models import (
     InventoryItem,
     Loading,
     Notification,
+    NoticeboardTask,
     Payment,
     PaymentTransaction,
     ProformaInvoice,
@@ -6021,6 +6023,100 @@ def export_containers_pdf(request):
     )
     log_audit("container_return", "export", 0, "PDF Export", request.user)
     return response
+
+
+@login_required
+def noticeboard(request):
+    if request.method == "POST":
+        form = NoticeboardTaskForm(request.POST)
+        if form.is_valid():
+            task = form.save(commit=False)
+            task.created_by = request.user
+            task.save()
+            task_link = reverse("noticeboard")
+            if task.assigned_to_id:
+                Notification.objects.create(
+                    recipient=task.assigned_to,
+                    title="Noticeboard task assigned",
+                    message=f"{request.user.get_full_name() or request.user.username} assigned you: {task.title}",
+                    category="system",
+                    link=task_link,
+                )
+            if task.assigned_role:
+                _notify_roles(
+                    title="Noticeboard department task",
+                    message=f"{request.user.get_full_name() or request.user.username} assigned {task.title} to your department.",
+                    link=task_link,
+                    category="system",
+                    roles=[task.assigned_role],
+                )
+            messages.success(request, "Noticeboard task posted.")
+            return redirect("noticeboard")
+    else:
+        form = NoticeboardTaskForm()
+
+    tasks = NoticeboardTask.objects.select_related(
+        "assigned_to", "created_by", "completed_by"
+    )
+    task_page_obj, task_query_string, task_page_range = paginate_queryset(
+        request, tasks, per_page=10
+    )
+    notifications = request.user.notifications.all().order_by("is_read", "-created_at")
+    notice_page_obj, notice_query_string, notice_page_range = paginate_queryset(
+        request, notifications, per_page=8
+    )
+    employees = CustomUser.objects.filter(is_active=True).order_by(
+        "role", "first_name", "last_name", "username"
+    )
+    return render(
+        request,
+        "logistics/noticeboard.html",
+        {
+            "form": form,
+            "tasks": task_page_obj,
+            "page_obj": task_page_obj,
+            "query_string": task_query_string,
+            "page_range": task_page_range,
+            "notifications": notice_page_obj,
+            "notice_page_obj": notice_page_obj,
+            "notice_query_string": notice_query_string,
+            "notice_page_range": notice_page_range,
+            "employees": employees,
+            "unread_count": request.user.notifications.filter(is_read=False).count(),
+        },
+    )
+
+
+@login_required
+def noticeboard_task_done(request, pk):
+    task = get_object_or_404(NoticeboardTask, pk=pk)
+    can_complete = (
+        request.user.is_superuser
+        or getattr(request.user, "role", "") == "ADMIN"
+        or task.created_by_id == request.user.pk
+        or task.assigned_to_id == request.user.pk
+        or (
+            task.assigned_role
+            and task.assigned_role == getattr(request.user, "role", "")
+        )
+    )
+    if request.method != "POST":
+        return redirect("noticeboard")
+    if not can_complete:
+        messages.error(
+            request,
+            "Only the creator, assignee or assigned department can mark this task done.",
+        )
+        return redirect("noticeboard")
+    if not task.is_done:
+        task.is_done = True
+        task.completed_by = request.user
+        task.completed_at = timezone.now()
+        task.save(
+            update_fields=["is_done", "completed_by", "completed_at", "updated_at"]
+        )
+        messages.success(request, "Noticeboard task marked done.")
+    return redirect("noticeboard")
 
 
 @login_required

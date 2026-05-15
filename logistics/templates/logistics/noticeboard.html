@@ -1,0 +1,157 @@
+{% extends "logistics/base.html" %}
+
+{% block title %}Noticeboard - GMI TERRALINK{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-4">
+        <div>
+            <h2 class="mb-1"><i class="bi bi-clipboard2-pulse"></i> Noticeboard</h2>
+            <div class="text-muted">Post tasks, direct them to staff or departments, and close them when done.</div>
+        </div>
+        {% if unread_count %}
+        <form method="post" action="{% url 'notifications_mark_all_read' %}">
+            {% csrf_token %}
+            <input type="hidden" name="next" value="{{ request.get_full_path }}">
+            <button type="submit" class="btn btn-outline-primary">
+                <i class="bi bi-check2-all"></i> Mark all read
+            </button>
+        </form>
+        {% endif %}
+    </div>
+
+    <div class="row g-4">
+        <div class="col-xl-4">
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-white"><strong>Post a task</strong></div>
+                <div class="card-body">
+                    <form method="post">
+                        {% csrf_token %}
+                        {% if form.non_field_errors %}<div class="alert alert-danger small">{{ form.non_field_errors }}</div>{% endif %}
+                        <div class="mb-3">
+                            <label class="form-label">Title</label>
+                            {{ form.title }}
+                            {% if form.title.errors %}<div class="text-danger small mt-1">{{ form.title.errors }}</div>{% endif %}
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Details</label>
+                            {{ form.description }}
+                            {% if form.description.errors %}<div class="text-danger small mt-1">{{ form.description.errors }}</div>{% endif %}
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Direct to staff member</label>
+                            {{ form.assigned_to }}
+                            {% if form.assigned_to.errors %}<div class="text-danger small mt-1">{{ form.assigned_to.errors }}</div>{% endif %}
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Or department</label>
+                            {{ form.assigned_role }}
+                            {% if form.assigned_role.errors %}<div class="text-danger small mt-1">{{ form.assigned_role.errors }}</div>{% endif %}
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100"><i class="bi bi-send"></i> Post Task</button>
+                    </form>
+                </div>
+            </div>
+
+            <div class="card shadow-sm">
+                <div class="card-header bg-white"><strong>Employee Contacts</strong></div>
+                <div class="list-group list-group-flush">
+                    {% for employee in employees %}
+                    <div class="list-group-item">
+                        <div class="fw-semibold">{{ employee.get_full_name|default:employee.username }}</div>
+                        <div class="small text-muted">{{ employee.get_role_display }}</div>
+                        <div class="small mt-1">
+                            <i class="bi bi-telephone"></i> {{ employee.phone|default:"No phone" }}<br>
+                            <i class="bi bi-envelope"></i> {{ employee.email|default:"No email" }}
+                        </div>
+                    </div>
+                    {% empty %}
+                    <div class="list-group-item text-muted">No employees found.</div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-8">
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                    <strong>Tasks</strong>
+                </div>
+                <div class="list-group list-group-flush">
+                    {% for task in tasks %}
+                    <div class="list-group-item py-3 {% if task.is_done %}bg-light{% endif %}">
+                        <div class="d-flex flex-column flex-lg-row justify-content-between gap-3">
+                            <div>
+                                <div class="fw-semibold">
+                                    {% if task.is_done %}<i class="bi bi-check2-circle text-success me-1"></i>{% else %}<i class="bi bi-circle text-primary me-1"></i>{% endif %}
+                                    {{ task.title }}
+                                    {% if task.is_done %}<span class="badge text-bg-success ms-2">Done</span>{% else %}<span class="badge text-bg-warning ms-2">Open</span>{% endif %}
+                                </div>
+                                <div class="text-muted mt-1">{{ task.description }}</div>
+                                <div class="small text-muted mt-2">
+                                    Posted by {{ task.created_by.get_full_name|default:task.created_by.username }} on {{ task.created_at|date:"d M Y H:i" }}
+                                </div>
+                            </div>
+                            <div class="text-lg-end flex-shrink-0">
+                                <div class="small text-muted">Assigned to</div>
+                                <div class="fw-semibold">
+                                    {% if task.assigned_to %}{{ task.assigned_to.get_full_name|default:task.assigned_to.username }}{% endif %}
+                                    {% if task.assigned_to and task.assigned_role %}<span class="text-muted"> / </span>{% endif %}
+                                    {% if task.assigned_role %}{{ task.get_assigned_role_display }}{% endif %}
+                                </div>
+                                {% if task.assigned_to %}
+                                <div class="small text-muted mt-1">
+                                    {{ task.assigned_to.phone|default:"No phone" }}<br>{{ task.assigned_to.email|default:"No email" }}
+                                </div>
+                                {% endif %}
+                                {% if task.is_done %}
+                                <div class="small text-success mt-2">Done by {{ task.completed_by|default:"-" }}{% if task.completed_at %} on {{ task.completed_at|date:"d M Y H:i" }}{% endif %}</div>
+                                {% else %}
+                                <form method="post" action="{% url 'noticeboard_task_done' task.pk %}" class="mt-2">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-sm btn-outline-success"><i class="bi bi-check2"></i> Mark Done</button>
+                                </form>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    {% empty %}
+                    <div class="text-center text-muted py-5">
+                        <i class="bi bi-clipboard2-check fs-2 d-block mb-2"></i>
+                        No tasks posted yet.
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            {% include "logistics/components/pagination.html" %}
+
+            <div class="card shadow-sm">
+                <div class="card-header bg-white"><strong>System notices</strong></div>
+        <div class="list-group list-group-flush">
+            {% for notification in notifications %}
+            <a href="{% url 'notification_open' notification.pk %}?next={{ request.get_full_path|urlencode }}" class="list-group-item list-group-item-action py-3 {% if not notification.is_read %}list-group-item-light{% endif %}">
+                <div class="d-flex flex-column flex-md-row justify-content-between gap-2">
+                    <div>
+                        <div class="fw-semibold">
+                            {% if notification.category == 'invoice' %}<i class="bi bi-receipt-cutoff text-primary me-1"></i>{% elif notification.category == 'document' %}<i class="bi bi-folder-symlink text-primary me-1"></i>{% else %}<i class="bi bi-bell text-primary me-1"></i>{% endif %}
+                            {{ notification.title }}
+                            {% if not notification.is_read %}<span class="badge text-bg-primary ms-2">New</span>{% endif %}
+                        </div>
+                        <div class="text-muted mt-1">{{ notification.message }}</div>
+                    </div>
+                    <div class="text-muted small text-md-end flex-shrink-0">{{ notification.created_at|date:"d M Y H:i" }}</div>
+                </div>
+            </a>
+            {% empty %}
+            <div class="text-center text-muted py-5">
+                <i class="bi bi-check2-circle fs-2 d-block mb-2"></i>
+                No notices yet.
+            </div>
+            {% endfor %}
+        </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

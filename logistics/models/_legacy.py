@@ -98,6 +98,51 @@ class Notification(models.Model):
         return f"{self.title} -> {self.recipient.username}"
 
 
+class NoticeboardTask(models.Model):
+    """Shared staff noticeboard task directed to a person or department."""
+
+    title = models.CharField(max_length=180)
+    description = models.TextField()
+    assigned_to = models.ForeignKey(
+        CustomUser,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="assigned_noticeboard_tasks",
+    )
+    assigned_role = models.CharField(
+        max_length=20, choices=CustomUser.ROLE_CHOICES, blank=True
+    )
+    created_by = models.ForeignKey(
+        CustomUser, on_delete=models.PROTECT, related_name="created_noticeboard_tasks"
+    )
+    is_done = models.BooleanField(default=False)
+    completed_by = models.ForeignKey(
+        CustomUser,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="completed_noticeboard_tasks",
+    )
+    completed_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["is_done", "-created_at"]
+        indexes = [
+            models.Index(fields=["is_done", "-created_at"]),
+            models.Index(fields=["assigned_role", "is_done"]),
+        ]
+
+    def clean(self):
+        if not self.assigned_to_id and not self.assigned_role:
+            raise ValidationError("Assign this task to a staff member or department.")
+
+    def __str__(self):
+        return self.title
+
+
 def _random_code(length=10):
     alphabet = string.ascii_uppercase + string.digits
     return "".join(secrets.choice(alphabet) for _ in range(length))

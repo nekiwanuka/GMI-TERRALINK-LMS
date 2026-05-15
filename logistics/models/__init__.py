@@ -40,6 +40,7 @@ from ._legacy import (  # noqa: F401  explicit re-exports for IDE/autocomplete
     InventoryPosition,
     Loading,
     Notification,
+    NoticeboardTask,
     Payment,
     PaymentTransaction,
     ProformaInvoice,
