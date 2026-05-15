@@ -106,7 +106,8 @@ class BillingInvoiceViewSet(viewsets.ReadOnlyModelViewSet):
             method=serializer.validated_data["method"],
             idempotency_key=serializer.validated_data.get("idempotency_key")
             or f"api:payment:{invoice.pk}:{uuid.uuid4()}",
-            reference=serializer.validated_data.get("reference", ""),
+            reference=serializer.validated_data["reference"],
+            proof_of_payment=serializer.validated_data.get("proof_of_payment"),
             created_by=request.user,
         )
 

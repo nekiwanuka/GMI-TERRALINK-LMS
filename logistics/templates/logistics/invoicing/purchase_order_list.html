@@ -330,6 +330,7 @@
                         <th>Type</th>
                         <th>Parties</th>
                         <th class="text-end">Value</th>
+                        <th>Supplier Payment</th>
                         <th>Client Payment</th>
                         <th>Fees</th>
                         <th>Status</th>
@@ -363,6 +364,13 @@
                             <div class="po-money-stack">
                                 <strong>{{ po.subtotal }} USD</strong>
                                 <span>{{ po.created_at|date:"d M Y H:i" }}</span>
+                            </div>
+                        </td>
+                        <td>
+                            <div class="po-badge-stack">
+                                <span class="badge {{ po.supplier_payment_status_class|default:'bg-secondary' }}">{{ po.supplier_payment_status_label|default:'Unpaid' }}</span>
+                                <span>{% if po.supplier_payments_include_splits %}Split paid{% else %}Paid{% endif %}: {{ po.supplier_total_paid|default:'0.00' }} USD</span>
+                                <span>Balance {{ po.supplier_balance_due|default:po.subtotal }} USD</span>
                             </div>
                         </td>
                         <td>
@@ -417,12 +425,21 @@
                                     <i class="bi bi-lock-fill me-1"></i>Locked
                                 </span>
                                 {% endif %}
+                                {% if po.can_record_supplier_payment %}
+                                <a href="{% url 'record_supplier_payment' po.pk %}" class="btn btn-sm btn-success">
+                                    <i class="bi bi-cash-stack me-1"></i>Pay Supplier
+                                </a>
+                                {% elif po.can_request_supplier_payment %}
+                                <a href="{% url 'record_supplier_payment' po.pk %}" class="btn btn-sm btn-outline-primary">
+                                    <i class="bi bi-shield-check me-1"></i>Request Pay
+                                </a>
+                                {% endif %}
                             </div>
                         </td>
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="9">
+                        <td colspan="10">
                             <div class="po-empty-state">
                                 <i class="bi bi-journal-x"></i>
                                 <strong>No purchase orders match this view.</strong>

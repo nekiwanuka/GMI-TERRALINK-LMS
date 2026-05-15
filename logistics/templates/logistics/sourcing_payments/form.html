@@ -44,7 +44,7 @@
             </div>
             {% endif %}
 
-            <form method="post" id="trade-payment-form">
+            <form method="post" enctype="multipart/form-data" id="trade-payment-form">
                 {% csrf_token %}
 
                 {% if form.non_field_errors %}
@@ -139,12 +139,17 @@
                         </div>
                     </div>
 
-                    <div class="col-md-6">
+                    <div class="col-md-4">
                         <label class="form-label fw-semibold">Reference</label>
                         {{ form.reference }}
                         {% if form.reference.errors %}<div class="text-danger small mt-1">{{ form.reference.errors }}</div>{% endif %}
                     </div>
-                    <div class="col-md-6">
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">Proof of Payment</label>
+                        {{ form.proof_of_payment }}
+                        {% if form.proof_of_payment.errors %}<div class="text-danger small mt-1">{{ form.proof_of_payment.errors }}</div>{% endif %}
+                    </div>
+                    <div class="col-md-4">
                         <label class="form-label fw-semibold">Notes</label>
                         {{ form.notes }}
                         {% if form.notes.errors %}<div class="text-danger small mt-1">{{ form.notes.errors }}</div>{% endif %}

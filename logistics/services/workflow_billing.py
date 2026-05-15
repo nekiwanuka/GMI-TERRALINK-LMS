@@ -145,6 +145,7 @@ class WorkflowBillingService:
         method: str,
         idempotency_key: str,
         reference: str = "",
+        proof_of_payment=None,
         created_by=None,
     ) -> BillingPayment:
         payment, created = BillingPayment.objects.get_or_create(
@@ -154,6 +155,7 @@ class WorkflowBillingService:
                 "amount": amount,
                 "method": method,
                 "reference": reference,
+                "proof_of_payment": proof_of_payment,
                 "created_by": created_by,
             },
         )

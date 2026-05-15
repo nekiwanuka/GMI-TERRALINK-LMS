@@ -717,6 +717,7 @@
                                     <div class="meta">
                                         {{ rec.payment_date|date:"M j, Y H:i" }}
                                         {% if rec.reference %}&middot; Ref: {{ rec.reference }}{% endif %}
+                                        {% if rec.proof_of_payment %}&middot; <a href="{% url 'protected_media' rec.proof_of_payment.name %}" target="_blank">Proof</a>{% endif %}
                                         {% if rec.is_full_payment %}&middot; <span class="text-success">Full</span>{% endif %}
                                     </div>
                                 </div>

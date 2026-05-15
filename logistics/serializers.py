@@ -87,5 +87,6 @@ class CargoTransitionSerializer(serializers.Serializer):
 class BillingPaymentRegisterSerializer(serializers.Serializer):
     amount = serializers.DecimalField(max_digits=12, decimal_places=2)
     method = serializers.ChoiceField(choices=BillingPayment.METHOD_CHOICES)
-    reference = serializers.CharField(required=False, allow_blank=True)
+    reference = serializers.CharField(required=True, allow_blank=False)
+    proof_of_payment = serializers.FileField(required=False, allow_null=True)
     idempotency_key = serializers.CharField(required=False, allow_blank=True)

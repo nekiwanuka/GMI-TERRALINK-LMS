@@ -32,7 +32,7 @@
   <div class="card shadow-sm mb-4">
     <div class="card-header"><strong>New payment</strong></div>
     <div class="card-body">
-      <form method="post">
+      <form method="post" enctype="multipart/form-data">
         {% csrf_token %}
         <div class="row g-3">
           <div class="col-md-6">
@@ -54,6 +54,10 @@
           <div class="col-md-3">
             <label class="form-label">Reference</label>
             {{ form.reference }}
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Proof of Payment</label>
+            {{ form.proof_of_payment }}
           </div>
           <div class="col-md-3">
             <label class="form-label">Paid at</label>
@@ -82,7 +86,7 @@
         <thead class="table-light">
           <tr>
             <th>Date</th><th>Supplier</th><th class="text-end">Amount</th>
-            <th>Method</th><th>Reference</th><th>By</th><th></th>
+            <th>Method</th><th>Reference</th><th>Proof</th><th>By</th><th></th>
           </tr>
         </thead>
         <tbody>
@@ -93,6 +97,7 @@
             <td class="text-end">{{ p.amount }} {{ p.currency }}</td>
             <td>{{ p.get_method_display }}</td>
             <td>{{ p.reference|default:"—" }}</td>
+            <td>{% if p.proof_of_payment %}<a href="{% url 'protected_media' p.proof_of_payment.name %}" target="_blank">Open</a>{% else %}—{% endif %}</td>
             <td>{{ p.created_by|default:"—" }}</td>
             <td class="text-end">
               {% if user.is_superuser or user.role in 'ADMIN,DIRECTOR' %}
@@ -101,7 +106,7 @@
             </td>
           </tr>
           {% empty %}
-          <tr><td colspan="7" class="text-muted text-center py-3">No supplier payments recorded yet.</td></tr>
+          <tr><td colspan="8" class="text-muted text-center py-3">No supplier payments recorded yet.</td></tr>
           {% endfor %}
         </tbody>
       </table>

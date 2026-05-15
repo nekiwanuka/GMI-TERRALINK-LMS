@@ -1016,7 +1016,14 @@ class PaymentTransactionForm(NormalizedTextMixin, forms.ModelForm):
 
     class Meta:
         model = PaymentTransaction
-        fields = ("amount", "payment_date", "payment_method", "reference", "notes")
+        fields = (
+            "amount",
+            "payment_date",
+            "payment_method",
+            "reference",
+            "proof_of_payment",
+            "notes",
+        )
         widgets = {
             "amount": forms.NumberInput(
                 attrs={
@@ -1033,8 +1040,10 @@ class PaymentTransactionForm(NormalizedTextMixin, forms.ModelForm):
                 attrs={
                     "class": "form-control",
                     "placeholder": "Entry Number / Reference",
+                    "required": "required",
                 }
             ),
+            "proof_of_payment": forms.FileInput(attrs={"class": "form-control"}),
             "notes": forms.Textarea(
                 attrs={
                     "class": "form-control",
@@ -1990,6 +1999,7 @@ class TransactionPaymentRecordForm(NormalizedTextMixin, forms.ModelForm):
             "payment_date",
             "payment_method",
             "reference",
+            "proof_of_payment",
             "notes",
         )
         widgets = {
@@ -2015,7 +2025,10 @@ class TransactionPaymentRecordForm(NormalizedTextMixin, forms.ModelForm):
                 attrs={"class": "form-control", "type": "datetime-local"}
             ),
             "payment_method": forms.Select(attrs={"class": "form-control"}),
-            "reference": forms.TextInput(attrs={"class": "form-control"}),
+            "reference": forms.TextInput(
+                attrs={"class": "form-control", "required": "required"}
+            ),
+            "proof_of_payment": forms.FileInput(attrs={"class": "form-control"}),
             "notes": forms.Textarea(attrs={"class": "form-control", "rows": 2}),
         }
 
@@ -2064,6 +2077,7 @@ class TransactionPaymentRecordForm(NormalizedTextMixin, forms.ModelForm):
         self.fields["change_given"].label = "Change To Return"
         self.fields["balance_after"].label = "Balance After Payment"
         self.fields["is_full_payment"].label = "Full Payment"
+        self.fields["reference"].required = True
 
     def clean(self):
         cleaned_data = super().clean()
@@ -2257,6 +2271,7 @@ class SupplierPaymentForm(NormalizedTextMixin, forms.ModelForm):
             "currency",
             "method",
             "reference",
+            "proof_of_payment",
             "paid_at",
             "notes",
         )
@@ -2268,8 +2283,13 @@ class SupplierPaymentForm(NormalizedTextMixin, forms.ModelForm):
             "currency": forms.TextInput(attrs={"class": "form-control"}),
             "method": forms.Select(attrs={"class": "form-select"}),
             "reference": forms.TextInput(
-                attrs={"class": "form-control", "placeholder": "Bank ref / receipt no."}
+                attrs={
+                    "class": "form-control",
+                    "placeholder": "Bank ref / receipt no.",
+                    "required": "required",
+                }
             ),
+            "proof_of_payment": forms.FileInput(attrs={"class": "form-control"}),
             "paid_at": forms.DateTimeInput(
                 attrs={"class": "form-control", "type": "datetime-local"}
             ),
@@ -2280,3 +2300,4 @@ class SupplierPaymentForm(NormalizedTextMixin, forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["paid_at"].input_formats = ["%Y-%m-%dT%H:%M", "%Y-%m-%d %H:%M:%S"]
+        self.fields["reference"].required = True

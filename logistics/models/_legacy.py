@@ -561,7 +561,10 @@ class PaymentTransaction(models.Model):
     payment_method = models.CharField(
         max_length=20, choices=Payment.PAYMENT_METHOD_CHOICES
     )
-    reference = models.CharField(max_length=100, blank=True)
+    reference = models.CharField(max_length=100)
+    proof_of_payment = models.FileField(
+        upload_to="payments/proofs/logistics/", blank=True, null=True
+    )
     notes = models.TextField(blank=True)
     verification_status = models.CharField(
         max_length=20, choices=VERIFICATION_CHOICES, default="pending"
@@ -2248,7 +2251,10 @@ class TransactionPaymentRecord(models.Model):
     balance_after = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     payment_date = models.DateTimeField(default=timezone.now)
     payment_method = models.CharField(max_length=20, choices=PAYMENT_METHOD_CHOICES)
-    reference = models.CharField(max_length=100, blank=True)
+    reference = models.CharField(max_length=100)
+    proof_of_payment = models.FileField(
+        upload_to="payments/proofs/trade/", blank=True, null=True
+    )
     notes = models.TextField(blank=True)
     created_by = models.ForeignKey(
         CustomUser, on_delete=models.PROTECT, related_name="sourcing_payment_records"
@@ -3272,7 +3278,10 @@ class BillingPayment(models.Model):
     )
     amount = models.DecimalField(max_digits=12, decimal_places=2)
     method = models.CharField(max_length=20, choices=METHOD_CHOICES, default="CASH")
-    reference = models.CharField(max_length=120, blank=True)
+    reference = models.CharField(max_length=120)
+    proof_of_payment = models.FileField(
+        upload_to="payments/proofs/billing/", blank=True, null=True
+    )
     idempotency_key = models.CharField(max_length=120, unique=True)
     paid_at = models.DateTimeField(default=timezone.now)
     created_by = models.ForeignKey(
@@ -3320,7 +3329,10 @@ class SupplierPayment(models.Model):
     amount = models.DecimalField(max_digits=14, decimal_places=2)
     currency = models.CharField(max_length=10, default="USD")
     method = models.CharField(max_length=10, choices=METHOD_CHOICES, default="BANK")
-    reference = models.CharField(max_length=120, blank=True)
+    reference = models.CharField(max_length=120)
+    proof_of_payment = models.FileField(
+        upload_to="payments/proofs/suppliers/", blank=True, null=True
+    )
     paid_at = models.DateTimeField(default=timezone.now)
     notes = models.TextField(blank=True)
     created_by = models.ForeignKey(

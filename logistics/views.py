@@ -245,6 +245,13 @@ def _can_record_payment_entry(user):
     )
 
 
+def _can_record_supplier_payment_entry(user):
+    return bool(
+        user.is_authenticated
+        and (user.is_superuser or getattr(user, "role", "") == "FINANCE")
+    )
+
+
 def _request_finance_payment_permission(request, *, payment_label, link=""):
     _notify_roles(
         title="Payment recording permission requested",
@@ -5267,6 +5274,7 @@ def purchase_order_list(request):
         _decorate_purchase_order_status(purchase_order)
         _decorate_purchase_order_invoice_payment(purchase_order)
         _decorate_purchase_order_edit_lock(purchase_order)
+        _decorate_purchase_order_supplier_payment(purchase_order, request.user)
 
     valid_statuses = {choice[0] for choice in PurchaseOrder.STATUS_CHOICES}
     if status_filter in valid_statuses:
@@ -5463,14 +5471,8 @@ def purchase_order_detail(request, pk):
     can_start_invoice_fulfillment = getattr(
         purchase_order, "can_start_invoice_fulfillment", False
     )
-    supplier_payments, supplier_total_paid, supplier_balance_due = _po_supplier_summary(
-        purchase_order
-    )
-    can_record_supplier_payment = (
-        not purchase_order.transaction.is_closed
-        and not purchase_order.payment_entry_locked
-        and supplier_balance_due > Decimal("0.00")
-        and not (not purchase_order.is_split and has_supplier_splits)
+    _decorate_purchase_order_supplier_payment(
+        purchase_order, request.user, has_supplier_splits=has_supplier_splits
     )
     can_split_purchase_order = (
         not purchase_order.is_split
@@ -5486,17 +5488,17 @@ def purchase_order_detail(request, pk):
             "base_po": base_po,
             "sibling_splits": sibling_splits,
             "can_start_invoice_fulfillment": can_start_invoice_fulfillment,
-            "supplier_payments": supplier_payments,
-            "supplier_total_paid": supplier_total_paid,
-            "supplier_balance_due": supplier_balance_due,
-            "can_record_supplier_payment": can_record_supplier_payment,
+            "supplier_payments": purchase_order.supplier_payment_records,
+            "supplier_total_paid": purchase_order.supplier_total_paid,
+            "supplier_balance_due": purchase_order.supplier_balance_due,
+            "can_record_supplier_payment": purchase_order.can_record_supplier_payment,
+            "can_request_supplier_payment": purchase_order.can_request_supplier_payment,
             "can_split_purchase_order": can_split_purchase_order,
             "can_manage_business_documents": _can_manage_business_documents(
                 request.user
             ),
             "has_supplier_splits": has_supplier_splits,
-            "supplier_payments_include_splits": not purchase_order.is_split
-            and has_supplier_splits,
+            "supplier_payments_include_splits": purchase_order.supplier_payments_include_splits,
         },
     )
 
@@ -7277,7 +7279,7 @@ def sourcing_payment_create(request, transaction_pk=None):
             initial["change_given"] = 0
 
     if request.method == "POST":
-        form = TransactionPaymentRecordForm(request.POST)
+        form = TransactionPaymentRecordForm(request.POST, request.FILES)
         if form.is_valid():
             record = form.save(commit=False)
             record.created_by = request.user
@@ -8425,6 +8427,42 @@ def _po_supplier_summary(purchase_order):
     return payments, total_paid, balance_due
 
 
+def _decorate_purchase_order_supplier_payment(
+    purchase_order, user=None, *, has_supplier_splits=None
+):
+    payments, total_paid, balance_due = _po_supplier_summary(purchase_order)
+    if has_supplier_splits is None:
+        has_supplier_splits = (
+            not purchase_order.is_split
+            and purchase_order.split_purchase_orders.exists()
+        )
+    payments_include_splits = not purchase_order.is_split and has_supplier_splits
+    can_attempt_payment = (
+        not purchase_order.transaction.is_closed
+        and not purchase_order.payment_entry_locked
+        and balance_due > Decimal("0.00")
+        and not payments_include_splits
+    )
+    can_record = can_attempt_payment and _can_record_supplier_payment_entry(user)
+
+    purchase_order.supplier_payment_records = payments
+    purchase_order.supplier_total_paid = total_paid
+    purchase_order.supplier_balance_due = balance_due
+    purchase_order.supplier_payments_include_splits = payments_include_splits
+    purchase_order.can_record_supplier_payment = can_record
+    purchase_order.can_request_supplier_payment = can_attempt_payment and not can_record
+    if balance_due <= Decimal("0.00") and total_paid > 0:
+        purchase_order.supplier_payment_status_label = "Paid"
+        purchase_order.supplier_payment_status_class = "bg-success"
+    elif total_paid > 0:
+        purchase_order.supplier_payment_status_label = "Partial"
+        purchase_order.supplier_payment_status_class = "bg-warning text-dark"
+    else:
+        purchase_order.supplier_payment_status_label = "Unpaid"
+        purchase_order.supplier_payment_status_class = "bg-secondary"
+    return purchase_order
+
+
 def _decorate_purchase_order_edit_lock(purchase_order):
     payments, total_paid, balance_due = _po_supplier_summary(purchase_order)
     subtotal = purchase_order.subtotal or Decimal("0.00")
@@ -8496,12 +8534,11 @@ def _decorate_purchase_order_status(purchase_order, persist=False):
 
 
 @login_required
-@role_required("ADMIN", "DIRECTOR", "FINANCE", "PROCUREMENT")
 def record_supplier_payment(request, po_pk):
     purchase_order = get_object_or_404(
         PurchaseOrder.objects.select_related("transaction"), pk=po_pk
     )
-    if not _can_record_payment_entry(request.user):
+    if not _can_record_supplier_payment_entry(request.user):
         _request_finance_payment_permission(
             request,
             payment_label=f"a supplier payment for {purchase_order.po_number}",
@@ -8540,7 +8577,7 @@ def record_supplier_payment(request, po_pk):
         return redirect("purchase_order_detail", pk=purchase_order.pk)
 
     if request.method == "POST":
-        form = SupplierPaymentForm(request.POST)
+        form = SupplierPaymentForm(request.POST, request.FILES)
         if form.is_valid():
             payment = form.save(commit=False)
             if payment.amount > balance_due:
