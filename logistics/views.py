@@ -77,6 +77,48 @@ def _extract_text_from_file(file_obj):
     return extracted.strip()
 
 
+def _structured_data_for_transaction_document(text, transaction, document_type=""):
+    structured_data = parse_purchase_inquiry(text)
+    customer = transaction.customer
+    structured_data.update(
+        {
+            "client_name": customer.name,
+            "contact_person": customer.contact_person,
+            "phone": customer.phone,
+            "email": customer.email,
+            "address": customer.address,
+            "customer_source": "transaction",
+            "source_document_type": document_type,
+        }
+    )
+    return structured_data
+
+
+def _unit_prices_from_structured_data(structured_data):
+    prices = {}
+    for item in (structured_data or {}).get("items", []):
+        if not isinstance(item, dict):
+            continue
+        name = (item.get("name") or item.get("description") or "").strip()
+        if not name:
+            continue
+        unit_price = item.get("unit_price", item.get("amount", ""))
+        total = item.get("total", "")
+        if unit_price in (None, "") and total not in (None, ""):
+            try:
+                quantity_decimal = Decimal(str(item.get("quantity") or "1"))
+                if quantity_decimal:
+                    unit_price = Decimal(str(total)) / quantity_decimal
+            except Exception:
+                unit_price = total
+        if unit_price not in (None, ""):
+            try:
+                prices[name] = float(Decimal(str(unit_price)))
+            except Exception:
+                continue
+    return prices
+
+
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.styles import getSampleStyleSheet
@@ -1048,7 +1090,7 @@ def _ensure_sourcing_entry_for_transaction(
         item_details=(
             items_to_sourcing_lines(structured_data) if structured_data else []
         ),
-        unit_prices={},
+        unit_prices=_unit_prices_from_structured_data(structured_data),
         notes=(
             build_sourcing_notes(structured_data)
             if structured_data
@@ -2828,7 +2870,7 @@ def transaction_detail(request, pk):
     documents = transaction.documents.select_related("uploaded_by").order_by(
         "-timestamp"
     )
-    pi_documents = documents.filter(document_type="CLIENT_PI")
+    pi_documents = documents.exclude(structured_data={})
     latest_invoice = transaction.final_invoices.order_by("-created_at").first()
     total_paid = (
         transaction.payment_records.aggregate(total=Sum("amount"))["total"] or 0
@@ -3011,12 +3053,12 @@ def transaction_document_upload(request, pk):
         uploaded_file = request.FILES.get("original_file")
         if uploaded_file:
             document.extracted_text = _extract_text_from_file(uploaded_file)
-        # If this is a Client PI, run the structured parser too
-        if (
-            form.cleaned_data.get("document_type") == "CLIENT_PI"
-            and document.extracted_text
-        ):
-            document.structured_data = parse_purchase_inquiry(document.extracted_text)
+        if document.extracted_text:
+            document.structured_data = _structured_data_for_transaction_document(
+                document.extracted_text,
+                transaction,
+                form.cleaned_data.get("document_type") or "",
+            )
         document.save()
         if document.extracted_text or document.structured_data:
             DocumentArchive.create_from_document(document, archived_by=request.user)
@@ -3053,32 +3095,49 @@ def transaction_document_upload(request, pk):
 @login_required
 def document_edit_pi(request, pk):
     """Allow editing the structured PI data extracted from a CLIENT_PI document."""
-    document = get_object_or_404(Document, pk=pk, document_type="CLIENT_PI")
+    document = get_object_or_404(
+        Document.objects.select_related("transaction__customer"), pk=pk
+    )
     locked_response = _locked_trade_document_response(request, document.transaction)
     if locked_response:
         return locked_response
     if request.method == "POST":
         sd = document.structured_data or {}
-        sd["client_name"] = normalize_text_entry(
-            "client_name", request.POST.get("client_name", "")
-        )
-        sd["contact_person"] = normalize_text_entry(
-            "contact_person", request.POST.get("contact_person", "")
-        )
-        sd["phone"] = request.POST.get("phone", "").strip()
-        sd["email"] = normalize_text_entry("email", request.POST.get("email", ""))
-        sd["address"] = normalize_text_entry("address", request.POST.get("address", ""))
+        customer = document.transaction.customer
+        sd["client_name"] = customer.name
+        sd["contact_person"] = customer.contact_person
+        sd["phone"] = customer.phone
+        sd["email"] = customer.email
+        sd["address"] = customer.address
+        sd["customer_source"] = "transaction"
         sd["subject"] = normalize_text_entry("subject", request.POST.get("subject", ""))
         sd["deadline"] = normalize_text_entry(
             "deadline", request.POST.get("deadline", "")
         )
-        # Items: one item name per line
+        # Items: name|quantity|unit|unit_price|total|notes, with name-only lines also accepted.
         items_text = request.POST.get("items_text", "")
-        sd["items"] = [
-            {"name": normalize_text_entry("name", line)}
-            for line in items_text.splitlines()
-            if line.strip()
-        ]
+        items = []
+        for line in items_text.splitlines():
+            if not line.strip():
+                continue
+            parts = [part.strip() for part in line.split("|")]
+            name = normalize_text_entry("name", parts[0])
+            if not name:
+                continue
+            item = {"name": name, "description": name}
+            if len(parts) >= 2 and parts[1]:
+                item["quantity"] = parts[1]
+            if len(parts) >= 3 and parts[2]:
+                item["unit"] = normalize_text_entry("unit", parts[2])
+            if len(parts) >= 4 and parts[3]:
+                item["unit_price"] = parts[3]
+                item["amount"] = parts[3]
+            if len(parts) >= 5 and parts[4]:
+                item["total"] = parts[4]
+            if len(parts) >= 6 and parts[5]:
+                item["notes"] = normalize_text_entry("notes", parts[5])
+            items.append(item)
+        sd["items"] = items
         document.structured_data = sd
         document.save(update_fields=["structured_data"])
         next_step = (request.POST.get("next_step") or "").strip()
@@ -3105,27 +3164,28 @@ def document_edit_pi(request, pk):
             )
             messages.success(
                 request,
-                "PI data updated. Optional Q-Worksheet is ready for online capture or printing.",
+                "Extracted data updated. Optional Q-Worksheet is ready for online capture or printing.",
             )
             if existing_sourcing:
                 return redirect("sourcing_update", pk=existing_sourcing.pk)
             return redirect(f"{reverse('sourcing_create')}?from_doc={document.pk}")
         if next_step == "proforma":
-            messages.success(request, "PI data updated. Opening proforma form.")
+            messages.success(request, "Extracted data updated. Opening proforma form.")
             return redirect(f"{reverse('proforma_create')}?from_doc={document.pk}")
 
-        messages.success(request, "PI data updated.")
+        messages.success(request, "Extracted data updated.")
         return redirect("transaction_detail", pk=document.transaction.pk)
     # GET — not used (form is inline on transaction_detail), redirect back
     return redirect("transaction_detail", pk=document.transaction.pk)
 
 
 def _build_sourcing_initial_from_document(pi_document):
-    """Build sourcing form initial values from an extracted PI document."""
+    """Build sourcing form initial values from an extracted document."""
     sd = pi_document.structured_data or {}
     initial = {
         "transaction": pi_document.transaction,
         "item_details": items_to_sourcing_lines(sd),
+        "unit_prices": _unit_prices_from_structured_data(sd),
         "notes": build_sourcing_notes(sd) if sd else "",
     }
     return initial
@@ -3142,13 +3202,25 @@ def _prefill_proforma_items_from_sourcing(sourcing):
         if not name:
             continue
         quantity = item.get("quantity") or "1"
-        unit_price = prices.get(name, "") if isinstance(prices, dict) else ""
+        unit_price = (
+            prices.get(name, item.get("unit_price", ""))
+            if isinstance(prices, dict)
+            else item.get("unit_price", "")
+        )
+        total = item.get("total", "")
+        if unit_price in (None, "") and total not in (None, ""):
+            try:
+                quantity_decimal = Decimal(str(quantity or "1"))
+                if quantity_decimal:
+                    unit_price = Decimal(str(total)) / quantity_decimal
+            except Exception:
+                unit_price = total
         prefill_items.append(
             {
                 "description": name,
                 "quantity": str(quantity),
-                "unit_price": unit_price,
-                "sales_price": unit_price,
+                "unit_price": unit_price if unit_price not in (None, "") else "0",
+                "sales_price": unit_price if unit_price not in (None, "") else "0",
             }
         )
     return prefill_items
@@ -3779,7 +3851,7 @@ def sourcing_update(request, pk):
     )
     generated_proforma = _generated_proforma_for_sourcing(sourcing)
     pi_document = (
-        sourcing.transaction.documents.filter(document_type="CLIENT_PI")
+        sourcing.transaction.documents.exclude(structured_data={})
         .order_by("-timestamp")
         .first()
     )
@@ -3997,7 +4069,7 @@ def sourcing_create(request):
 
     if from_doc_pk:
         pi_document = (
-            Document.objects.filter(pk=from_doc_pk, document_type="CLIENT_PI")
+            Document.objects.filter(pk=from_doc_pk)
             .select_related("transaction__customer")
             .first()
         )
@@ -4102,7 +4174,7 @@ def proforma_create(request):
 
     if from_doc_pk:
         pi_document = (
-            Document.objects.filter(pk=from_doc_pk, document_type="CLIENT_PI")
+            Document.objects.filter(pk=from_doc_pk)
             .select_related("transaction__customer")
             .first()
         )
@@ -4113,12 +4185,22 @@ def proforma_create(request):
                 for it in sd["items"]:
                     name = it.get("name") or it.get("description") or ""
                     if name:
+                        quantity = it.get("quantity") or "1"
+                        unit_price = it.get("unit_price", it.get("amount", ""))
+                        total = it.get("total", "")
+                        if unit_price in (None, "") and total not in (None, ""):
+                            try:
+                                quantity_decimal = Decimal(str(quantity or "1"))
+                                if quantity_decimal:
+                                    unit_price = Decimal(str(total)) / quantity_decimal
+                            except Exception:
+                                unit_price = total
                         prefill_items.append(
                             {
                                 "description": name,
-                                "quantity": "1",
-                                "unit_price": "",
-                                "sales_price": "",
+                                "quantity": quantity,
+                                "unit_price": unit_price if unit_price not in (None, "") else "0",
+                                "sales_price": unit_price if unit_price not in (None, "") else "0",
                             }
                         )
             initial_notes = build_sourcing_notes(sd) if sd else ""

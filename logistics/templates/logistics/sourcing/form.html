@@ -488,7 +488,7 @@
             <div class="no-print d-flex justify-content-between align-items-center mb-2">
                 <span class="text-muted small">
                     <i class="bi bi-file-earmark-text"></i>
-                    Client Purchase Inquiry
+                    Extracted Document
                     {% if transaction %} — <strong>{{ transaction.transaction_id }}</strong>{% endif %}
                 </span>
             </div>
@@ -501,7 +501,7 @@
                             <div style="font-size:0.75rem;opacity:.75;">Q-Worksheet reference workspace</div>
                         </div>
                         <div class="text-end">
-                            <div style="font-size:0.72rem;opacity:.7;">PURCHASE INQUIRY REFERENCE</div>
+                            <div style="font-size:0.72rem;opacity:.7;">DOCUMENT REFERENCE</div>
                             {% if transaction %}
                             <span class="ref-badge">{{ transaction.transaction_id }}</span>
                             {% endif %}
@@ -522,11 +522,11 @@
                     <div class="mb-3 pi-section-block">
                         <div class="pi-section-title">Client Details</div>
                         <table style="font-size:0.82rem;width:100%;">
-                            {% if sd.client_name %}<tr><td style="width:38%;color:#6c757d;padding:2px 0;">Client</td><td><strong>{{ sd.client_name }}</strong></td></tr>{% endif %}
-                            {% if sd.contact_person %}<tr><td style="color:#6c757d;padding:2px 0;">Contact</td><td>{{ sd.contact_person }}</td></tr>{% endif %}
-                            {% if sd.phone %}<tr><td style="color:#6c757d;padding:2px 0;">Phone</td><td>{{ sd.phone }}</td></tr>{% endif %}
-                            {% if sd.email %}<tr><td style="color:#6c757d;padding:2px 0;">Email</td><td>{{ sd.email }}</td></tr>{% endif %}
-                            {% if sd.address %}<tr><td style="color:#6c757d;padding:2px 0;">Address</td><td>{{ sd.address }}</td></tr>{% endif %}
+                            {% if transaction.customer.name %}<tr><td style="width:38%;color:#6c757d;padding:2px 0;">Client</td><td><strong>{{ transaction.customer.name }}</strong></td></tr>{% endif %}
+                            {% if transaction.customer.contact_person %}<tr><td style="color:#6c757d;padding:2px 0;">Contact</td><td>{{ transaction.customer.contact_person }}</td></tr>{% endif %}
+                            {% if transaction.customer.phone %}<tr><td style="color:#6c757d;padding:2px 0;">Phone</td><td>{{ transaction.customer.phone }}</td></tr>{% endif %}
+                            {% if transaction.customer.email %}<tr><td style="color:#6c757d;padding:2px 0;">Email</td><td>{{ transaction.customer.email }}</td></tr>{% endif %}
+                            {% if transaction.customer.address %}<tr><td style="color:#6c757d;padding:2px 0;">Address</td><td>{{ transaction.customer.address }}</td></tr>{% endif %}
                             {% if sd.deadline %}<tr><td style="color:#6c757d;padding:2px 0;">Deadline</td><td><strong style="color:#dc3545;">{{ sd.deadline }}</strong></td></tr>{% endif %}
                         </table>
                     </div>

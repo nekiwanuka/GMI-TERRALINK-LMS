@@ -334,11 +334,11 @@
             </div>
         </div>
 
-        <!-- STEP 2: Extracted / Structured PI Preview (Editable) -->
+        <!-- STEP 2: Extracted document preview (Editable) -->
         <div class="col-lg-6">
             <div class="card h-100 transaction-step-card">
                 <div class="transaction-step-header">
-                    <h3 class="transaction-step-title"><span class="step-number">2</span> Review PI Content</h3>
+                    <h3 class="transaction-step-title"><span class="step-number">2</span> Review Extracted Content</h3>
                     {% if pi_documents and pi_documents.first.structured_data %}
                     <span class="badge bg-white text-info" style="font-size:0.72rem;">Auto-extracted — edit if needed</span>
                     {% endif %}
@@ -349,7 +349,7 @@
                         {% if latest_pi.structured_data and latest_pi.structured_data.items %}
                             {% if trade_documents_locked and not can_edit_closed_trade_documents %}
                             <div class="alert alert-secondary mb-0 small">
-                                PI content is locked because this trade is closed. Only the Director or System Admin can edit it.
+                                Extracted content is locked because this trade is closed. Only the Director or System Admin can edit it.
                             </div>
                             {% else %}
                             {# ─── Editable structured form ─── #}
@@ -372,22 +372,22 @@
                                     </div>
                                     <div class="col-6">
                                         <label class="form-label mb-0 text-muted">Client Name</label>
-                                        <input type="text" name="client_name" class="form-control form-control-sm"
+                                             <input type="text" name="client_name" class="form-control form-control-sm bg-light" readonly
                                                value="{{ latest_pi.structured_data.client_name }}">
                                     </div>
                                     <div class="col-6">
                                         <label class="form-label mb-0 text-muted">Contact Person</label>
-                                        <input type="text" name="contact_person" class="form-control form-control-sm"
+                                             <input type="text" name="contact_person" class="form-control form-control-sm bg-light" readonly
                                                value="{{ latest_pi.structured_data.contact_person }}">
                                     </div>
                                     <div class="col-6">
                                         <label class="form-label mb-0 text-muted">Phone</label>
-                                        <input type="text" name="phone" class="form-control form-control-sm"
+                                             <input type="text" name="phone" class="form-control form-control-sm bg-light" readonly
                                                value="{{ latest_pi.structured_data.phone }}">
                                     </div>
                                     <div class="col-6">
                                         <label class="form-label mb-0 text-muted">Email</label>
-                                        <input type="email" name="email" class="form-control form-control-sm"
+                                             <input type="email" name="email" class="form-control form-control-sm bg-light" readonly
                                                value="{{ latest_pi.structured_data.email }}">
                                     </div>
                                     <div class="col-8">
@@ -403,11 +403,11 @@
                                     </div>
                                     <div class="col-12">
                                         <label class="form-label mb-0 text-muted">
-                                            Requested Items <small>(one per line)</small>
+                                            Extracted Items <small>(item|quantity|unit|unit price|total|notes)</small>
                                         </label>
                                         <textarea name="items_text" class="form-control form-control-sm"
                                                   rows="5" spellcheck="false"
-                                                  style="font-family:'Courier New',monospace;font-size:0.8rem;">{% for item in latest_pi.structured_data.items %}{{ item.name }}
+                                                  style="font-family:'Courier New',monospace;font-size:0.8rem;">{% for item in latest_pi.structured_data.items %}{{ item.name|default:item.description }}{% if item.quantity or item.unit or item.unit_price or item.total or item.notes %}|{{ item.quantity|default:'' }}|{{ item.unit|default:'' }}|{{ item.unit_price|default:'' }}|{{ item.total|default:'' }}|{{ item.notes|default:'' }}{% endif %}
 {% endfor %}</textarea>
                                     </div>
                                 </div>
@@ -419,7 +419,7 @@
                                         <i class="bi bi-table"></i> Optional Q-Worksheet
                                     </button>
                                 </div>
-                                <div class="form-text mt-1">The worksheet is optional. Use it only when supplier quote comparison is needed before the proforma.</div>
+                                <div class="form-text mt-1">Customer details come from this transaction entry. The worksheet is optional; use it only when supplier quote comparison is needed before the proforma.</div>
                             </form>
                             {% endif %}
 
