@@ -13,6 +13,7 @@ import string
 import uuid
 
 from ..constants import COUNTRY_CHOICES, CONTAINER_SIZE_CHOICES
+from ..role_permissions import PROCUREMENT_PERMISSION_ROLES
 
 
 class CustomUser(AbstractUser):
@@ -63,7 +64,7 @@ class CustomUser(AbstractUser):
 
     @property
     def is_procurement_role(self):
-        return self.role == "PROCUREMENT"
+        return self.role in {"PROCUREMENT", "OFFICE_ADMIN"}
 
 
 class Notification(models.Model):
@@ -1399,11 +1400,11 @@ class Sourcing(models.Model):
         return f"Sourcing - {self.transaction.transaction_id}"
 
     def clean(self):
-        allowed_roles = {"PROCUREMENT", "DIRECTOR", "ADMIN"}
+        allowed_roles = PROCUREMENT_PERMISSION_ROLES
         if self.created_by_id and self.created_by.role not in allowed_roles:
             raise ValidationError(
-                "Only Procurement Officer, Director or System Admin can create or "
-                "update sourcing records."
+                "Only Uganda Admin, Procurement Officer, Director or System Admin "
+                "can create or update sourcing records."
             )
 
     def save(self, *args, **kwargs):

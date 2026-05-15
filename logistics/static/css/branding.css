@@ -220,6 +220,12 @@ a:hover {
   box-shadow: 0 0 0 2px #ffffff;
 }
 
+.noticeboard-count-badge {
+  background: #dc3545 !important;
+  background-color: #dc3545 !important;
+  color: #ffffff !important;
+}
+
 .notification-menu {
   width: min(430px, 94vw);
   padding: 0;
@@ -634,6 +640,13 @@ a:hover {
 .sidebar-submenu-link.active .sidebar-count-badge {
   background: #dc3545;
   color: #ffffff;
+}
+
+.sidebar .nav-link.active .noticeboard-count-badge,
+.topbar .nav-link.active .noticeboard-count-badge {
+  background: #dc3545 !important;
+  background-color: #dc3545 !important;
+  color: #ffffff !important;
 }
 
 .sidebar-bottom-spacer {

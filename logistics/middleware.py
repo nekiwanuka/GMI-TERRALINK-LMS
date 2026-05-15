@@ -7,14 +7,7 @@ from django.contrib.auth.views import redirect_to_login
 from django.shortcuts import resolve_url
 from urllib.parse import urlsplit
 
-ROLE_ALIASES = {
-    "superuser": "ADMIN",
-    "data_entry": "OFFICE_ADMIN",
-}
-
-
-def _normalized_role(user):
-    return ROLE_ALIASES.get(getattr(user, "role", ""), getattr(user, "role", ""))
+from .role_permissions import PROCUREMENT_PERMISSION_ROLES, normalized_role
 
 
 def _normalized_path(value):
@@ -140,7 +133,7 @@ class ModuleRoleMiddleware:
         if not request.user.is_authenticated:
             return self.get_response(request)
 
-        role = _normalized_role(request.user)
+        role = normalized_role(request.user)
         path = request.path
 
         if self._is_document_read_path(request):
@@ -159,11 +152,7 @@ class ModuleRoleMiddleware:
         if request.user.is_superuser:
             return self.get_response(request)
 
-        if path.startswith("/sourcing/") and role not in {
-            "PROCUREMENT",
-            "DIRECTOR",
-            "ADMIN",
-        }:
+        if path.startswith("/sourcing/") and role not in PROCUREMENT_PERMISSION_ROLES:
             return HttpResponseForbidden(
                 "Procurement role required for sourcing module."
             )

@@ -13,7 +13,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
-    <link rel="stylesheet" href="{% static 'css/branding.css' %}?v=20260507-secure-admin-logo">
+    <link rel="stylesheet" href="{% static 'css/branding.css' %}?v=20260515-noticeboard-red-counts">
     <style>
     .dept-switcher {
         display: inline-flex;
@@ -205,7 +205,7 @@
                         <li class="nav-item d-none d-lg-block">
                             <a class="nav-link {% if request.resolver_match.url_name == 'noticeboard' %}active{% endif %}" href="{% url 'noticeboard' %}">
                                 <i class="bi bi-clipboard2-pulse me-1"></i>Noticeboard
-                                {% if shell_notifications_unread_count %}<span class="badge rounded-pill text-bg-danger ms-1">{{ shell_notifications_unread_count }}</span>{% endif %}
+                                {% if shell_notifications_unread_count %}<span class="badge rounded-pill noticeboard-count-badge ms-1">{{ shell_notifications_unread_count }}</span>{% endif %}
                             </a>
                         </li>
 
@@ -330,7 +330,7 @@
                     <li class="nav-item">
                         <a class="nav-link {% if request.resolver_match.url_name == 'noticeboard' %}active{% endif %}" href="{% url 'noticeboard' %}" data-bs-toggle="tooltip" data-bs-placement="right" title="Noticeboard and alerts">
                             <i class="bi bi-clipboard2-pulse-fill"></i> Noticeboard
-                            {% if shell_notifications_unread_count %}<span class="sidebar-count-badge ms-auto">{{ shell_notifications_unread_count }}</span>{% endif %}
+                            {% if shell_notifications_unread_count %}<span class="sidebar-count-badge noticeboard-count-badge ms-auto">{{ shell_notifications_unread_count }}</span>{% endif %}
                         </a>
                     </li>
 
@@ -430,7 +430,7 @@
                             {% if shell_module_notification_counts.documents %}<span class="sidebar-count-badge ms-auto">{{ shell_module_notification_counts.documents }}</span>{% endif %}
                         </a>
                     </li>
-                    {% if user.is_superuser or user.role == 'ADMIN' or user.role == 'DIRECTOR' or user.role == 'PROCUREMENT' %}
+                    {% if user.is_superuser or user.role == 'ADMIN' or user.role == 'DIRECTOR' or user.role == 'PROCUREMENT' or user.role == 'OFFICE_ADMIN' %}
                     <li class="nav-item">
                         <a class="nav-link {% if 'sourcing' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'sourcing_list' %}" data-bs-toggle="tooltip" data-bs-placement="right" title="Manual or document-based supplier quote worksheets attached to customer entries">
                             <i class="bi bi-table"></i> Q-Worksheets
@@ -438,7 +438,7 @@
                         </a>
                     </li>
                     {% endif %}
-                    {% if user.is_superuser or user.role in 'ADMIN,DIRECTOR,PROCUREMENT' %}
+                    {% if user.is_superuser or user.role == 'ADMIN' or user.role == 'DIRECTOR' or user.role == 'PROCUREMENT' or user.role == 'OFFICE_ADMIN' %}
                     <li class="nav-item">
                         <a class="nav-link {% if 'supplier' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'supplier_list' %}" data-bs-toggle="tooltip" data-bs-placement="right" title="Supplier records and product sourcing">
                             <i class="bi bi-building-fill"></i> Suppliers
@@ -490,7 +490,7 @@
                         </a>
                     </li>
                     {% endif %}
-                    {% if user.is_superuser or user.role in 'ADMIN,DIRECTOR,PROCUREMENT' %}
+                    {% if user.is_superuser or user.role == 'ADMIN' or user.role == 'DIRECTOR' or user.role == 'PROCUREMENT' or user.role == 'OFFICE_ADMIN' %}
                     <li class="nav-item">
                         <a class="nav-link {% if 'inventory' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'inventory_list' %}" data-bs-toggle="tooltip" data-bs-placement="right" title="Warehouse stock and storage tracking">
                             <i class="bi bi-boxes"></i> Warehouse

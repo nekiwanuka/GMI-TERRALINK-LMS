@@ -115,6 +115,12 @@ from .decorators import (
     procurement_required,
     role_required,
 )
+from .role_permissions import (
+    PROCUREMENT_PERMISSION_ROLES,
+    PROCUREMENT_STAFF_ROLES,
+    expand_allowed_roles,
+    role_has_procurement_permissions,
+)
 from .document_numbers import (
     display_document_number,
     display_document_slug,
@@ -238,7 +244,9 @@ def _text_search_q(field_name, value):
 
 
 def _notify_roles(*, title, message, link="", category="system", roles=None):
-    roles = roles or ["ADMIN", "DIRECTOR", "FINANCE", "PROCUREMENT"]
+    roles = expand_allowed_roles(
+        roles or ["ADMIN", "DIRECTOR", "FINANCE", "PROCUREMENT"]
+    )
     recipients = CustomUser.objects.filter(is_active=True).filter(
         Q(is_superuser=True) | Q(role__in=roles)
     )
@@ -371,7 +379,7 @@ def _user_default_lane(user):
     role = getattr(user, "role", "")
     if getattr(user, "is_superuser", False) or role in {"ADMIN", "DIRECTOR", "FINANCE"}:
         return "all"
-    if role == "PROCUREMENT":
+    if role in PROCUREMENT_STAFF_ROLES:
         return "sourcing"
     return "logistics"
 
@@ -459,12 +467,9 @@ def _can_edit_closed_trade_documents(user):
 
 
 def _can_manage_business_documents(user):
-    return user.is_superuser or getattr(user, "role", "") in {
-        "ADMIN",
-        "DIRECTOR",
-        "FINANCE",
-        "PROCUREMENT",
-    }
+    return (
+        role_has_procurement_permissions(user) or getattr(user, "role", "") == "FINANCE"
+    )
 
 
 def _closed_trade_edit_reason(request):
@@ -968,13 +973,13 @@ def _resolve_sourcing_owner(preferred_user=None):
         and preferred_user.is_active
         and (
             preferred_user.is_superuser
-            or preferred_user.role in {"PROCUREMENT", "DIRECTOR", "ADMIN"}
+            or preferred_user.role in PROCUREMENT_PERMISSION_ROLES
         )
     ):
         return preferred_user
     return (
         CustomUser.objects.filter(is_active=True)
-        .filter(Q(is_superuser=True) | Q(role__in=["PROCUREMENT", "DIRECTOR", "ADMIN"]))
+        .filter(Q(is_superuser=True) | Q(role__in=PROCUREMENT_PERMISSION_ROLES))
         .order_by("is_superuser", "id")
         .first()
     )
@@ -1386,13 +1391,8 @@ def loading_create(request):
             )
             can_manage_commercial_flow = (
                 request.user.is_superuser
-                or request.user.role
-                in {
-                    "ADMIN",
-                    "DIRECTOR",
-                    "FINANCE",
-                    "PROCUREMENT",
-                }
+                or request.user.role == "FINANCE"
+                or role_has_procurement_permissions(request.user)
             )
             if can_manage_commercial_flow:
                 return redirect("proforma_update", pk=proforma.id)
@@ -1522,12 +1522,11 @@ def loading_start_flow(request, pk):
             request,
             f"Quotation / Proforma draft {display_document_number(proforma, 'PI')} was generated for cargo {loading.loading_id}.",
         )
-    can_manage_commercial_flow = request.user.is_superuser or request.user.role in {
-        "ADMIN",
-        "DIRECTOR",
-        "FINANCE",
-        "PROCUREMENT",
-    }
+    can_manage_commercial_flow = (
+        request.user.is_superuser
+        or request.user.role == "FINANCE"
+        or role_has_procurement_permissions(request.user)
+    )
     if not can_manage_commercial_flow:
         messages.warning(
             request,

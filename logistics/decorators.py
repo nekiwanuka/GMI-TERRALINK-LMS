@@ -5,14 +5,7 @@ from functools import wraps
 from django.contrib import messages
 from django.shortcuts import redirect
 
-ROLE_ALIASES = {
-    "superuser": "ADMIN",
-    "data_entry": "OFFICE_ADMIN",
-}
-
-
-def _normalized_role(user):
-    return ROLE_ALIASES.get(getattr(user, "role", ""), getattr(user, "role", ""))
+from .role_permissions import role_in_allowed_roles
 
 
 def role_required(*allowed_roles):
@@ -26,7 +19,7 @@ def role_required(*allowed_roles):
                 return redirect("login")
             if user.is_superuser:
                 return view_func(request, *args, **kwargs)
-            if _normalized_role(user) not in allowed_roles:
+            if not role_in_allowed_roles(user, allowed_roles):
                 messages.error(
                     request, "You do not have permission to access this module."
                 )
