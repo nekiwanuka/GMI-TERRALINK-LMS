@@ -5666,11 +5666,12 @@ def _count_collection(value):
 
 
 @login_required
-@director_required
+@role_required("DIRECTOR", "FINANCE", "ADMIN")
 def reports_dashboard(request):
     can_view_financial_totals = request.user.is_superuser or request.user.role in {
         "ADMIN",
         "DIRECTOR",
+        "FINANCE",
     }
     totals = (
         DirectorReportingService.financial_totals()
@@ -6618,9 +6619,9 @@ def log_audit(model_type, action, object_id, object_str, user, changes=None):
 
 
 @login_required
-@director_required
+@role_required("DIRECTOR", "FINANCE", "ADMIN")
 def director_finance_summary(request):
-    """Director-only finance summary rendered as an executive UI."""
+    """Executive finance summary across lanes."""
     from .models import Commission
 
     def section_page(items, page_param, per_page):

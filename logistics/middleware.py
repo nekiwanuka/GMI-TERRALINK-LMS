@@ -175,7 +175,11 @@ class ModuleRoleMiddleware:
         }:
             return HttpResponseForbidden("Finance role required for finance module.")
 
-        if path.startswith("/reports/") and role not in {"DIRECTOR", "ADMIN"}:
+        if path.startswith("/reports/") and role not in {
+            "DIRECTOR",
+            "FINANCE",
+            "ADMIN",
+        }:
             return HttpResponseForbidden("Director role required for reports module.")
 
         if path in {"/login/", "/logout/"}:

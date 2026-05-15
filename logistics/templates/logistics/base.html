@@ -504,7 +504,7 @@
                     {% endif %}
                     {% endif %}
 
-                    {% if user.is_superuser or user.role in 'ADMIN,DIRECTOR' %}
+                    {% if user.is_superuser or user.role in 'ADMIN,DIRECTOR,FINANCE' %}
                     <li class="sidebar-section-label"><i class="bi bi-bar-chart-line-fill"></i> Executive</li>
                     <li class="nav-item">
                         <a class="nav-link {% if 'report' in request.resolver_match.url_name and request.resolver_match.url_name != 'director_finance_summary' %}active{% endif %}" href="{% url 'reports_dashboard' %}" data-bs-toggle="tooltip" data-bs-placement="right" title="Revenue, activity and performance analytics">
@@ -513,15 +513,17 @@
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link {% if request.resolver_match.url_name == 'director_finance_summary' %}active{% endif %}" href="{% url 'director_finance_summary' %}" data-bs-toggle="tooltip" data-bs-placement="right" title="Director-level finance summary across lanes">
+                        <a class="nav-link {% if request.resolver_match.url_name == 'director_finance_summary' %}active{% endif %}" href="{% url 'director_finance_summary' %}" data-bs-toggle="tooltip" data-bs-placement="right" title="Executive finance summary across lanes">
                             <i class="bi bi-bank"></i> Finance Summary
                         </a>
                     </li>
+                    {% if user.is_superuser or user.role in 'ADMIN,DIRECTOR' %}
                     <li class="nav-item">
                         <a class="nav-link {% if 'commission' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'commission_list' %}" data-bs-toggle="tooltip" data-bs-placement="right" title="Commissions earned ledger (Director / Admin only)">
                             <i class="bi bi-cash-coin"></i> Commissions
                         </a>
                     </li>
+                    {% endif %}
                     {% endif %}
 
                     {% if user.is_superuser or user.role == 'ADMIN' %}

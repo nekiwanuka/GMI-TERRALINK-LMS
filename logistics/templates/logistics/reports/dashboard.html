@@ -305,7 +305,9 @@
         </div>
         <div class="reports-actions">
             <a href="{% url 'director_finance_summary' %}" class="btn btn-sm btn-dark"><i class="bi bi-bank me-1"></i>Finance summary</a>
+            {% if user.is_superuser or user.role in 'ADMIN,DIRECTOR' %}
             <a href="{% url 'commission_list' %}" class="btn btn-sm btn-outline-dark"><i class="bi bi-cash-coin me-1"></i>Commissions</a>
+            {% endif %}
         </div>
     </header>
 
