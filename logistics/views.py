@@ -173,6 +173,22 @@ def _prevent_stale_pdf_cache(response):
     return response
 
 
+def csrf_failure(request, reason=""):
+    target = request.POST.get("next") or request.META.get("HTTP_REFERER") or "/"
+    if not url_has_allowed_host_and_scheme(
+        target,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ) and not (target.startswith("/") and not target.startswith("//")):
+        target = "/"
+    messages.error(
+        request,
+        "Your security token expired or changed. Please refresh the page and try again.",
+        fail_silently=True,
+    )
+    return redirect(target)
+
+
 PDF_BRAND_BLACK = colors.HexColor("#1A1A1A")
 PDF_BRAND_GOLD = colors.HexColor("#D4AF37")
 PDF_BRAND_GREY = colors.HexColor("#666666")

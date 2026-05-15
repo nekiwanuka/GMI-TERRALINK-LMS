@@ -211,8 +211,8 @@ a:hover {
   height: 1.1rem;
   padding: 0 0.28rem;
   border-radius: 999px;
-  background: #262626;
-  color: #f7d766;
+  background: #dc3545;
+  color: #ffffff;
   font-size: 0.68rem;
   font-weight: 800;
   line-height: 1.1rem;
@@ -605,8 +605,8 @@ a:hover {
   height: 1.42rem;
   padding: 0 0.4rem;
   border-radius: 999px;
-  background: #e8e2d2;
-  color: #4b444f;
+  background: #dc3545;
+  color: #ffffff;
   font-size: 0.7rem;
   font-weight: 800;
   line-height: 1.42rem;
@@ -632,8 +632,8 @@ a:hover {
 }
 
 .sidebar-submenu-link.active .sidebar-count-badge {
-  background: #d4af37;
-  color: #1f1c22;
+  background: #dc3545;
+  color: #ffffff;
 }
 
 .sidebar-bottom-spacer {

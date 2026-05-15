@@ -34,6 +34,7 @@ if not SECRET_KEY:
 
 ALLOWED_HOSTS = _csv_env("ALLOWED_HOSTS", "127.0.0.1,localhost,0.0.0.0")
 CSRF_TRUSTED_ORIGINS = _csv_env("CSRF_TRUSTED_ORIGINS")
+CSRF_FAILURE_VIEW = "logistics.views.csrf_failure"
 
 # Application definition
 INSTALLED_APPS = [
