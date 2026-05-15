@@ -17,6 +17,74 @@ def _normalized_role(user):
     return ROLE_ALIASES.get(getattr(user, "role", ""), getattr(user, "role", ""))
 
 
+def _normalized_path(value):
+    path = urlsplit(value or "").path or "/"
+    if path != "/":
+        path = path.rstrip("/")
+    return path
+
+
+def _record_key(path):
+    segments = [segment for segment in _normalized_path(path).split("/") if segment]
+    record_segments = {
+        "clients",
+        "container-returns",
+        "documents",
+        "final",
+        "fulfillment",
+        "inventory",
+        "loadings",
+        "payments",
+        "pod",
+        "proformas",
+        "purchase-orders",
+        "receipts",
+        "sourcing",
+        "supplier-payments",
+        "suppliers",
+        "transactions",
+        "transit",
+    }
+    for index, segment in enumerate(segments[:-1]):
+        if segment in record_segments and segments[index + 1].isdigit():
+            return segment, segments[index + 1]
+    return None
+
+
+def _paths_match_notification_target(notification_link, current_path):
+    link_path = _normalized_path(notification_link)
+    current_path = _normalized_path(current_path)
+    if link_path == current_path:
+        return True
+    if current_path.startswith(f"{link_path}/"):
+        return True
+    link_key = _record_key(link_path)
+    current_key = _record_key(current_path)
+    return bool(link_key and link_key == current_key)
+
+
+class FreshAuthenticatedPageMiddleware:
+    """Prevent stale authenticated HTML screens from being reused by browsers."""
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        response = self.get_response(request)
+        if not getattr(request, "user", None) or not request.user.is_authenticated:
+            return response
+        if request.method not in {"GET", "HEAD"}:
+            return response
+        if request.path.startswith(("/static/", "/media/")):
+            return response
+        if "text/html" not in response.get("Content-Type", ""):
+            return response
+        response["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        response["Pragma"] = "no-cache"
+        response["Expires"] = "0"
+        return response
+
+
 class AuthenticationRequiredMiddleware:
     """Require login for every app endpoint except explicitly public routes."""
 
@@ -135,7 +203,10 @@ class NotificationTargetReadMiddleware:
             link_full_path = link_path
             if link_parts.query:
                 link_full_path = f"{link_path}?{link_parts.query}"
-            if link_path == current_path or link_full_path == current_full_path:
+            if (
+                link_full_path == current_full_path
+                or _paths_match_notification_target(link_path, current_path)
+            ):
                 ids_to_mark.append(notification.id)
         if ids_to_mark:
             Notification.objects.filter(id__in=ids_to_mark).update(is_read=True)
