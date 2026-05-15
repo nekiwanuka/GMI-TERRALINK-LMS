@@ -2,6 +2,16 @@
 
 {% block title %}Noticeboard - GMI TERRALINK{% endblock %}
 
+{% block extra_css %}
+<style>
+.noticeboard-new-badge {
+    background: #fff5f5;
+    border: 1px solid #dc3545;
+    color: #dc3545;
+}
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="container-fluid">
     <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-4">
@@ -136,7 +146,7 @@
                         <div class="fw-semibold">
                             {% if notification.category == 'invoice' %}<i class="bi bi-receipt-cutoff text-primary me-1"></i>{% elif notification.category == 'document' %}<i class="bi bi-folder-symlink text-primary me-1"></i>{% else %}<i class="bi bi-bell text-primary me-1"></i>{% endif %}
                             {{ notification.title }}
-                            {% if not notification.is_read %}<span class="badge text-bg-primary ms-2">New</span>{% endif %}
+                            {% if not notification.is_read %}<span class="badge noticeboard-new-badge ms-2">New</span>{% endif %}
                         </div>
                         <div class="text-muted mt-1">{{ notification.message }}</div>
                     </div>

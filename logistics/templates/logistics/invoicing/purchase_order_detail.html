@@ -34,6 +34,20 @@
     border-radius: 0;
     font-weight: 700;
 }
+.po-header-muted-action,
+.po-header-muted-action.disabled,
+.po-header-muted-action:disabled {
+    border-color: rgba(255, 253, 246, 0.68) !important;
+    color: #fffdf6 !important;
+    opacity: 1 !important;
+}
+.po-header-success-action,
+.po-header-success-action.disabled,
+.po-header-success-action:disabled {
+    border-color: rgba(216, 244, 224, 0.82) !important;
+    color: #d8f4e0 !important;
+    opacity: 1 !important;
+}
 .po-metadata {
     font-size: .86rem;
     line-height: 1.7;
@@ -309,9 +323,9 @@
                                                                         {% elif can_request_supplier_payment %}
                                     <a href="{% url 'record_supplier_payment' purchase_order.pk %}" class="btn btn-sm btn-outline-primary"><i class="bi bi-shield-check"></i> Request Finance Payment</a>
                                     {% elif has_supplier_splits and not purchase_order.is_split %}
-                                    <span class="btn btn-sm btn-outline-secondary disabled"><i class="bi bi-diagram-3"></i> Pay Split POs</span>
+                                    <span class="btn btn-sm po-header-muted-action disabled"><i class="bi bi-diagram-3"></i> Pay Split POs</span>
                                     {% elif supplier_balance_due <= 0 %}
-                                    <span class="btn btn-sm btn-outline-success disabled"><i class="bi bi-check2-circle"></i> Fully paid</span>
+                                    <span class="btn btn-sm po-header-success-action disabled"><i class="bi bi-check2-circle"></i> Fully paid</span>
                   {% else %}
                   <span class="badge bg-secondary">Trade closed</span>
                   {% endif %}
