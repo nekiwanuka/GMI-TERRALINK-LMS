@@ -192,7 +192,7 @@
             <small class="text-muted">{{ purchase_order.po_number }} - {{ purchase_order.transaction.transaction_id }}</small>
         </div>
         <div class="d-flex gap-2">
-            {% if can_manage_business_documents and purchase_order.can_edit_purchase_order %}
+            {% if can_edit_business_documents and purchase_order.can_edit_purchase_order %}
             <a href="{% url 'purchase_order_update' purchase_order.pk %}" class="btn btn-outline-dark">Edit PO</a>
             {% elif can_manage_business_documents %}
             <span class="btn btn-outline-secondary disabled"><i class="bi bi-lock-fill"></i> Locked</span>

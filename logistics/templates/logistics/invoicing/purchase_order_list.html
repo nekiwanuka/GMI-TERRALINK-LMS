@@ -416,7 +416,7 @@
                                 <a href="{% url 'purchase_order_detail' po.pk %}" class="btn btn-sm btn-outline-dark">
                                     <i class="bi bi-eye me-1"></i>Open
                                 </a>
-                                {% if can_manage_business_documents and po.can_edit_purchase_order %}
+                                {% if can_edit_business_documents and po.can_edit_purchase_order %}
                                 <a href="{% url 'purchase_order_update' po.pk %}" class="btn btn-sm btn-outline-secondary">
                                     <i class="bi bi-pencil me-1"></i>Edit
                                 </a>

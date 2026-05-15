@@ -226,6 +226,13 @@ a:hover {
   color: #ffffff !important;
 }
 
+.noticeboard-top-count-badge {
+  background: #ffffff !important;
+  background-color: #ffffff !important;
+  border: 1px solid #198754 !important;
+  color: #198754 !important;
+}
+
 .notification-menu {
   width: min(430px, 94vw);
   padding: 0;
@@ -647,6 +654,13 @@ a:hover {
   background: #dc3545 !important;
   background-color: #dc3545 !important;
   color: #ffffff !important;
+}
+
+.topbar .nav-link.active .noticeboard-top-count-badge {
+  background: #ffffff !important;
+  background-color: #ffffff !important;
+  border-color: #198754 !important;
+  color: #198754 !important;
 }
 
 .sidebar-bottom-spacer {

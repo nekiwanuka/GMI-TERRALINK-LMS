@@ -43,7 +43,7 @@
                         <td>
                             <a class="btn btn-sm btn-outline-dark" href="{% if inv.loading %}{% url 'logistics_final_invoice_detail' inv.id %}{% else %}{% url 'sourcing_final_invoice_detail' inv.id %}{% endif %}">Open</a>
                             <a class="btn btn-sm btn-outline-primary" href="{% if inv.loading %}{% url 'logistics_final_invoice_html_preview' inv.id %}{% else %}{% url 'sourcing_final_invoice_html_preview' inv.id %}{% endif %}?download=1" target="_blank">PDF</a>
-                            {% if can_manage_business_documents and inv.can_edit_invoice %}
+                            {% if can_edit_business_documents and inv.can_edit_invoice %}
                             <a class="btn btn-sm btn-warning" href="{% if inv.loading %}{% url 'logistics_final_invoice_update' inv.id %}{% else %}{% url 'sourcing_final_invoice_update' inv.id %}{% endif %}">Edit</a>
                             {% elif can_manage_business_documents %}
                             <button type="button" class="btn btn-sm btn-outline-secondary" disabled title="Invoice has payment(s) and is locked from editing.">Locked</button>

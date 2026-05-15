@@ -295,6 +295,23 @@ def _request_finance_payment_permission(request, *, payment_label, link=""):
     )
 
 
+def _request_director_edit_permission(request, *, edit_label, link=""):
+    _notify_roles(
+        title="Edit permission requested",
+        message=(
+            f"{request.user.get_full_name() or request.user.username} needs Director approval "
+            f"to edit {edit_label}."
+        ),
+        link=link or request.META.get("HTTP_REFERER", ""),
+        category="system",
+        roles=["ADMIN", "DIRECTOR"],
+    )
+    messages.info(
+        request,
+        "Editing this record requires Director approval. A permission request has been sent to the Director.",
+    )
+
+
 def _redirect_back(request, default="dashboard"):
     """Redirect to the referring page when possible, else use a safe fallback."""
     target = request.META.get("HTTP_REFERER")
@@ -466,10 +483,30 @@ def _can_edit_closed_trade_documents(user):
     return user.is_superuser or getattr(user, "role", "") in {"ADMIN", "DIRECTOR"}
 
 
+def _can_directly_edit_business_documents(user):
+    return user.is_superuser or getattr(user, "role", "") in {
+        "ADMIN",
+        "DIRECTOR",
+        "FINANCE",
+        "PROCUREMENT",
+    }
+
+
 def _can_manage_business_documents(user):
     return (
         role_has_procurement_permissions(user) or getattr(user, "role", "") == "FINANCE"
     )
+
+
+def _guard_business_document_edit_permission(
+    request, *, edit_label, link="", redirect_url=None
+):
+    if _can_directly_edit_business_documents(request.user):
+        return None
+    _request_director_edit_permission(request, edit_label=edit_label, link=link)
+    if redirect_url:
+        return redirect(redirect_url)
+    return _redirect_back(request)
 
 
 def _closed_trade_edit_reason(request):
@@ -3351,7 +3388,7 @@ def fulfillment_order_create(request, transaction_pk):
 
 
 @login_required
-@role_required("PROCUREMENT", "DIRECTOR", "FINANCE", "ADMIN")
+@role_required("PROCUREMENT", "OFFICE_ADMIN", "DIRECTOR", "FINANCE", "ADMIN")
 def fulfillment_list(request):
     lane = _resolve_lane(request)
     orders = _apply_fulfillment_lane(
@@ -4031,12 +4068,15 @@ def proforma_list(request):
             "can_manage_business_documents": _can_manage_business_documents(
                 request.user
             ),
+            "can_edit_business_documents": _can_directly_edit_business_documents(
+                request.user
+            ),
         },
     )
 
 
 @login_required
-@role_required("PROCUREMENT", "FINANCE", "DIRECTOR", "ADMIN")
+@role_required("PROCUREMENT", "OFFICE_ADMIN", "FINANCE", "DIRECTOR", "ADMIN")
 def proforma_create(request):
     """Single simple entry form for sourcing agents to create proforma invoices."""
     from decimal import Decimal, InvalidOperation
@@ -4261,6 +4301,9 @@ def proforma_detail(request, pk):
             "can_manage_business_documents": _can_manage_business_documents(
                 request.user
             ),
+            "can_edit_business_documents": _can_directly_edit_business_documents(
+                request.user
+            ),
         },
     )
 
@@ -4281,7 +4324,7 @@ def proforma_sign(request, pk):
 
 
 @login_required
-@role_required("PROCUREMENT", "FINANCE", "DIRECTOR", "ADMIN")
+@role_required("PROCUREMENT", "OFFICE_ADMIN", "FINANCE", "DIRECTOR", "ADMIN")
 def proforma_update(request, pk):
     """Edit a draft proforma invoice using the same simplified entry template."""
     from decimal import Decimal, InvalidOperation
@@ -4293,6 +4336,18 @@ def proforma_update(request, pk):
     )
     if canonical and request.method != "POST":
         return canonical
+    edit_guard = _guard_business_document_edit_permission(
+        request,
+        edit_label=f"proforma {display_document_number(proforma, 'PI')}",
+        link=reverse(
+            _proforma_route_name(proforma, "update"), kwargs={"pk": proforma.pk}
+        ),
+        redirect_url=reverse(
+            _proforma_route_name(proforma, "detail"), kwargs={"pk": proforma.pk}
+        ),
+    )
+    if edit_guard:
+        return edit_guard
     locked_response = _locked_trade_document_response(request, proforma.transaction)
     if locked_response:
         return locked_response
@@ -4395,7 +4450,7 @@ def proforma_update(request, pk):
 
 
 @login_required
-@role_required("PROCUREMENT", "FINANCE", "DIRECTOR", "ADMIN")
+@role_required("PROCUREMENT", "OFFICE_ADMIN", "FINANCE", "DIRECTOR", "ADMIN")
 def proforma_confirm(request, pk):
     """Confirm a proforma and convert it into a client-facing invoice."""
     from decimal import Decimal
@@ -4684,6 +4739,9 @@ def final_invoice_list(request):
             "can_manage_business_documents": _can_manage_business_documents(
                 request.user
             ),
+            "can_edit_business_documents": _can_directly_edit_business_documents(
+                request.user
+            ),
         },
     )
 
@@ -4777,7 +4835,7 @@ def final_invoice_sign(request, pk):
 
 
 @login_required
-@role_required("PROCUREMENT", "FINANCE", "DIRECTOR", "ADMIN")
+@role_required("PROCUREMENT", "OFFICE_ADMIN", "FINANCE", "DIRECTOR", "ADMIN")
 def final_invoice_create(request):
     if request.method == "POST":
         from decimal import Decimal, InvalidOperation
@@ -4880,7 +4938,7 @@ def final_invoice_create(request):
 
 
 @login_required
-@role_required("PROCUREMENT", "FINANCE", "DIRECTOR", "ADMIN")
+@role_required("PROCUREMENT", "OFFICE_ADMIN", "FINANCE", "DIRECTOR", "ADMIN")
 def final_invoice_update(request, pk):
     invoice = get_object_or_404(FinalInvoice, pk=pk)
     canonical = _canonical_route_redirect(
@@ -4888,6 +4946,18 @@ def final_invoice_update(request, pk):
     )
     if canonical and request.method != "POST":
         return canonical
+    edit_guard = _guard_business_document_edit_permission(
+        request,
+        edit_label=f"final invoice {display_document_number(invoice, 'FI')}",
+        link=reverse(
+            _final_invoice_route_name(invoice, "update"), kwargs={"pk": invoice.pk}
+        ),
+        redirect_url=reverse(
+            _final_invoice_route_name(invoice, "detail"), kwargs={"pk": invoice.pk}
+        ),
+    )
+    if edit_guard:
+        return edit_guard
     locked_response = _locked_trade_document_response(request, invoice.transaction)
     if locked_response:
         return locked_response
@@ -5069,7 +5139,7 @@ def _ensure_purchase_order_for_transaction(transaction, user, invoice=None):
 
 
 @login_required
-@role_required("PROCUREMENT", "FINANCE", "DIRECTOR", "ADMIN")
+@role_required("PROCUREMENT", "OFFICE_ADMIN", "FINANCE", "DIRECTOR", "ADMIN")
 def final_invoice_generate_purchase_order(request, pk):
     """Generate a base purchase order once invoice item funds are covered."""
     invoice = get_object_or_404(
@@ -5154,7 +5224,7 @@ def _parse_purchase_order_items(post_data):
 
 
 @login_required
-@role_required("PROCUREMENT", "FINANCE", "DIRECTOR", "ADMIN")
+@role_required("PROCUREMENT", "OFFICE_ADMIN", "FINANCE", "DIRECTOR", "ADMIN")
 def purchase_order_split_create(request, pk):
     """Create a supplier split purchase order linked to the same invoice details."""
     purchase_order = get_object_or_404(
@@ -5357,12 +5427,15 @@ def purchase_order_list(request):
             "can_manage_business_documents": _can_manage_business_documents(
                 request.user
             ),
+            "can_edit_business_documents": _can_directly_edit_business_documents(
+                request.user
+            ),
         },
     )
 
 
 @login_required
-@role_required("PROCUREMENT", "FINANCE", "DIRECTOR", "ADMIN")
+@role_required("PROCUREMENT", "OFFICE_ADMIN", "FINANCE", "DIRECTOR", "ADMIN")
 def purchase_order_update(request, pk):
     """Edit a base or split PO so each supplier version can be tailored independently."""
     purchase_order = get_object_or_404(
@@ -5377,6 +5450,14 @@ def purchase_order_update(request, pk):
     )
     _decorate_purchase_order_status(purchase_order)
     _decorate_purchase_order_edit_lock(purchase_order)
+    edit_guard = _guard_business_document_edit_permission(
+        request,
+        edit_label=f"purchase order {purchase_order.po_number}",
+        link=reverse("purchase_order_update", kwargs={"pk": purchase_order.pk}),
+        redirect_url=reverse("purchase_order_detail", kwargs={"pk": purchase_order.pk}),
+    )
+    if edit_guard:
+        return edit_guard
     if purchase_order.edit_locked:
         messages.error(request, purchase_order.edit_lock_message)
         return redirect("purchase_order_detail", pk=purchase_order.pk)
@@ -5514,6 +5595,9 @@ def purchase_order_detail(request, pk):
             "can_manage_business_documents": _can_manage_business_documents(
                 request.user
             ),
+            "can_edit_business_documents": _can_directly_edit_business_documents(
+                request.user
+            ),
             "has_supplier_splits": has_supplier_splits,
             "supplier_payments_include_splits": purchase_order.supplier_payments_include_splits,
         },
@@ -5521,7 +5605,7 @@ def purchase_order_detail(request, pk):
 
 
 @login_required
-@role_required("PROCUREMENT", "FINANCE", "DIRECTOR", "ADMIN")
+@role_required("PROCUREMENT", "OFFICE_ADMIN", "FINANCE", "DIRECTOR", "ADMIN")
 def purchase_order_correction_request(request, pk):
     purchase_order = get_object_or_404(
         PurchaseOrder.objects.select_related(
@@ -7766,7 +7850,7 @@ def record_logistics_pod(request, loading_pk):
 
 
 @login_required
-@role_required("ADMIN", "DIRECTOR", "FINANCE", "PROCUREMENT")
+@role_required("ADMIN", "DIRECTOR", "FINANCE", "PROCUREMENT", "OFFICE_ADMIN")
 def record_trading_pod(request, fulfillment_pk):
     """Capture POD for a FulfillmentOrder (sourcing / trading lane)."""
     fulfillment = get_object_or_404(FulfillmentOrder, pk=fulfillment_pk)
@@ -8752,7 +8836,7 @@ def record_supplier_payment(request, po_pk):
 
 
 @login_required
-@role_required("ADMIN", "DIRECTOR", "FINANCE", "PROCUREMENT")
+@role_required("ADMIN", "DIRECTOR", "FINANCE", "PROCUREMENT", "OFFICE_ADMIN")
 def supplier_payment_list(request):
     qs = SupplierPayment.objects.select_related(
         "purchase_order__transaction__customer", "created_by"

@@ -40,4 +40,4 @@ def director_required(view_func):
 
 
 def procurement_required(view_func):
-    return role_required("PROCUREMENT", "DIRECTOR", "ADMIN")(view_func)
+    return role_required("PROCUREMENT", "OFFICE_ADMIN", "DIRECTOR", "ADMIN")(view_func)

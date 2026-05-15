@@ -205,7 +205,7 @@
                         <li class="nav-item d-none d-lg-block">
                             <a class="nav-link {% if request.resolver_match.url_name == 'noticeboard' %}active{% endif %}" href="{% url 'noticeboard' %}">
                                 <i class="bi bi-clipboard2-pulse me-1"></i>Noticeboard
-                                {% if shell_notifications_unread_count %}<span class="badge rounded-pill noticeboard-count-badge ms-1">{{ shell_notifications_unread_count }}</span>{% endif %}
+                                {% if shell_notifications_unread_count %}<span class="badge rounded-pill noticeboard-count-badge noticeboard-top-count-badge ms-1">{{ shell_notifications_unread_count }}</span>{% endif %}
                             </a>
                         </li>
 
