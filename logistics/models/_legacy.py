@@ -1857,6 +1857,14 @@ class FinalInvoice(models.Model):
         null=True,
         blank=True,
     )
+    proforma = models.OneToOneField(
+        ProformaInvoice,
+        on_delete=models.PROTECT,
+        related_name="final_invoice",
+        null=True,
+        blank=True,
+        help_text="The single proforma this final invoice was generated from.",
+    )
     items = models.JSONField(default=list)
     subtotal = models.DecimalField(max_digits=14, decimal_places=2)
     sourcing_fee = models.DecimalField(
@@ -1889,6 +1897,15 @@ class FinalInvoice(models.Model):
         return f"FI-{self.pk or 'DRAFT'}-{self.transaction.transaction_id}"
 
     def save(self, *args, **kwargs):
+        if self.proforma_id:
+            if self.proforma.transaction_id != self.transaction_id:
+                raise ValidationError(
+                    "Selected proforma must belong to the same transaction."
+                )
+            if self.proforma.loading_id and self.proforma.loading_id != self.loading_id:
+                raise ValidationError(
+                    "Selected proforma must belong to the same cargo record."
+                )
         self.total_amount = (
             (self.subtotal or 0)
             + (self.sourcing_fee or 0)
@@ -1908,6 +1925,7 @@ class FinalInvoice(models.Model):
                     "shipping_mode",
                     "route",
                     "transaction_id",
+                    "proforma_id",
                 )
                 for field in tracked_fields:
                     if getattr(original, field) != getattr(self, field):

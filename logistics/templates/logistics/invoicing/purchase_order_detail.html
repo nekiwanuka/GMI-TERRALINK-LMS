@@ -186,12 +186,18 @@
 
 {% block content %}
 <div class="container" style="max-width:980px;">
-    <div class="d-flex justify-content-between align-items-center mt-4 mb-3">
+    <div class="d-flex justify-content-between align-items-center mt-4 mb-3 po-toolbar no-print">
         <div>
             <h1 class="mb-0"><i class="bi bi-journal-text"></i> Purchase Order</h1>
             <small class="text-muted">{{ purchase_order.po_number }} - {{ purchase_order.transaction.transaction_id }}</small>
         </div>
         <div class="d-flex gap-2">
+            <button type="button" class="btn btn-outline-dark" onclick="window.print()">
+                <i class="bi bi-printer"></i> Print
+            </button>
+            <a href="{% url 'purchase_order_pdf' purchase_order.pk %}" class="btn btn-primary" target="_blank" rel="noopener noreferrer">
+                <i class="bi bi-file-pdf"></i> Download PDF
+            </a>
             {% if can_edit_business_documents and purchase_order.can_edit_purchase_order %}
             <a href="{% url 'purchase_order_update' purchase_order.pk %}" class="btn btn-outline-dark">Edit PO</a>
             {% elif can_manage_business_documents %}
@@ -301,7 +307,7 @@
             </div>
 
             {% if sibling_splits %}
-            <div class="mt-4">
+            <div class="mt-4 no-print">
                 <h6 class="mb-2">Supplier Split POs (Same Invoice Details)</h6>
                 <div class="d-flex flex-wrap gap-2">
                     {% for split in sibling_splits %}
@@ -314,7 +320,7 @@
             </div>
             {% endif %}
 
-            <div class="mt-4 card shadow-sm">
+            <div class="mt-4 card shadow-sm no-print">
               <div class="card-header d-flex justify-content-between align-items-center">
                 <strong><i class="bi bi-cash-stack"></i> Supplier Payments</strong>
                                 {% if can_manage_business_documents %}

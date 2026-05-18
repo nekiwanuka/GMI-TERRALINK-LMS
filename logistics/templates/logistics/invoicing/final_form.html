@@ -111,6 +111,9 @@
                         <div class="form-text">This reason is saved in the audit trail for Director/System Admin review.</div>
                     </div>
                     <div class="row g-3 mb-4" id="invoice-settings">
+                        {% if form_values.proforma_id %}
+                        <input type="hidden" name="proforma" value="{{ form_values.proforma_id }}">
+                        {% endif %}
                         <div class="col-md-4">
                             <label class="form-label fw-semibold">Transaction</label>
                             <select name="transaction" id="transaction-select" class="form-select" required>
@@ -138,6 +141,13 @@
                             <label class="form-label fw-semibold">Route</label>
                             <input type="text" name="route" class="form-control" value="{{ form_values.route }}">
                         </div>
+                        {% if selected_proforma %}
+                        <div class="col-12">
+                            <div class="alert alert-info mb-0 py-2">
+                                This final invoice will be linked to proforma <strong>{{ selected_proforma|doc_number:"PI" }}</strong>. That proforma cannot create another final invoice.
+                            </div>
+                        </div>
+                        {% endif %}
                     </div>
 
                     <div class="line-items-section mb-4">

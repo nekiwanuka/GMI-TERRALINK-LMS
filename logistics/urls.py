@@ -463,6 +463,16 @@ urlpatterns = [
         name="purchase_order_correction_request",
     ),
     path(
+        "invoicing/purchase-orders/<int:pk>/pdf/",
+        views.purchase_order_pdf,
+        name="purchase_order_pdf",
+    ),
+    path(
+        "invoicing/purchase-orders/<int:pk>/html-preview/",
+        views.purchase_order_html_preview,
+        name="purchase_order_html_preview",
+    ),
+    path(
         "invoicing/purchase-orders/<int:pk>/",
         views.purchase_order_detail,
         name="purchase_order_detail",

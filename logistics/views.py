@@ -4404,7 +4404,7 @@ def proforma_detail(request, pk):
     )
     if canonical:
         return canonical
-    final_invoice = proforma.transaction.final_invoices.order_by("-created_at").first()
+    final_invoice = _final_invoice_for_proforma(proforma)
     document_signature = _document_signature_for(proforma)
     return render(
         request,
@@ -4420,6 +4420,26 @@ def proforma_detail(request, pk):
                 request.user
             ),
         },
+    )
+
+
+def _final_invoice_for_proforma(proforma):
+    try:
+        return proforma.final_invoice
+    except FinalInvoice.DoesNotExist:
+        pass
+
+    legacy_qs = proforma.transaction.final_invoices.filter(proforma__isnull=True)
+    if proforma.loading_id:
+        legacy_qs = legacy_qs.filter(loading_id=proforma.loading_id)
+    return legacy_qs.order_by("created_at", "pk").first()
+
+
+def _unbilled_proforma_for_transaction(transaction):
+    return (
+        transaction.proforma_invoices.filter(final_invoice__isnull=True)
+        .order_by("created_at", "pk")
+        .first()
     )
 
 
@@ -4579,6 +4599,16 @@ def proforma_confirm(request, pk):
     locked_response = _locked_trade_document_response(request, proforma.transaction)
     if locked_response:
         return locked_response
+    existing_invoice = _final_invoice_for_proforma(proforma)
+    if existing_invoice:
+        messages.info(
+            request,
+            f"This proforma already has final invoice {display_document_number(existing_invoice, 'FI')}.",
+        )
+        return redirect(
+            _final_invoice_route_name(existing_invoice, "detail"),
+            pk=existing_invoice.pk,
+        )
     if request.method == "POST":
         final_items = []
         subtotal = Decimal("0")
@@ -4598,6 +4628,7 @@ def proforma_confirm(request, pk):
             transaction=proforma.transaction,
             loading=proforma.loading
             or getattr(proforma.transaction, "source_loading", None),
+            proforma=proforma,
             items=final_items,
             subtotal=subtotal,
             sourcing_fee=proforma.sourcing_fee,
@@ -4689,7 +4720,12 @@ def _build_final_invoice_items(post_data):
 
 
 def _build_final_invoice_form_context(
-    *, invoice=None, post_data=None, title, initial_transaction_id=""
+    *,
+    invoice=None,
+    post_data=None,
+    title,
+    initial_transaction_id="",
+    initial_proforma_id="",
 ):
     transactions = _transactions_with_lock_status(
         Transaction.objects.select_related("customer").order_by("-created_at")
@@ -4717,6 +4753,7 @@ def _build_final_invoice_form_context(
 
         form_values = {
             "transaction_id": post_data.get("transaction", ""),
+            "proforma_id": post_data.get("proforma", ""),
             "sourcing_fee": post_data.get("sourcing_fee", "0"),
             "shipping_cost": post_data.get("shipping_cost", "0"),
             "service_fee": post_data.get("service_fee", "0"),
@@ -4731,6 +4768,7 @@ def _build_final_invoice_form_context(
             line_items = [{"description": "", "quantity": "1", "unit_price": "0"}]
         form_values = {
             "transaction_id": str(invoice.transaction_id),
+            "proforma_id": str(invoice.proforma_id or ""),
             "sourcing_fee": invoice.sourcing_fee,
             "shipping_cost": invoice.shipping_cost,
             "service_fee": invoice.service_fee,
@@ -4743,6 +4781,7 @@ def _build_final_invoice_form_context(
         line_items = [{"description": "", "quantity": "1", "unit_price": "0"}]
         form_values = {
             "transaction_id": str(initial_transaction_id or ""),
+            "proforma_id": str(initial_proforma_id or ""),
             "sourcing_fee": "0",
             "shipping_cost": "0",
             "service_fee": "0",
@@ -4753,11 +4792,19 @@ def _build_final_invoice_form_context(
         }
 
     selected_transaction_id = form_values.get("transaction_id")
+    selected_proforma_id = form_values.get("proforma_id")
     selected_transaction = None
+    selected_proforma = None
     if selected_transaction_id:
         selected_transaction = (
             Transaction.objects.filter(pk=selected_transaction_id)
             .select_related("source_loading")
+            .first()
+        )
+    if selected_proforma_id:
+        selected_proforma = (
+            ProformaInvoice.objects.filter(pk=selected_proforma_id)
+            .select_related("transaction__customer", "loading")
             .first()
         )
     is_freight_invoice = bool(
@@ -4771,6 +4818,7 @@ def _build_final_invoice_form_context(
         "transactions": transactions,
         "line_items": line_items,
         "form_values": form_values,
+        "selected_proforma": selected_proforma,
         "is_freight_invoice": is_freight_invoice,
         "closed_trade_edit": bool(
             selected_transaction and _trade_documents_locked(selected_transaction)
@@ -4957,6 +5005,7 @@ def final_invoice_create(request):
 
         items, subtotal, errors = _build_final_invoice_items(request.POST)
         transaction_id = (request.POST.get("transaction") or "").strip()
+        proforma_id = (request.POST.get("proforma") or "").strip()
         sourcing_fee_raw = (request.POST.get("sourcing_fee") or "0").strip()
         shipping_cost_raw = (request.POST.get("shipping_cost") or "0").strip()
         service_fee_raw = (request.POST.get("service_fee") or "0").strip()
@@ -4983,6 +5032,7 @@ def final_invoice_create(request):
             errors.append("Additional charges must be valid non-negative numbers.")
 
         txn = None
+        proforma = None
         if not transaction_id:
             errors.append("Select a transaction.")
         else:
@@ -4990,6 +5040,35 @@ def final_invoice_create(request):
                 txn = Transaction.objects.get(pk=transaction_id)
             except Transaction.DoesNotExist:
                 errors.append("Transaction not found.")
+
+        if not errors and proforma_id:
+            try:
+                proforma = ProformaInvoice.objects.get(pk=proforma_id)
+            except ProformaInvoice.DoesNotExist:
+                errors.append("Proforma not found.")
+            else:
+                if proforma.transaction_id != txn.pk:
+                    errors.append(
+                        "Selected proforma does not belong to this transaction."
+                    )
+                else:
+                    existing_invoice = _final_invoice_for_proforma(proforma)
+                    if existing_invoice:
+                        messages.info(
+                            request,
+                            f"This proforma already has final invoice {display_document_number(existing_invoice, 'FI')}.",
+                        )
+                        return redirect(
+                            _final_invoice_route_name(existing_invoice, "detail"),
+                            pk=existing_invoice.pk,
+                        )
+
+        if not errors and not proforma:
+            proforma = _unbilled_proforma_for_transaction(txn)
+            if not proforma and txn.proforma_invoices.exists():
+                errors.append(
+                    "Every proforma on this transaction already has a final invoice. Open the existing invoice instead of creating another one."
+                )
 
         if not errors:
             locked_response = _locked_trade_document_response(request, txn)
@@ -5000,6 +5079,7 @@ def final_invoice_create(request):
             invoice = FinalInvoice.objects.create(
                 transaction=txn,
                 loading=getattr(txn, "source_loading", None),
+                proforma=proforma,
                 items=items,
                 subtotal=subtotal,
                 sourcing_fee=sourcing_fee,
@@ -5033,6 +5113,22 @@ def final_invoice_create(request):
             messages.error(request, error)
     else:
         transaction_pk = request.GET.get("transaction", "")
+        proforma_pk = request.GET.get("proforma", "")
+        initial_proforma = None
+        if proforma_pk:
+            initial_proforma = ProformaInvoice.objects.filter(pk=proforma_pk).first()
+            if initial_proforma:
+                existing_invoice = _final_invoice_for_proforma(initial_proforma)
+                if existing_invoice:
+                    messages.info(
+                        request,
+                        f"This proforma already has final invoice {display_document_number(existing_invoice, 'FI')}.",
+                    )
+                    return redirect(
+                        _final_invoice_route_name(existing_invoice, "detail"),
+                        pk=existing_invoice.pk,
+                    )
+                transaction_pk = str(initial_proforma.transaction_id)
         if transaction_pk:
             initial_transaction = Transaction.objects.filter(pk=transaction_pk).first()
             if initial_transaction:
@@ -5048,6 +5144,11 @@ def final_invoice_create(request):
             post_data=request.POST if request.method == "POST" else None,
             title="Create Final Invoice",
             initial_transaction_id=transaction_pk if request.method != "POST" else "",
+            initial_proforma_id=(
+                initial_proforma.pk
+                if request.method != "POST" and initial_proforma
+                else ""
+            ),
         ),
     )
 
@@ -5660,15 +5761,24 @@ def purchase_order_update(request, pk):
 
 @login_required
 def purchase_order_detail(request, pk):
-    purchase_order = get_object_or_404(
-        PurchaseOrder.objects.select_related(
-            "transaction__customer",
-            "created_by",
-            "parent_po",
-            "final_invoice",
-        ),
-        pk=pk,
+    purchase_order = get_object_or_404(_purchase_order_document_queryset(), pk=pk)
+    return render(
+        request,
+        "logistics/invoicing/purchase_order_detail.html",
+        _purchase_order_display_context(purchase_order, request.user),
     )
+
+
+def _purchase_order_document_queryset():
+    return PurchaseOrder.objects.select_related(
+        "transaction__customer",
+        "created_by",
+        "parent_po",
+        "final_invoice",
+    )
+
+
+def _purchase_order_display_context(purchase_order, user):
     _decorate_purchase_order_status(purchase_order)
     _decorate_purchase_order_invoice_payment(purchase_order)
     _decorate_purchase_order_edit_lock(purchase_order)
@@ -5685,7 +5795,7 @@ def purchase_order_detail(request, pk):
         purchase_order, "can_start_invoice_fulfillment", False
     )
     _decorate_purchase_order_supplier_payment(
-        purchase_order, request.user, has_supplier_splits=has_supplier_splits
+        purchase_order, user, has_supplier_splits=has_supplier_splits
     )
     can_split_purchase_order = (
         not purchase_order.is_split
@@ -5693,30 +5803,62 @@ def purchase_order_detail(request, pk):
         and not purchase_order.transaction.is_closed
         and not purchase_order.edit_locked
     )
-    return render(
-        request,
-        "logistics/invoicing/purchase_order_detail.html",
+    return {
+        "purchase_order": purchase_order,
+        "base_po": base_po,
+        "sibling_splits": sibling_splits,
+        "can_start_invoice_fulfillment": can_start_invoice_fulfillment,
+        "supplier_payments": purchase_order.supplier_payment_records,
+        "supplier_total_paid": purchase_order.supplier_total_paid,
+        "supplier_balance_due": purchase_order.supplier_balance_due,
+        "can_record_supplier_payment": purchase_order.can_record_supplier_payment,
+        "can_request_supplier_payment": purchase_order.can_request_supplier_payment,
+        "can_split_purchase_order": can_split_purchase_order,
+        "can_manage_business_documents": _can_manage_business_documents(user),
+        "can_edit_business_documents": _can_directly_edit_business_documents(user),
+        "has_supplier_splits": has_supplier_splits,
+        "supplier_payments_include_splits": purchase_order.supplier_payments_include_splits,
+    }
+
+
+@login_required
+@xframe_options_sameorigin
+def purchase_order_html_preview(request, pk):
+    purchase_order = get_object_or_404(_purchase_order_document_queryset(), pk=pk)
+    context = _purchase_order_display_context(purchase_order, request.user)
+    context.update(
         {
-            "purchase_order": purchase_order,
-            "base_po": base_po,
-            "sibling_splits": sibling_splits,
-            "can_start_invoice_fulfillment": can_start_invoice_fulfillment,
-            "supplier_payments": purchase_order.supplier_payment_records,
-            "supplier_total_paid": purchase_order.supplier_total_paid,
-            "supplier_balance_due": purchase_order.supplier_balance_due,
-            "can_record_supplier_payment": purchase_order.can_record_supplier_payment,
-            "can_request_supplier_payment": purchase_order.can_request_supplier_payment,
-            "can_split_purchase_order": can_split_purchase_order,
-            "can_manage_business_documents": _can_manage_business_documents(
-                request.user
-            ),
-            "can_edit_business_documents": _can_directly_edit_business_documents(
-                request.user
-            ),
-            "has_supplier_splits": has_supplier_splits,
-            "supplier_payments_include_splits": purchase_order.supplier_payments_include_splits,
-        },
+            "document_number": purchase_order.po_number,
+            "auto_print_pdf": request.GET.get("download") == "1",
+        }
     )
+    response = render(
+        request,
+        "logistics/pdf/purchase_order_standalone.html",
+        context,
+    )
+    return _prevent_stale_pdf_cache(response)
+
+
+@login_required
+def purchase_order_pdf(request, pk):
+    purchase_order = get_object_or_404(_purchase_order_document_queryset(), pk=pk)
+    context = _purchase_order_display_context(purchase_order, request.user)
+    context.update(
+        {
+            "document_number": purchase_order.po_number,
+            "auto_print_pdf": False,
+        }
+    )
+    pdf_bytes = render_to_browser_pdf(
+        "logistics/pdf/purchase_order_standalone.html",
+        context,
+    )
+    response = HttpResponse(pdf_bytes, content_type="application/pdf")
+    response["Content-Disposition"] = (
+        f'attachment; filename="{purchase_order.po_number}.pdf"'
+    )
+    return _prevent_stale_pdf_cache(response)
 
 
 @login_required
