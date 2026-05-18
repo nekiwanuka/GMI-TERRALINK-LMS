@@ -74,7 +74,24 @@ def _extract_text_from_file(file_obj):
             extracted = f"[File type not supported for automatic extraction: {os.path.splitext(filename)[1]}]"
     except Exception as exc:  # noqa: BLE001
         extracted = f"[Extraction failed: {exc}]"
+    finally:
+        try:
+            file_obj.seek(0)
+        except Exception:
+            pass
     return extracted.strip()
+
+
+def _has_extractable_document_text(text):
+    if not text:
+        return False
+    status_prefixes = (
+        "[PDF extraction requires",
+        "[Word extraction requires",
+        "[File type not supported",
+        "[Extraction failed:",
+    )
+    return not text.strip().startswith(status_prefixes)
 
 
 def _structured_data_for_transaction_document(text, transaction, document_type=""):
@@ -3053,7 +3070,7 @@ def transaction_document_upload(request, pk):
         uploaded_file = request.FILES.get("original_file")
         if uploaded_file:
             document.extracted_text = _extract_text_from_file(uploaded_file)
-        if document.extracted_text:
+        if _has_extractable_document_text(document.extracted_text):
             document.structured_data = _structured_data_for_transaction_document(
                 document.extracted_text,
                 transaction,
@@ -3072,10 +3089,16 @@ def transaction_document_upload(request, pk):
                 link=reverse("transaction_detail", kwargs={"pk": transaction.pk}),
                 category="document",
             )
-            messages.success(
-                request,
-                "Client PI uploaded and text extracted. Review the extracted PI below, then create a proforma or open the optional Q-Worksheet.",
-            )
+            if _has_extractable_document_text(document.extracted_text):
+                messages.success(
+                    request,
+                    "Client PI uploaded and text extracted. Review the extracted PI below, then create a proforma or open the optional Q-Worksheet.",
+                )
+            else:
+                messages.warning(
+                    request,
+                    "Client PI uploaded, but no readable text could be extracted. If this is a scanned image PDF, enter the PI details manually or upload a text-based PDF/Word file.",
+                )
         else:
             _notify_roles(
                 title="Document uploaded",
@@ -4199,8 +4222,12 @@ def proforma_create(request):
                             {
                                 "description": name,
                                 "quantity": quantity,
-                                "unit_price": unit_price if unit_price not in (None, "") else "0",
-                                "sales_price": unit_price if unit_price not in (None, "") else "0",
+                                "unit_price": (
+                                    unit_price if unit_price not in (None, "") else "0"
+                                ),
+                                "sales_price": (
+                                    unit_price if unit_price not in (None, "") else "0"
+                                ),
                             }
                         )
             initial_notes = build_sourcing_notes(sd) if sd else ""
