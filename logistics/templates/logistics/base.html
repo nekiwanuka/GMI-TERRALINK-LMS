@@ -445,6 +445,12 @@
                             {% if shell_module_notification_counts.suppliers %}<span class="sidebar-count-badge ms-auto">{{ shell_module_notification_counts.suppliers }}</span>{% endif %}
                         </a>
                     </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if 'purchase_order' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'purchase_order_list' %}" data-bs-toggle="tooltip" data-bs-placement="right" title="Purchase orders and supplier allocations">
+                            <i class="bi bi-journal-bookmark-fill"></i> Purchase Orders
+                            {% if shell_module_notification_counts.purchase_orders %}<span class="sidebar-count-badge ms-auto">{{ shell_module_notification_counts.purchase_orders }}</span>{% endif %}
+                        </a>
+                    </li>
                     {% endif %}
                     {% if user.is_superuser or user.role in 'ADMIN,DIRECTOR,FINANCE,OFFICE_ADMIN' %}
                     <li class="nav-item">
@@ -465,12 +471,6 @@
                                 </a>
                             </div>
                         </div>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link {% if 'purchase_order' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'purchase_order_list' %}" data-bs-toggle="tooltip" data-bs-placement="right" title="Purchase orders and supplier allocations">
-                            <i class="bi bi-journal-bookmark-fill"></i> Purchase Orders
-                            {% if shell_module_notification_counts.purchase_orders %}<span class="sidebar-count-badge ms-auto">{{ shell_module_notification_counts.purchase_orders }}</span>{% endif %}
-                        </a>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link {% if 'supplier_payment' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'supplier_payment_list' %}" data-bs-toggle="tooltip" data-bs-placement="right" title="Payments made to suppliers against POs">

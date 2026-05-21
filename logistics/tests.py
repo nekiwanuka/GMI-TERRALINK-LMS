@@ -386,6 +386,7 @@ class PurchaseOrderSplitTests(TestCase):
         )
 
         self.assertEqual(detail_response.status_code, 200)
+        self.assertContains(detail_response, "Purchase Orders")
         self.assertContains(detail_response, "Split PO")
         self.assertNotContains(detail_response, "Edit PO")
 
