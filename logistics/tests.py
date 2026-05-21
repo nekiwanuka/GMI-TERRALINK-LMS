@@ -346,6 +346,7 @@ class PurchaseOrderSplitTests(TestCase):
         self.assertEqual(list_response.status_code, 200)
         self.assertEqual(detail_response.status_code, 200)
         self.assertContains(detail_response, "Purchase Orders")
+        self.assertContains(detail_response, reverse("purchase_order_list"))
         self.assertContains(detail_response, "Edit PO")
 
     def test_split_creation_deducts_quantity_from_main_po_line(self):

@@ -444,7 +444,7 @@
                         </a>
                     </li>
                     {% endif %}
-                    {% if user.is_superuser or user.role == 'ADMIN' or user.role == 'DIRECTOR' or user.role == 'PROCUREMENT' or user.role == 'OFFICE_ADMIN' %}
+                    {% if user.is_superuser or user.role == 'ADMIN' or user.role == 'DIRECTOR' or user.role == 'FINANCE' or user.role == 'PROCUREMENT' or user.role == 'OFFICE_ADMIN' %}
                     <li class="nav-item">
                         <a class="nav-link {% if 'supplier' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'supplier_list' %}" data-bs-toggle="tooltip" data-bs-placement="right" title="Supplier records and product sourcing">
                             <i class="bi bi-building-fill"></i> Suppliers
