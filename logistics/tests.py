@@ -372,3 +372,47 @@ class PurchaseOrderSplitTests(TestCase):
         self.assertEqual(response.status_code, 302)
         split_po.refresh_from_db()
         self.assertEqual(split_po.split_quantity, Decimal("2.00"))
+
+    def test_procurement_can_control_po_splits_but_not_directly_edit_po(self):
+        procurement_user = CustomUser.objects.create_user(
+            username="po-procurement",
+            password="testpass123",
+            role="PROCUREMENT",
+        )
+        self.client.force_login(procurement_user)
+
+        detail_response = self.client.get(
+            reverse("purchase_order_detail", kwargs={"pk": self.purchase_order.pk})
+        )
+
+        self.assertEqual(detail_response.status_code, 200)
+        self.assertContains(detail_response, "Split PO")
+        self.assertNotContains(detail_response, "Edit PO")
+
+        edit_response = self.client.post(
+            reverse("purchase_order_update", kwargs={"pk": self.purchase_order.pk}),
+            {
+                "supplier_name": "Edited Supplier",
+                "status": "SENT",
+                "item_desc[]": ["Changed item"],
+                "item_qty[]": ["1"],
+                "item_unit_price[]": ["1"],
+            },
+        )
+
+        self.assertEqual(edit_response.status_code, 302)
+        self.purchase_order.refresh_from_db()
+        self.assertEqual(self.purchase_order.supplier_name, "Supplier Pending")
+        self.assertEqual(self.purchase_order.items[0]["description"], "Solar battery")
+
+        split_response = self.client.post(
+            reverse(
+                "purchase_order_split_create", kwargs={"pk": self.purchase_order.pk}
+            ),
+            self._split_payload("2"),
+        )
+
+        self.assertEqual(split_response.status_code, 302)
+        self.assertTrue(
+            PurchaseOrder.objects.filter(parent_po=self.purchase_order).exists()
+        )

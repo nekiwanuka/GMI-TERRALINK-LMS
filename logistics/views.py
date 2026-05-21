@@ -555,10 +555,30 @@ def _can_directly_edit_business_documents(user):
     }
 
 
+def _can_directly_edit_purchase_orders(user):
+    return user.is_superuser or getattr(user, "role", "") in {
+        "ADMIN",
+        "DIRECTOR",
+        "FINANCE",
+        "OFFICE_ADMIN",
+    }
+
+
 def _can_manage_business_documents(user):
     return (
         role_has_procurement_permissions(user) or getattr(user, "role", "") == "FINANCE"
     )
+
+
+def _guard_purchase_order_edit_permission(request, purchase_order):
+    if _can_directly_edit_purchase_orders(request.user):
+        return None
+    _request_director_edit_permission(
+        request,
+        edit_label=f"purchase order {purchase_order.po_number}",
+        link=reverse("purchase_order_update", kwargs={"pk": purchase_order.pk}),
+    )
+    return redirect("purchase_order_detail", pk=purchase_order.pk)
 
 
 def _guard_business_document_edit_permission(
@@ -4173,6 +4193,9 @@ def proforma_list(request):
             "can_edit_business_documents": _can_directly_edit_business_documents(
                 request.user
             ),
+            "can_edit_purchase_orders": _can_directly_edit_purchase_orders(
+                request.user
+            ),
         },
     )
 
@@ -6156,12 +6179,7 @@ def purchase_order_update(request, pk):
             "Split purchase orders only allow split quantity changes; supplier and line editing stays locked to the source PO line.",
         )
         return redirect("purchase_order_split_quantity_update", pk=purchase_order.pk)
-    edit_guard = _guard_business_document_edit_permission(
-        request,
-        edit_label=f"purchase order {purchase_order.po_number}",
-        link=reverse("purchase_order_update", kwargs={"pk": purchase_order.pk}),
-        redirect_url=reverse("purchase_order_detail", kwargs={"pk": purchase_order.pk}),
-    )
+    edit_guard = _guard_purchase_order_edit_permission(request, purchase_order)
     if edit_guard:
         return edit_guard
     if purchase_order.edit_locked:
@@ -6317,6 +6335,7 @@ def _purchase_order_display_context(purchase_order, user):
         "can_split_purchase_order": can_split_purchase_order,
         "can_manage_business_documents": _can_manage_business_documents(user),
         "can_edit_business_documents": _can_directly_edit_business_documents(user),
+        "can_edit_purchase_orders": _can_directly_edit_purchase_orders(user),
         "has_supplier_splits": has_supplier_splits,
         "supplier_payments_include_splits": purchase_order.supplier_payments_include_splits,
     }

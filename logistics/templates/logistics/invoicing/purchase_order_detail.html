@@ -220,11 +220,11 @@
             <a href="{% url 'purchase_order_pdf' purchase_order.pk %}" class="btn btn-primary" target="_blank" rel="noopener noreferrer">
                 <i class="bi bi-file-pdf"></i> Download PDF
             </a>
-            {% if can_edit_business_documents and purchase_order.can_edit_purchase_order and not purchase_order.is_split %}
+            {% if can_edit_purchase_orders and purchase_order.can_edit_purchase_order and not purchase_order.is_split %}
             <a href="{% url 'purchase_order_update' purchase_order.pk %}" class="btn btn-outline-dark">Edit PO</a>
-            {% elif can_edit_business_documents and purchase_order.is_split and purchase_order.split_mode != 'ITEMS' and not purchase_order.edit_locked %}
+            {% elif can_manage_business_documents and purchase_order.is_split and purchase_order.split_mode != 'ITEMS' and not purchase_order.edit_locked %}
             <a href="{% url 'purchase_order_split_quantity_update' purchase_order.pk %}" class="btn btn-outline-dark">Edit Split Qty</a>
-            {% elif can_edit_business_documents and purchase_order.is_split and purchase_order.split_mode == 'ITEMS' %}
+            {% elif can_manage_business_documents and purchase_order.is_split and purchase_order.split_mode == 'ITEMS' %}
             <span class="btn btn-outline-secondary disabled">Moved Items Fixed</span>
             {% elif can_manage_business_documents %}
             <span class="btn btn-outline-secondary disabled"><i class="bi bi-lock-fill"></i> Locked</span>
