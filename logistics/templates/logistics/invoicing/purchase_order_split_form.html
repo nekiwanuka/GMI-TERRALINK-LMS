@@ -179,7 +179,7 @@
         <div class="po-split-context">
             <div><span>Transaction</span><strong>{{ base_po.transaction.transaction_id }}</strong></div>
             <div><span>Customer</span><strong>{{ base_po.transaction.customer.name }}</strong></div>
-            <div><span>Main PO</span><strong>{{ base_po.po_number }}</strong></div>
+            <div><span>Original PO</span><strong>{{ base_po.po_number }}</strong></div>
             <div><span>Invoice</span><strong>{% if invoice %}{{ invoice|doc_number:"FI" }}{% else %}Not linked{% endif %}</strong></div>
         </div>
 
@@ -211,14 +211,14 @@
                         <input type="radio" name="split_mode" value="ITEMS" {% if split_mode == 'ITEMS' %}checked{% endif %}>
                         <span>
                             <strong>Split Items</strong>
-                            <span>Move one or more complete PO item lines to a new supplier PO and remove them from the main PO.</span>
+                            <span>Create an independent supplier PO for one or more complete item lines.</span>
                         </span>
                     </label>
                     <label class="po-mode-option">
                         <input type="radio" name="split_mode" value="QUANTITY" {% if split_mode != 'ITEMS' %}checked{% endif %}>
                         <span>
                             <strong>Split Specific Item Quantity</strong>
-                            <span>Move part of one PO line to a split PO while the remaining balance stays on the main PO.</span>
+                            <span>Create an independent supplier PO for part of one item line.</span>
                         </span>
                     </label>
                 </div>
@@ -226,7 +226,7 @@
                 <div class="po-section" data-split-section="ITEMS">
                     <div class="po-section-title">
                         <strong>Items to Move</strong>
-                        <span>Main PO must keep at least one item line</span>
+                        <span>Original PO keeps the unallocated balance</span>
                     </div>
                     <div class="table-responsive">
                         <table class="table table-sm mb-0 po-lines-choice-table">
@@ -234,8 +234,8 @@
                                 <tr>
                                     <th style="width:54px;">Move</th>
                                     <th>Item</th>
-                                    <th class="text-end">Main Qty</th>
-                                    <th class="text-end">Unit Price</th>
+                                    <th class="text-end">Available Qty</th>
+                                    <th class="text-end">Supplier Cost</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -244,7 +244,7 @@
                                     <td><input class="form-check-input" type="checkbox" name="selected_line_indices" value="{{ line.index }}" {% if not line.can_move_item %}disabled{% endif %}></td>
                                     <td><strong>Line {{ line.number }}</strong> - {{ line.description }}</td>
                                     <td class="text-end">{{ line.remaining_quantity }}</td>
-                                    <td class="text-end">{{ line.unit_price }}</td>
+                                    <td class="text-end"><input type="number" step="0.01" min="0" name="line_unit_price_{{ line.index }}" class="form-control form-control-sm text-end" value="{{ line.unit_price }}"></td>
                                 </tr>
                                 {% empty %}
                                 <tr><td colspan="4" class="text-center text-muted py-3">No item lines are available.</td></tr>
@@ -257,7 +257,7 @@
                 <div class="po-section" data-split-section="QUANTITY">
                     <div class="po-section-title">
                         <strong>Specific Item Quantity</strong>
-                        <span>Original quantity must be greater than 2 and main balance cannot be zero</span>
+                        <span>Original quantity must be greater than 2 and original balance cannot be zero</span>
                     </div>
                     <div class="po-section-body">
                         <div class="row g-3">
@@ -267,7 +267,7 @@
                                     <option value="">Choose a PO line</option>
                                     {% for line in line_options %}
                                     <option value="{{ line.index }}" {% if not line.can_split %}disabled{% endif %}>
-                                        Line {{ line.number }} - {{ line.description }} | Original {{ line.original_quantity }} | Main balance {{ line.remaining_quantity }}
+                                        Line {{ line.number }} - {{ line.description }} | Original {{ line.original_quantity }} | Available {{ line.remaining_quantity }}
                                     </option>
                                     {% endfor %}
                                 </select>
@@ -276,14 +276,18 @@
                                 <label class="form-label">Split Quantity</label>
                                 <input type="number" step="0.01" min="0.01" name="split_quantity" class="form-control">
                             </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Supplier Cost Price</label>
+                                <input type="number" step="0.01" min="0" name="split_unit_price" class="form-control" placeholder="Use original cost if blank">
+                            </div>
                         </div>
                     </div>
                 </div>
 
                 <div class="po-section">
                     <div class="po-section-title">
-                        <strong>Supplier for Split PO</strong>
-                        <span>Used on the new purchase order</span>
+                        <strong>Supplier for Independent PO</strong>
+                        <span>Used on the new SP-numbered purchase order</span>
                     </div>
                     <div class="po-section-body">
                         <div class="row g-3">

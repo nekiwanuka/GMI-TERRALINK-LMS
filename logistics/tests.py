@@ -319,17 +319,34 @@ class PurchaseOrderSplitTests(TestCase):
         return PurchaseOrder.objects.get(parent_po=self.purchase_order)
 
     def test_purchase_order_pdf_renders_inline(self):
-        with patch("logistics.views.render_to_browser_pdf", return_value=b"%PDF-1.4"):
-            response = self.client.get(
-                reverse("purchase_order_pdf", kwargs={"pk": self.purchase_order.pk})
-            )
-
+        response = self.client.get(
+            reverse("purchase_order_pdf", kwargs={"pk": self.purchase_order.pk})
+        )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response["Content-Type"], "application/pdf")
+        self.assertTrue(response.content.startswith(b"%PDF"))
         self.assertIn("inline", response["Content-Disposition"])
         self.assertIn(
             f"{self.purchase_order.po_number}.pdf", response["Content-Disposition"]
         )
+
+    def test_finance_can_access_purchase_orders(self):
+        finance_user = CustomUser.objects.create_user(
+            username="po-finance",
+            password="testpass123",
+            role="FINANCE",
+        )
+        self.client.force_login(finance_user)
+
+        list_response = self.client.get(reverse("purchase_order_list"))
+        detail_response = self.client.get(
+            reverse("purchase_order_detail", kwargs={"pk": self.purchase_order.pk})
+        )
+
+        self.assertEqual(list_response.status_code, 200)
+        self.assertEqual(detail_response.status_code, 200)
+        self.assertContains(detail_response, "Purchase Orders")
+        self.assertContains(detail_response, "Edit PO")
 
     def test_split_creation_deducts_quantity_from_main_po_line(self):
         response = self.client.post(
@@ -343,6 +360,7 @@ class PurchaseOrderSplitTests(TestCase):
         split_po = PurchaseOrder.objects.get(parent_po=self.purchase_order)
         self.purchase_order.refresh_from_db()
         self.assertEqual(split_po.original_po_line_index, 0)
+        self.assertEqual(split_po.po_number, f"{self.purchase_order.po_number}-SP1")
         self.assertEqual(split_po.original_po_line_quantity, Decimal("5.00"))
         self.assertEqual(split_po.split_quantity, Decimal("2.00"))
         self.assertEqual(split_po.split_mode, "QUANTITY")
@@ -351,6 +369,44 @@ class PurchaseOrderSplitTests(TestCase):
         self.assertEqual(split_po.items[0]["quantity"], "2")
         self.assertEqual(self.purchase_order.subtotal, Decimal("300.00"))
         self.assertEqual(split_po.subtotal, Decimal("200.00"))
+
+    def test_quantity_splits_use_sequence_numbers_and_supplier_cost(self):
+        first_response = self.client.post(
+            reverse(
+                "purchase_order_split_create", kwargs={"pk": self.purchase_order.pk}
+            ),
+            {
+                **self._split_payload("2"),
+                "split_unit_price": "90",
+            },
+        )
+        second_response = self.client.post(
+            reverse(
+                "purchase_order_split_create", kwargs={"pk": self.purchase_order.pk}
+            ),
+            {
+                **self._split_payload("1"),
+                "split_unit_price": "80",
+            },
+        )
+
+        self.assertEqual(first_response.status_code, 302)
+        self.assertEqual(second_response.status_code, 302)
+        splits = list(
+            PurchaseOrder.objects.filter(parent_po=self.purchase_order).order_by(
+                "created_at"
+            )
+        )
+        self.assertEqual(splits[0].po_number, f"{self.purchase_order.po_number}-SP1")
+        self.assertEqual(splits[1].po_number, f"{self.purchase_order.po_number}-SP2")
+        self.assertEqual(
+            Decimal(str(splits[0].items[0]["unit_price"])), Decimal("90.0")
+        )
+        self.assertEqual(
+            Decimal(str(splits[1].items[0]["unit_price"])), Decimal("80.0")
+        )
+        self.assertEqual(splits[0].subtotal, Decimal("180.00"))
+        self.assertEqual(splits[1].subtotal, Decimal("80.00"))
 
     def test_whole_item_split_moves_selected_lines_from_main_po(self):
         self.purchase_order.items = [

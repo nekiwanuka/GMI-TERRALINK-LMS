@@ -226,7 +226,6 @@ from .services import (
     transition_shipment,
 )
 from .services.reporting import DirectorReportingService
-from .services.pdf_render import render_to_browser_pdf
 
 DEFAULT_PAGE_SIZE = 20
 AUDIT_PAGE_SIZE = 40
@@ -5500,10 +5499,14 @@ def _purchase_order_item_unit_price(item):
     return _decimal_from_value(amount, "0")
 
 
-def _purchase_order_item_with_quantity(item, quantity):
+def _purchase_order_item_with_quantity(item, quantity, unit_price=None):
     updated = dict(item or {})
     quantity = Decimal(quantity).quantize(Decimal("0.01"))
-    unit_price = _purchase_order_item_unit_price(item)
+    unit_price = (
+        Decimal(unit_price).quantize(Decimal("0.01"))
+        if unit_price not in (None, "")
+        else _purchase_order_item_unit_price(item)
+    )
     line_total = (quantity * unit_price).quantize(Decimal("0.01"))
     updated["quantity"] = _format_decimal_for_json(quantity)
     updated["unit_price"] = float(unit_price.quantize(Decimal("0.01")))
@@ -5518,6 +5521,18 @@ def _purchase_order_items_subtotal(items):
         quantity = _purchase_order_item_quantity(item)
         subtotal += quantity * _purchase_order_item_unit_price(item)
     return subtotal.quantize(Decimal("0.01"))
+
+
+def _next_split_po_number(base_po):
+    existing_suffixes = []
+    for split in base_po.split_purchase_orders.all():
+        suffix = str(split.po_number or "").replace(f"{base_po.po_number}-SP", "", 1)
+        try:
+            existing_suffixes.append(int(suffix))
+        except (TypeError, ValueError):
+            continue
+    next_suffix = (max(existing_suffixes) if existing_suffixes else 0) + 1
+    return f"{base_po.po_number}-SP{next_suffix}"
 
 
 def _purchase_order_line_split_total(base_po, line_index, exclude_split_pk=None):
@@ -5834,9 +5849,13 @@ def purchase_order_split_create(request, pk):
                 split_items = []
                 split_lines = []
                 for selected_index, selected_item, selected_quantity in selected_lines:
+                    supplier_unit_price = _decimal_from_value(
+                        request.POST.get(f"line_unit_price_{selected_index}"),
+                        str(_purchase_order_item_unit_price(selected_item)),
+                    )
                     split_items.append(
                         _purchase_order_item_with_quantity(
-                            selected_item, selected_quantity
+                            selected_item, selected_quantity, supplier_unit_price
                         )
                     )
                     split_lines.append(
@@ -5851,6 +5870,7 @@ def purchase_order_split_create(request, pk):
                 first_index, first_item, first_quantity = selected_lines[0]
                 with transaction.atomic():
                     split_po = PurchaseOrder.objects.create(
+                        po_number=_next_split_po_number(base_po),
                         transaction=base_po.transaction,
                         proforma=base_po.proforma,
                         final_invoice=invoice,
@@ -5869,13 +5889,13 @@ def purchase_order_split_create(request, pk):
                         items=split_items,
                         subtotal=split_subtotal,
                         notes=split_notes
-                        or f"Whole item split from main PO {base_po.po_number}.",
+                        or f"Independent supplier PO split from original PO {base_po.po_number}.",
                         created_by=request.user,
                     )
                     _remove_purchase_order_items(base_po, selected_line_indices)
                 messages.success(
                     request,
-                    f"Split purchase order {split_po.po_number} created with selected item lines removed from the main PO.",
+                    f"Independent supplier PO {split_po.po_number} created from {base_po.po_number}.",
                 )
                 return redirect("purchase_order_detail", pk=split_po.pk)
         else:
@@ -5887,7 +5907,12 @@ def purchase_order_split_create(request, pk):
                     base_po, line_index, source_item
                 )
                 split_item = _purchase_order_item_with_quantity(
-                    source_item, split_quantity
+                    source_item,
+                    split_quantity,
+                    _decimal_from_value(
+                        request.POST.get("split_unit_price"),
+                        str(_purchase_order_item_unit_price(source_item)),
+                    ),
                 )
                 split_subtotal = _purchase_order_items_subtotal([split_item])
                 split_lines = [
@@ -5897,6 +5922,7 @@ def purchase_order_split_create(request, pk):
                 ]
                 with transaction.atomic():
                     split_po = PurchaseOrder.objects.create(
+                        po_number=_next_split_po_number(base_po),
                         transaction=base_po.transaction,
                         proforma=base_po.proforma,
                         final_invoice=invoice,
@@ -5912,13 +5938,13 @@ def purchase_order_split_create(request, pk):
                         items=[split_item],
                         subtotal=split_subtotal,
                         notes=split_notes
-                        or f"Line quantity split from main PO {base_po.po_number}.",
+                        or f"Independent supplier PO split from original PO {base_po.po_number}.",
                         created_by=request.user,
                     )
                     _sync_purchase_order_split_line(base_po, line_index)
                 messages.success(
                     request,
-                    f"Split purchase order {split_po.po_number} created and the main PO quantity was recalculated.",
+                    f"Independent supplier PO {split_po.po_number} created from {base_po.po_number}.",
                 )
                 return redirect("purchase_order_detail", pk=split_po.pk)
 
@@ -6367,6 +6393,138 @@ def purchase_order_html_preview(request, pk):
     return _prevent_stale_pdf_cache(response)
 
 
+def _render_purchase_order_pdf_bytes(purchase_order):
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        rightMargin=36,
+        leftMargin=36,
+        topMargin=36,
+        bottomMargin=36,
+    )
+    styles = getSampleStyleSheet()
+    title_style = styles["Title"]
+    title_style.fontSize = 18
+    title_style.leading = 22
+    normal = styles["BodyText"]
+    normal.fontSize = 8.5
+    normal.leading = 11
+    small = styles["BodyText"]
+    small.fontSize = 7.5
+    small.leading = 9
+
+    story = []
+    story.append(Paragraph("GMI TERRALINK", title_style))
+    story.append(Paragraph("PURCHASE ORDER", styles["Heading2"]))
+    story.append(Spacer(1, 8))
+
+    detail_rows = [
+        ["PO No.", purchase_order.po_number, "Transaction", purchase_order.transaction.transaction_id],
+        ["Supplier", purchase_order.supplier_name or "-", "Customer", purchase_order.transaction.customer.name],
+        ["Issue Date", purchase_order.created_at.strftime("%d %b %Y"), "Status", getattr(purchase_order, "effective_status_display", None) or purchase_order.get_status_display()],
+    ]
+    if purchase_order.final_invoice:
+        detail_rows.append(["Invoice", display_document_number(purchase_order.final_invoice, "FI"), "", ""])
+    detail_table = Table(detail_rows, colWidths=[70, 170, 70, 170])
+    detail_table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, -1), colors.whitesmoke),
+                ("TEXTCOLOR", (0, 0), (0, -1), colors.HexColor("#8a6d1d")),
+                ("TEXTCOLOR", (2, 0), (2, -1), colors.HexColor("#8a6d1d")),
+                ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
+                ("FONTNAME", (2, 0), (2, -1), "Helvetica-Bold"),
+                ("GRID", (0, 0), (-1, -1), 0.35, colors.lightgrey),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("FONTSIZE", (0, 0), (-1, -1), 8.5),
+                ("LEFTPADDING", (0, 0), (-1, -1), 6),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+                ("TOPPADDING", (0, 0), (-1, -1), 5),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+            ]
+        )
+    )
+    story.append(detail_table)
+    story.append(Spacer(1, 10))
+
+    if purchase_order.supplier_address:
+        story.append(Paragraph("Supplier Address", styles["Heading4"]))
+        story.append(Paragraph(escape(purchase_order.supplier_address).replace("\n", "<br />"), normal))
+        story.append(Spacer(1, 8))
+
+    item_rows = [["No", "Item Description", "Quantity", "Unit Cost", "Amount"]]
+    for index, item in enumerate(purchase_order.items or [], start=1):
+        description = item.get("description") or item.get("name") or "Item description not recorded"
+        quantity = _purchase_order_item_quantity(item)
+        unit_price = _purchase_order_item_unit_price(item)
+        amount = (quantity * unit_price).quantize(Decimal("0.01"))
+        item_rows.append(
+            [
+                str(index),
+                Paragraph(escape(str(description)), normal),
+                _format_decimal_for_json(quantity),
+                f"USD {unit_price:,.2f}",
+                f"USD {amount:,.2f}",
+            ]
+        )
+    if len(item_rows) == 1:
+        item_rows.append(["-", "No line items.", "-", "-", "-"])
+    items_table = Table(item_rows, colWidths=[30, 250, 70, 75, 80], repeatRows=1)
+    items_table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#222222")),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("ALIGN", (0, 0), (0, -1), "CENTER"),
+                ("ALIGN", (2, 1), (-1, -1), "RIGHT"),
+                ("GRID", (0, 0), (-1, -1), 0.35, colors.lightgrey),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("FONTSIZE", (0, 0), (-1, -1), 8.5),
+                ("TOPPADDING", (0, 0), (-1, -1), 6),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+            ]
+        )
+    )
+    story.append(items_table)
+    story.append(Spacer(1, 8))
+
+    total_table = Table(
+        [["PO Subtotal", f"USD {purchase_order.subtotal:,.2f}"]],
+        colWidths=[380, 125],
+    )
+    total_table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#d4af37")),
+                ("FONTNAME", (0, 0), (-1, -1), "Helvetica-Bold"),
+                ("ALIGN", (1, 0), (1, 0), "RIGHT"),
+                ("GRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#8a6d1d")),
+                ("FONTSIZE", (0, 0), (-1, -1), 9),
+                ("TOPPADDING", (0, 0), (-1, -1), 7),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
+            ]
+        )
+    )
+    story.append(total_table)
+    story.append(Spacer(1, 12))
+
+    if purchase_order.notes:
+        story.append(Paragraph("Notes", styles["Heading4"]))
+        story.append(Paragraph(escape(purchase_order.notes).replace("\n", "<br />"), normal))
+        story.append(Spacer(1, 10))
+
+    story.append(
+        Paragraph(
+            "This purchase order authorises supplier procurement for the listed goods only. Quote the PO number on all supplier correspondence.",
+            small,
+        )
+    )
+    doc.build(story)
+    return buffer.getvalue()
+
+
 @login_required
 def purchase_order_pdf(request, pk):
     purchase_order = get_object_or_404(_purchase_order_document_queryset(), pk=pk)
@@ -6377,10 +6535,7 @@ def purchase_order_pdf(request, pk):
             "auto_print_pdf": False,
         }
     )
-    pdf_bytes = render_to_browser_pdf(
-        "logistics/pdf/purchase_order_standalone.html",
-        context,
-    )
+    pdf_bytes = _render_purchase_order_pdf_bytes(purchase_order)
     response = HttpResponse(pdf_bytes, content_type="application/pdf")
     response["Content-Disposition"] = (
         f'inline; filename="{purchase_order.po_number}.pdf"; '

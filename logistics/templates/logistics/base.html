@@ -368,6 +368,12 @@
                             </div>
                         </div>
                     </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if 'purchase_order' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'purchase_order_list' %}" data-bs-toggle="tooltip" data-bs-placement="right" title="Purchase orders and supplier allocations">
+                            <i class="bi bi-journal-bookmark-fill"></i> Purchase Orders
+                            {% if shell_module_notification_counts.purchase_orders %}<span class="sidebar-count-badge ms-auto">{{ shell_module_notification_counts.purchase_orders }}</span>{% endif %}
+                        </a>
+                    </li>
                     {% endif %}
                     <li class="nav-item">
                         <a class="nav-link {% if 'transit' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'transit_list' %}" data-bs-toggle="tooltip" data-bs-placement="right" title="Transit tracking and vessel monitoring">
@@ -430,7 +436,7 @@
                             {% if shell_module_notification_counts.documents %}<span class="sidebar-count-badge ms-auto">{{ shell_module_notification_counts.documents }}</span>{% endif %}
                         </a>
                     </li>
-                    {% if user.is_superuser or user.role == 'ADMIN' or user.role == 'DIRECTOR' or user.role == 'PROCUREMENT' or user.role == 'OFFICE_ADMIN' %}
+                    {% if user.is_superuser or user.role == 'ADMIN' or user.role == 'DIRECTOR' or user.role == 'FINANCE' or user.role == 'PROCUREMENT' or user.role == 'OFFICE_ADMIN' %}
                     <li class="nav-item">
                         <a class="nav-link {% if 'sourcing' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'sourcing_list' %}" data-bs-toggle="tooltip" data-bs-placement="right" title="Manual or document-based supplier quote worksheets attached to customer entries">
                             <i class="bi bi-table"></i> Q-Worksheets
