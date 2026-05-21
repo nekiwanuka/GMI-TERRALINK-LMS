@@ -212,6 +212,23 @@
     max-width: 180px;
 }
 
+.po-line-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    min-width: 190px;
+}
+
+.po-line-stack span {
+    color: #666;
+    font-size: 0.76rem;
+}
+
+.po-line-stack strong {
+    color: #1a1a1a;
+    font-size: 0.82rem;
+}
+
 .purchase-order-actions {
     display: flex;
     flex-wrap: wrap;
@@ -329,6 +346,7 @@
                         <th>Purchase Order</th>
                         <th>Type</th>
                         <th>Parties</th>
+                        <th>Line Quantities</th>
                         <th class="text-end">Value</th>
                         <th>Supplier Payment</th>
                         <th>Client Payment</th>
@@ -358,6 +376,22 @@
                             <div class="po-party-stack">
                                 <strong>{{ po.transaction.customer.name }}</strong>
                                 <span>{% if po.supplier_name %}{{ po.supplier_name }}{% else %}Supplier not assigned{% endif %}</span>
+                            </div>
+                        </td>
+                        <td>
+                            <div class="po-line-stack">
+                                {% for line in po.line_quantity_summary|slice:":3" %}
+                                <div>
+                                    <strong>Line {{ line.number }}: {{ line.description|truncatechars:32 }}</strong>
+                                    {% if po.parent_po %}
+                                    <span>Split qty {{ line.split_quantity|default:"0" }} of original {{ line.original_quantity|default:"0" }}</span>
+                                    {% else %}
+                                    <span>Main {{ line.remaining_quantity }} / Original {{ line.original_quantity }}{% if line.split_quantity %} · Split {{ line.split_quantity }}{% endif %}</span>
+                                    {% endif %}
+                                </div>
+                                {% empty %}
+                                <span>No line quantities</span>
+                                {% endfor %}
                             </div>
                         </td>
                         <td class="text-end">
@@ -428,6 +462,17 @@
                                     <i class="bi bi-lock-fill me-1"></i>Locked
                                 </span>
                                 {% endif %}
+                                {% if can_edit_business_documents %}
+                                    {% if po.parent_po and not po.edit_locked %}
+                                    <a href="{% url 'purchase_order_split_quantity_update' po.pk %}" class="btn btn-sm btn-outline-dark">
+                                        <i class="bi bi-sliders me-1"></i>Split Qty
+                                    </a>
+                                    {% elif not po.parent_po and not po.edit_locked %}
+                                    <a href="{% url 'purchase_order_split_create' po.pk %}" class="btn btn-sm btn-outline-dark">
+                                        <i class="bi bi-diagram-3 me-1"></i>Split Line
+                                    </a>
+                                    {% endif %}
+                                {% endif %}
                                 {% if po.can_record_supplier_payment %}
                                 <a href="{% url 'record_supplier_payment' po.pk %}" class="btn btn-sm btn-success">
                                     <i class="bi bi-cash-stack me-1"></i>Pay Supplier
@@ -442,7 +487,7 @@
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="10">
+                        <td colspan="11">
                             <div class="po-empty-state">
                                 <i class="bi bi-journal-x"></i>
                                 <strong>No purchase orders match this view.</strong>

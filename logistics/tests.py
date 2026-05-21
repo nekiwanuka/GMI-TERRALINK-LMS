@@ -1,4 +1,5 @@
 from io import BytesIO
+from decimal import Decimal
 
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import SimpleTestCase, TestCase
@@ -10,6 +11,7 @@ from logistics.models import (
     Client,
     CustomUser,
     FinalInvoice,
+    PurchaseOrder,
     ProformaInvoice,
     Transaction,
 )
@@ -110,3 +112,179 @@ class ProformaFinalInvoiceOneToOneTests(TestCase):
         invoice = FinalInvoice.objects.get()
         self.assertEqual(invoice.proforma_id, self.proforma.pk)
         self.assertIn(str(invoice.pk), second_response["Location"])
+
+
+class PurchaseOrderSplitTests(TestCase):
+    def setUp(self):
+        self.user = CustomUser.objects.create_user(
+            username="po-admin",
+            password="testpass123",
+            role="ADMIN",
+        )
+        self.customer = Client.objects.create(
+            name="Lakeview Grand Hotel",
+            contact_person="Amina",
+            phone="+256700000000",
+            email="amina@example.com",
+            address="Kampala",
+            created_by=self.user,
+        )
+        self.transaction = Transaction.objects.create(
+            customer=self.customer,
+            description="Hotel supplies",
+            created_by=self.user,
+        )
+        self.purchase_order = PurchaseOrder.objects.create(
+            transaction=self.transaction,
+            supplier_name="Supplier Pending",
+            supplier_address="",
+            items=[
+                {
+                    "description": "Solar battery",
+                    "quantity": "5",
+                    "unit_price": 100,
+                    "amount": 500,
+                    "total": 500,
+                }
+            ],
+            subtotal=500,
+            created_by=self.user,
+        )
+        self.client.force_login(self.user)
+
+    def _split_payload(self, quantity="2"):
+        return {
+            "line_index": "0",
+            "split_quantity": quantity,
+            "supplier_name": "Split Supplier",
+            "supplier_address": "Kampala",
+            "notes": "Supplier allocation",
+        }
+
+    def _create_split(self, quantity="2"):
+        self.client.post(
+            reverse(
+                "purchase_order_split_create", kwargs={"pk": self.purchase_order.pk}
+            ),
+            self._split_payload(quantity),
+        )
+        return PurchaseOrder.objects.get(parent_po=self.purchase_order)
+
+    def test_split_creation_deducts_quantity_from_main_po_line(self):
+        response = self.client.post(
+            reverse(
+                "purchase_order_split_create", kwargs={"pk": self.purchase_order.pk}
+            ),
+            self._split_payload("2"),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        split_po = PurchaseOrder.objects.get(parent_po=self.purchase_order)
+        self.purchase_order.refresh_from_db()
+        self.assertEqual(split_po.original_po_line_index, 0)
+        self.assertEqual(split_po.original_po_line_quantity, Decimal("5.00"))
+        self.assertEqual(split_po.split_quantity, Decimal("2.00"))
+        self.assertEqual(self.purchase_order.items[0]["quantity"], "3")
+        self.assertEqual(split_po.items[0]["quantity"], "2")
+        self.assertEqual(self.purchase_order.subtotal, Decimal("300.00"))
+        self.assertEqual(split_po.subtotal, Decimal("200.00"))
+
+    def test_split_requires_original_quantity_greater_than_two(self):
+        self.purchase_order.items = [
+            {
+                "description": "Small batch",
+                "quantity": "2",
+                "unit_price": 50,
+                "amount": 100,
+                "total": 100,
+            }
+        ]
+        self.purchase_order.subtotal = 100
+        self.purchase_order.save(update_fields=["items", "subtotal", "updated_at"])
+
+        response = self.client.post(
+            reverse(
+                "purchase_order_split_create", kwargs={"pk": self.purchase_order.pk}
+            ),
+            self._split_payload("1"),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(
+            PurchaseOrder.objects.filter(parent_po=self.purchase_order).exists()
+        )
+
+    def test_split_quantity_cannot_consume_entire_po_line(self):
+        response = self.client.post(
+            reverse(
+                "purchase_order_split_create", kwargs={"pk": self.purchase_order.pk}
+            ),
+            self._split_payload("5"),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(
+            PurchaseOrder.objects.filter(parent_po=self.purchase_order).exists()
+        )
+        self.purchase_order.refresh_from_db()
+        self.assertEqual(self.purchase_order.items[0]["quantity"], "5")
+
+    def test_split_quantity_update_recalculates_main_po_balance(self):
+        split_po = self._create_split("2")
+
+        response = self.client.post(
+            reverse("purchase_order_split_quantity_update", kwargs={"pk": split_po.pk}),
+            {"split_quantity": "3"},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        split_po.refresh_from_db()
+        self.purchase_order.refresh_from_db()
+        self.assertEqual(split_po.split_quantity, Decimal("3.00"))
+        self.assertEqual(split_po.items[0]["quantity"], "3")
+        self.assertEqual(self.purchase_order.items[0]["quantity"], "2")
+
+    def test_split_quantity_update_cannot_zero_main_po_balance(self):
+        split_po = self._create_split("2")
+
+        response = self.client.post(
+            reverse("purchase_order_split_quantity_update", kwargs={"pk": split_po.pk}),
+            {"split_quantity": "5"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        split_po.refresh_from_db()
+        self.purchase_order.refresh_from_db()
+        self.assertEqual(split_po.split_quantity, Decimal("2.00"))
+        self.assertEqual(self.purchase_order.items[0]["quantity"], "3")
+
+    def test_received_purchase_order_blocks_splits_and_split_quantity_edits(self):
+        self.purchase_order.status = "RECEIVED"
+        self.purchase_order.save(update_fields=["status", "updated_at"])
+
+        response = self.client.post(
+            reverse(
+                "purchase_order_split_create", kwargs={"pk": self.purchase_order.pk}
+            ),
+            self._split_payload("2"),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(
+            PurchaseOrder.objects.filter(parent_po=self.purchase_order).exists()
+        )
+
+        self.purchase_order.status = "PENDING"
+        self.purchase_order.save(update_fields=["status", "updated_at"])
+        split_po = self._create_split("2")
+        split_po.status = "RECEIVED"
+        split_po.save(update_fields=["status", "updated_at"])
+
+        response = self.client.post(
+            reverse("purchase_order_split_quantity_update", kwargs={"pk": split_po.pk}),
+            {"split_quantity": "3"},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        split_po.refresh_from_db()
+        self.assertEqual(split_po.split_quantity, Decimal("2.00"))

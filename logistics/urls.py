@@ -453,6 +453,11 @@ urlpatterns = [
         name="purchase_order_split_create",
     ),
     path(
+        "invoicing/purchase-orders/<int:pk>/split-quantity/",
+        views.purchase_order_split_quantity_update,
+        name="purchase_order_split_quantity_update",
+    ),
+    path(
         "invoicing/purchase-orders/<int:pk>/update/",
         views.purchase_order_update,
         name="purchase_order_update",

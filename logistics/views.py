@@ -15,6 +15,7 @@ from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
 from django.conf import settings
 from django.contrib.contenttypes.models import ContentType
+from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Q, Sum, ProtectedError, Count
@@ -5439,10 +5440,185 @@ def _parse_purchase_order_items(post_data):
     return items, subtotal
 
 
+def _decimal_from_value(value, default="0"):
+    from decimal import InvalidOperation
+
+    try:
+        return Decimal(str(value if value not in (None, "") else default))
+    except (InvalidOperation, TypeError, ValueError):
+        return Decimal(default)
+
+
+def _format_decimal_for_json(value):
+    value = Decimal(value).quantize(Decimal("0.01"))
+    return format(value.normalize(), "f") if value != 0 else "0"
+
+
+def _purchase_order_item_quantity(item):
+    return _decimal_from_value((item or {}).get("quantity"), "0")
+
+
+def _purchase_order_item_unit_price(item):
+    item = item or {}
+    for key in ("unit_price", "sales_price"):
+        if item.get(key) not in (None, ""):
+            return _decimal_from_value(item.get(key), "0")
+    amount = item.get("total", item.get("amount"))
+    quantity = _purchase_order_item_quantity(item)
+    if amount not in (None, "") and quantity:
+        return _decimal_from_value(amount, "0") / quantity
+    return _decimal_from_value(amount, "0")
+
+
+def _purchase_order_item_with_quantity(item, quantity):
+    updated = dict(item or {})
+    quantity = Decimal(quantity).quantize(Decimal("0.01"))
+    unit_price = _purchase_order_item_unit_price(item)
+    line_total = (quantity * unit_price).quantize(Decimal("0.01"))
+    updated["quantity"] = _format_decimal_for_json(quantity)
+    updated["unit_price"] = float(unit_price.quantize(Decimal("0.01")))
+    updated["amount"] = float(line_total)
+    updated["total"] = float(line_total)
+    return updated
+
+
+def _purchase_order_items_subtotal(items):
+    subtotal = Decimal("0.00")
+    for item in items or []:
+        quantity = _purchase_order_item_quantity(item)
+        subtotal += quantity * _purchase_order_item_unit_price(item)
+    return subtotal.quantize(Decimal("0.01"))
+
+
+def _purchase_order_line_split_total(base_po, line_index, exclude_split_pk=None):
+    splits = base_po.split_purchase_orders.filter(original_po_line_index=line_index)
+    if exclude_split_pk:
+        splits = splits.exclude(pk=exclude_split_pk)
+    return splits.aggregate(total=Sum("split_quantity"))["total"] or Decimal("0.00")
+
+
+def _purchase_order_original_line_quantity(base_po, line_index, item):
+    existing_split = (
+        base_po.split_purchase_orders.filter(
+            original_po_line_index=line_index,
+            original_po_line_quantity__isnull=False,
+        )
+        .order_by("created_at")
+        .first()
+    )
+    if existing_split:
+        return existing_split.original_po_line_quantity
+    return _purchase_order_item_quantity(item) + _purchase_order_line_split_total(
+        base_po, line_index
+    )
+
+
+def _is_purchase_order_received_locked(purchase_order):
+    status = (purchase_order.status or "").upper()
+    effective_status = (getattr(purchase_order, "effective_status", "") or "").upper()
+    return status in {"RECEIVED", "FULFILLED"} or effective_status in {
+        "RECEIVED",
+        "FULFILLED",
+    }
+
+
+def _purchase_order_split_line_options(base_po):
+    options = []
+    items = list(base_po.items or [])
+    for line_index, item in enumerate(items):
+        original_quantity = _purchase_order_original_line_quantity(
+            base_po, line_index, item
+        )
+        split_total = _purchase_order_line_split_total(base_po, line_index)
+        remaining_quantity = original_quantity - split_total
+        options.append(
+            {
+                "index": line_index,
+                "number": line_index + 1,
+                "description": item.get("description")
+                or item.get("name")
+                or "Line item",
+                "original_quantity": original_quantity,
+                "split_quantity": split_total,
+                "remaining_quantity": remaining_quantity,
+                "unit_price": _purchase_order_item_unit_price(item),
+                "can_split": original_quantity > Decimal("2.00")
+                and remaining_quantity > 0,
+            }
+        )
+    return options
+
+
+def _validate_purchase_order_split_quantity(
+    base_po, line_index, split_quantity, *, exclude_split_pk=None
+):
+    items = list(base_po.items or [])
+    if line_index is None or line_index < 0 or line_index >= len(items):
+        return None, ["Select a valid PO line to split."]
+    item = items[line_index]
+    original_quantity = _purchase_order_original_line_quantity(
+        base_po, line_index, item
+    )
+    other_split_total = _purchase_order_line_split_total(
+        base_po, line_index, exclude_split_pk=exclude_split_pk
+    )
+    remaining_after_split = original_quantity - other_split_total - split_quantity
+    errors = []
+    if original_quantity <= Decimal("2.00"):
+        errors.append(
+            "PO lines can only be split when the original quantity is greater than 2."
+        )
+    if split_quantity <= 0:
+        errors.append("Split quantity must be greater than zero.")
+    if remaining_after_split <= 0:
+        errors.append(
+            "Split quantity cannot consume the entire PO line; the main PO must keep a remaining balance."
+        )
+    return item, errors
+
+
+def _sync_purchase_order_split_line(base_po, line_index):
+    items = list(base_po.items or [])
+    if line_index is None or line_index < 0 or line_index >= len(items):
+        return
+    item = items[line_index]
+    original_quantity = _purchase_order_original_line_quantity(
+        base_po, line_index, item
+    )
+    split_total = _purchase_order_line_split_total(base_po, line_index)
+    remaining_quantity = max(original_quantity - split_total, Decimal("0.00"))
+    items[line_index] = _purchase_order_item_with_quantity(item, remaining_quantity)
+    base_po.items = items
+    base_po.subtotal = _purchase_order_items_subtotal(items)
+    base_po.save(update_fields=["items", "subtotal", "updated_at"])
+
+
+def _decorate_purchase_order_line_quantities(purchase_order):
+    base_po = purchase_order.root_po
+    if purchase_order.is_split:
+        purchase_order.line_quantity_summary = [
+            {
+                "number": (purchase_order.original_po_line_index or 0) + 1,
+                "description": (
+                    (purchase_order.items or [{}])[0].get("description", "Line item")
+                    if purchase_order.items
+                    else "Line item"
+                ),
+                "original_quantity": purchase_order.original_po_line_quantity,
+                "split_quantity": purchase_order.split_quantity,
+                "remaining_quantity": None,
+                "can_split": False,
+            }
+        ]
+        return purchase_order
+    purchase_order.line_quantity_summary = _purchase_order_split_line_options(base_po)
+    return purchase_order
+
+
 @login_required
 @role_required("PROCUREMENT", "OFFICE_ADMIN", "FINANCE", "DIRECTOR", "ADMIN")
 def purchase_order_split_create(request, pk):
-    """Create a supplier split purchase order linked to the same invoice details."""
+    """Create a supplier split purchase order for one source PO line."""
     purchase_order = get_object_or_404(
         PurchaseOrder.objects.select_related(
             "transaction",
@@ -5456,15 +5632,19 @@ def purchase_order_split_create(request, pk):
     base_po = purchase_order.root_po
     _decorate_purchase_order_status(base_po)
     _decorate_purchase_order_edit_lock(base_po)
+    _decorate_purchase_order_line_quantities(base_po)
     if base_po.edit_locked:
         messages.error(request, base_po.edit_lock_message)
         return redirect("purchase_order_detail", pk=base_po.pk)
-
-    existing_split_exists = base_po.split_purchase_orders.exists()
-    if purchase_order.is_split or existing_split_exists:
+    if _is_purchase_order_received_locked(base_po):
         messages.warning(
             request,
-            "This purchase order has already been split. Open the existing split instead of creating a duplicate.",
+            "This purchase order has already been received/fulfilled; split operations are blocked.",
+        )
+        return redirect("purchase_order_detail", pk=base_po.pk)
+    if purchase_order.is_split:
+        messages.warning(
+            request, "Open the main purchase order before creating another line split."
         )
         return redirect("purchase_order_detail", pk=base_po.pk)
     if purchase_order.transaction.is_closed:
@@ -5481,6 +5661,7 @@ def purchase_order_split_create(request, pk):
         ).first()
     )
     suppliers = Supplier.objects.all().order_by("name")
+    line_options = _purchase_order_split_line_options(base_po)
 
     if request.method == "POST":
         supplier_id = (request.POST.get("supplier_id") or "").strip()
@@ -5491,6 +5672,11 @@ def purchase_order_split_create(request, pk):
             "supplier_address", request.POST.get("supplier_address") or ""
         )
         split_notes = (request.POST.get("notes") or "").strip()
+        try:
+            line_index = int((request.POST.get("line_index") or "-1").strip() or "-1")
+        except ValueError:
+            line_index = -1
+        split_quantity = _decimal_from_value(request.POST.get("split_quantity"), "0")
 
         supplier_name = ""
         supplier_address = ""
@@ -5514,26 +5700,56 @@ def purchase_order_split_create(request, pk):
                     "base_po": base_po,
                     "invoice": invoice,
                     "suppliers": suppliers,
+                    "line_options": line_options,
                 },
             )
 
-        split_po = PurchaseOrder.objects.create(
-            transaction=base_po.transaction,
-            proforma=base_po.proforma,
-            final_invoice=invoice,
-            parent_po=base_po,
-            supplier_name=supplier_name,
-            supplier_address=supplier_address,
-            items=(invoice.items if invoice else base_po.items),
-            subtotal=(invoice.subtotal if invoice else base_po.subtotal),
-            notes=split_notes or f"Supplier split from base PO {base_po.po_number}.",
-            created_by=request.user,
+        source_item, errors = _validate_purchase_order_split_quantity(
+            base_po, line_index, split_quantity
         )
+        if errors:
+            for error in errors:
+                messages.error(request, error)
+            return render(
+                request,
+                "logistics/invoicing/purchase_order_split_form.html",
+                {
+                    "purchase_order": purchase_order,
+                    "base_po": base_po,
+                    "invoice": invoice,
+                    "suppliers": suppliers,
+                    "line_options": line_options,
+                },
+            )
+
+        original_quantity = _purchase_order_original_line_quantity(
+            base_po, line_index, source_item
+        )
+        split_item = _purchase_order_item_with_quantity(source_item, split_quantity)
+        split_subtotal = _purchase_order_items_subtotal([split_item])
+        with transaction.atomic():
+            split_po = PurchaseOrder.objects.create(
+                transaction=base_po.transaction,
+                proforma=base_po.proforma,
+                final_invoice=invoice,
+                parent_po=base_po,
+                original_po_line_index=line_index,
+                original_po_line_snapshot=source_item,
+                original_po_line_quantity=original_quantity,
+                split_quantity=split_quantity,
+                supplier_name=supplier_name,
+                supplier_address=supplier_address,
+                items=[split_item],
+                subtotal=split_subtotal,
+                notes=split_notes or f"Line split from main PO {base_po.po_number}.",
+                created_by=request.user,
+            )
+            _sync_purchase_order_split_line(base_po, line_index)
         messages.success(
             request,
-            f"Split purchase order {split_po.po_number} created. You can now edit supplier-specific items before sending.",
+            f"Split purchase order {split_po.po_number} created and the main PO quantity was recalculated.",
         )
-        return redirect("purchase_order_update", pk=split_po.pk)
+        return redirect("purchase_order_detail", pk=split_po.pk)
 
     return render(
         request,
@@ -5543,6 +5759,82 @@ def purchase_order_split_create(request, pk):
             "base_po": base_po,
             "invoice": invoice,
             "suppliers": suppliers,
+            "line_options": line_options,
+        },
+    )
+
+
+@login_required
+@role_required("PROCUREMENT", "OFFICE_ADMIN", "FINANCE", "DIRECTOR", "ADMIN")
+def purchase_order_split_quantity_update(request, pk):
+    split_po = get_object_or_404(
+        PurchaseOrder.objects.select_related(
+            "transaction__customer",
+            "created_by",
+            "parent_po",
+            "final_invoice",
+            "proforma",
+        ),
+        pk=pk,
+        parent_po__isnull=False,
+    )
+    base_po = split_po.root_po
+    _decorate_purchase_order_status(base_po)
+    _decorate_purchase_order_status(split_po)
+    _decorate_purchase_order_edit_lock(base_po)
+    _decorate_purchase_order_edit_lock(split_po)
+    if base_po.transaction.is_closed:
+        messages.error(
+            request, "This trade is closed; split quantities cannot be edited."
+        )
+        return redirect("purchase_order_detail", pk=split_po.pk)
+    if _is_purchase_order_received_locked(
+        base_po
+    ) or _is_purchase_order_received_locked(split_po):
+        messages.error(
+            request,
+            "This purchase order has been received/fulfilled; split quantity edits are blocked.",
+        )
+        return redirect("purchase_order_detail", pk=split_po.pk)
+
+    if request.method == "POST":
+        split_quantity = _decimal_from_value(request.POST.get("split_quantity"), "0")
+        line_index = split_po.original_po_line_index
+        source_item, errors = _validate_purchase_order_split_quantity(
+            base_po,
+            line_index,
+            split_quantity,
+            exclude_split_pk=split_po.pk,
+        )
+        if not errors:
+            split_item = _purchase_order_item_with_quantity(source_item, split_quantity)
+            with transaction.atomic():
+                split_po.split_quantity = split_quantity
+                split_po.items = [split_item]
+                split_po.subtotal = _purchase_order_items_subtotal([split_item])
+                split_po.save(
+                    update_fields=["split_quantity", "items", "subtotal", "updated_at"]
+                )
+                _sync_purchase_order_split_line(base_po, line_index)
+            messages.success(
+                request,
+                "Split quantity updated and the main PO balance was recalculated.",
+            )
+            return redirect("purchase_order_detail", pk=split_po.pk)
+        for error in errors:
+            messages.error(request, error)
+
+    return render(
+        request,
+        "logistics/invoicing/purchase_order_split_form.html",
+        {
+            "purchase_order": split_po,
+            "base_po": base_po,
+            "invoice": split_po.final_invoice,
+            "suppliers": Supplier.objects.none(),
+            "line_options": _purchase_order_split_line_options(base_po),
+            "split_po": split_po,
+            "is_split_quantity_edit": True,
         },
     )
 
@@ -5577,6 +5869,7 @@ def purchase_order_list(request):
         _decorate_purchase_order_status(purchase_order)
         _decorate_purchase_order_invoice_payment(purchase_order)
         _decorate_purchase_order_edit_lock(purchase_order)
+        _decorate_purchase_order_line_quantities(purchase_order)
         _decorate_purchase_order_supplier_payment(purchase_order, request.user)
 
     valid_statuses = {choice[0] for choice in PurchaseOrder.STATUS_CHOICES}
@@ -5666,6 +5959,12 @@ def purchase_order_update(request, pk):
     )
     _decorate_purchase_order_status(purchase_order)
     _decorate_purchase_order_edit_lock(purchase_order)
+    if purchase_order.is_split:
+        messages.info(
+            request,
+            "Split purchase orders only allow split quantity changes; supplier and line editing stays locked to the source PO line.",
+        )
+        return redirect("purchase_order_split_quantity_update", pk=purchase_order.pk)
     edit_guard = _guard_business_document_edit_permission(
         request,
         edit_label=f"purchase order {purchase_order.po_number}",
@@ -5782,6 +6081,7 @@ def _purchase_order_display_context(purchase_order, user):
     _decorate_purchase_order_status(purchase_order)
     _decorate_purchase_order_invoice_payment(purchase_order)
     _decorate_purchase_order_edit_lock(purchase_order)
+    _decorate_purchase_order_line_quantities(purchase_order)
     base_po = purchase_order.root_po
     sibling_splits = base_po.split_purchase_orders.select_related(
         "created_by", "final_invoice"
@@ -5799,9 +6099,10 @@ def _purchase_order_display_context(purchase_order, user):
     )
     can_split_purchase_order = (
         not purchase_order.is_split
-        and not has_supplier_splits
         and not purchase_order.transaction.is_closed
         and not purchase_order.edit_locked
+        and not _is_purchase_order_received_locked(purchase_order)
+        and any(line["can_split"] for line in purchase_order.line_quantity_summary)
     )
     return {
         "purchase_order": purchase_order,
@@ -8926,7 +9227,13 @@ def _decorate_purchase_order_edit_lock(purchase_order):
     is_paid = subtotal > 0 and total_paid >= subtotal
     is_cleared = total_paid > 0 and balance_due <= Decimal("0.00")
     has_supplier_payment = total_paid > 0
-    is_served = effective_status == "FULFILLED" or purchase_order.status == "FULFILLED"
+    is_served = effective_status in {
+        "RECEIVED",
+        "FULFILLED",
+    } or purchase_order.status in {
+        "RECEIVED",
+        "FULFILLED",
+    }
     is_closed = purchase_order.transaction.is_closed
 
     reasons = []
@@ -8960,6 +9267,8 @@ def _decorate_purchase_order_edit_lock(purchase_order):
 
 
 def _purchase_order_effective_status(purchase_order, total_paid=None):
+    if purchase_order.status in {"RECEIVED", "FULFILLED"}:
+        return purchase_order.status
     if total_paid is None:
         _, total_paid, _ = _po_supplier_summary(purchase_order)
     subtotal = purchase_order.subtotal or Decimal("0.00")

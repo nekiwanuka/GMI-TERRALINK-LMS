@@ -1757,6 +1757,7 @@ class PurchaseOrder(models.Model):
     STATUS_CHOICES = (
         ("PENDING", "Pending"),
         ("SENT", "Sent to Supplier"),
+        ("RECEIVED", "Received"),
         ("FULFILLED", "Fulfilled"),
     )
 
@@ -1784,6 +1785,14 @@ class PurchaseOrder(models.Model):
         null=True,
         blank=True,
         related_name="split_purchase_orders",
+    )
+    original_po_line_index = models.PositiveIntegerField(null=True, blank=True)
+    original_po_line_snapshot = models.JSONField(default=dict, blank=True)
+    original_po_line_quantity = models.DecimalField(
+        max_digits=12, decimal_places=2, null=True, blank=True
+    )
+    split_quantity = models.DecimalField(
+        max_digits=12, decimal_places=2, null=True, blank=True
     )
     supplier_name = models.CharField(max_length=255)
     supplier_address = models.TextField(blank=True)
