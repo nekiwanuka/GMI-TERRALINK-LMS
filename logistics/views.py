@@ -179,6 +179,7 @@ from .role_permissions import (
     PROCUREMENT_PERMISSION_ROLES,
     PROCUREMENT_STAFF_ROLES,
     expand_allowed_roles,
+    normalized_role,
     role_has_procurement_permissions,
 )
 from .document_numbers import (
@@ -3016,6 +3017,8 @@ def document_archive_list(request):
     archives = DocumentArchive.objects.select_related(
         "transaction__customer", "document", "archived_by"
     ).order_by("-created_at")
+    if not request.user.is_superuser and normalized_role(request.user) != "DIRECTOR":
+        archives = archives.filter(archived_by__role=normalized_role(request.user))
     page_obj, query_string, page_range = paginate_queryset(request, archives)
     return render(
         request,
@@ -3098,8 +3101,7 @@ def transaction_document_upload(request, pk):
                 form.cleaned_data.get("document_type") or "",
             )
         document.save()
-        if document.extracted_text or document.structured_data:
-            DocumentArchive.create_from_document(document, archived_by=request.user)
+        DocumentArchive.create_from_document(document, archived_by=request.user)
         if document.document_type == "CLIENT_PI":
             _notify_roles(
                 title="Client PI uploaded",

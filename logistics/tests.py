@@ -1,8 +1,11 @@
 from io import BytesIO
 from decimal import Decimal
+import shutil
+import tempfile
+from unittest.mock import patch
 
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import SimpleTestCase, TestCase
+from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 
 from reportlab.pdfgen import canvas
@@ -10,6 +13,8 @@ from reportlab.pdfgen import canvas
 from logistics.models import (
     Client,
     CustomUser,
+    Document,
+    DocumentArchive,
     FinalInvoice,
     PurchaseOrder,
     ProformaInvoice,
@@ -62,6 +67,96 @@ class DocumentExtractionTests(SimpleTestCase):
         self.assertIn("not supported", text.lower())
         self.assertEqual(upload.tell(), 0)
         self.assertFalse(_has_extractable_document_text(text))
+
+
+class DocumentArchiveTests(TestCase):
+    def setUp(self):
+        self.media_root = tempfile.mkdtemp()
+        self.override = override_settings(MEDIA_ROOT=self.media_root)
+        self.override.enable()
+        self.addCleanup(self.override.disable)
+        self.addCleanup(shutil.rmtree, self.media_root, ignore_errors=True)
+
+        self.director = CustomUser.objects.create_user(
+            username="director",
+            password="testpass123",
+            role="DIRECTOR",
+        )
+        self.finance = CustomUser.objects.create_user(
+            username="finance",
+            password="testpass123",
+            role="FINANCE",
+        )
+        self.procurement = CustomUser.objects.create_user(
+            username="procurement-docs",
+            password="testpass123",
+            role="PROCUREMENT",
+        )
+        self.customer = Client.objects.create(
+            name="Lakeview Grand Hotel",
+            contact_person="Amina",
+            phone="+256700000000",
+            email="amina@example.com",
+            address="Kampala",
+            created_by=self.director,
+        )
+        self.transaction = Transaction.objects.create(
+            customer=self.customer,
+            description="Hotel supplies",
+            created_by=self.director,
+        )
+
+    def _archive_for(self, user, filename):
+        document = Document.objects.create(
+            transaction=self.transaction,
+            document_type="INQUIRY",
+            original_file=SimpleUploadedFile(
+                filename, b"department upload", content_type="text/plain"
+            ),
+            uploaded_by=user,
+        )
+        return DocumentArchive.create_from_document(document, archived_by=user)
+
+    def test_upload_without_extracted_text_is_still_archived(self):
+        self.client.force_login(self.finance)
+
+        with patch("logistics.views._extract_text_from_file", return_value=""):
+            response = self.client.post(
+                reverse(
+                    "transaction_document_upload", kwargs={"pk": self.transaction.pk}
+                ),
+                {
+                    "document_type": "INQUIRY",
+                    "original_file": SimpleUploadedFile(
+                        "blank-ish.txt", b"no readable text", content_type="text/plain"
+                    ),
+                },
+            )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(Document.objects.count(), 1)
+        self.assertEqual(DocumentArchive.objects.count(), 1)
+        self.assertEqual(DocumentArchive.objects.get().archived_by, self.finance)
+
+    def test_archive_visibility_is_limited_to_department_except_director(self):
+        finance_archive = self._archive_for(self.finance, "finance.txt")
+        procurement_archive = self._archive_for(self.procurement, "procurement.txt")
+        url = reverse("document_archive_list")
+
+        self.client.force_login(self.finance)
+        finance_response = self.client.get(url)
+        self.assertContains(finance_response, finance_archive.original_filename)
+        self.assertNotContains(finance_response, procurement_archive.original_filename)
+
+        self.client.force_login(self.procurement)
+        procurement_response = self.client.get(url)
+        self.assertContains(procurement_response, procurement_archive.original_filename)
+        self.assertNotContains(procurement_response, finance_archive.original_filename)
+
+        self.client.force_login(self.director)
+        director_response = self.client.get(url)
+        self.assertContains(director_response, finance_archive.original_filename)
+        self.assertContains(director_response, procurement_archive.original_filename)
 
 
 class ProformaFinalInvoiceOneToOneTests(TestCase):
