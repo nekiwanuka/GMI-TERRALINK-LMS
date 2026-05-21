@@ -1252,7 +1252,12 @@ def protected_media(request, path):
         raise Http404("File not found")
 
     content_type, _ = mimetypes.guess_type(file_path)
-    return FileResponse(open(file_path, "rb"), content_type=content_type)
+    filename = os.path.basename(file_path)
+    response = FileResponse(open(file_path, "rb"), content_type=content_type)
+    response["Content-Disposition"] = (
+        f"inline; filename=\"{filename}\"; filename*=UTF-8''{quote(filename)}"
+    )
+    return response
 
 
 # ===== DASHBOARD & USERS =====
@@ -6378,7 +6383,8 @@ def purchase_order_pdf(request, pk):
     )
     response = HttpResponse(pdf_bytes, content_type="application/pdf")
     response["Content-Disposition"] = (
-        f'attachment; filename="{purchase_order.po_number}.pdf"'
+        f'inline; filename="{purchase_order.po_number}.pdf"; '
+        f"filename*=UTF-8''{quote(f'{purchase_order.po_number}.pdf')}"
     )
     return _prevent_stale_pdf_cache(response)
 

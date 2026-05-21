@@ -155,6 +155,19 @@ class DocumentArchiveTests(TestCase):
         self.assertEqual(DocumentArchive.objects.count(), 1)
         self.assertEqual(DocumentArchive.objects.get().archived_by, self.finance)
 
+    def test_protected_media_renders_archived_pdf_inline(self):
+        archive = self._archive_for(self.finance, "finance-proof.pdf")
+        self.client.force_login(self.finance)
+
+        response = self.client.get(
+            reverse("protected_media", kwargs={"path": archive.archived_file.name})
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "application/pdf")
+        self.assertIn("inline", response["Content-Disposition"])
+        self.assertIn("finance-proof.pdf", response["Content-Disposition"])
+
     def test_supplier_payment_proof_is_archived(self):
         payment = SupplierPayment.objects.create(
             purchase_order=self.purchase_order,
@@ -174,7 +187,9 @@ class DocumentArchiveTests(TestCase):
         self.assertEqual(archive.transaction, self.transaction)
         self.assertEqual(archive.archived_by, self.procurement)
         self.assertEqual(archive.original_filename, "supplier-proof.txt")
-        self.assertTrue(archive.archived_file.name.startswith("transactions/archive/originals/"))
+        self.assertTrue(
+            archive.archived_file.name.startswith("transactions/archive/originals/")
+        )
 
     def test_archive_visibility_is_limited_to_department_except_director(self):
         finance_archive = self._archive_for(self.finance, "finance.txt")
@@ -302,6 +317,19 @@ class PurchaseOrderSplitTests(TestCase):
             self._split_payload(quantity),
         )
         return PurchaseOrder.objects.get(parent_po=self.purchase_order)
+
+    def test_purchase_order_pdf_renders_inline(self):
+        with patch("logistics.views.render_to_browser_pdf", return_value=b"%PDF-1.4"):
+            response = self.client.get(
+                reverse("purchase_order_pdf", kwargs={"pk": self.purchase_order.pk})
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "application/pdf")
+        self.assertIn("inline", response["Content-Disposition"])
+        self.assertIn(
+            f"{self.purchase_order.po_number}.pdf", response["Content-Disposition"]
+        )
 
     def test_split_creation_deducts_quantity_from_main_po_line(self):
         response = self.client.post(
