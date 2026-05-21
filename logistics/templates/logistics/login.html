@@ -418,8 +418,8 @@
 
     <div class="gmi-auth-form">
       <div class="gmi-auth-form-head">
-        <h2>Welcome back</h2>
-        <p>Sign in to continue to your operations dashboard.</p>
+        <h2>{% if otp_pending %}Enter your OTP{% else %}Welcome back{% endif %}</h2>
+        <p>{% if otp_pending %}Use the code sent to {{ otp_email }} to complete sign-in.{% else %}Sign in to continue to your operations dashboard.{% endif %}</p>
       </div>
 
       {% if form.errors or form.non_field_errors %}
@@ -432,6 +432,41 @@
         </div>
       {% endif %}
 
+      {% if otp_pending %}
+      <form method="post" novalidate id="gmi-login-form" autocomplete="one-time-code">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{{ next }}">
+
+        <div class="gmi-field">
+          <label for="id_otp_code">One-time password</label>
+          <div class="gmi-input-wrap">
+            <i class="bi bi-shield-lock"></i>
+            <input type="text" id="id_otp_code" name="otp_code"
+                   placeholder="6-digit code" autocomplete="one-time-code"
+                   inputmode="numeric" pattern="[0-9]*" maxlength="6"
+                   required autofocus>
+          </div>
+        </div>
+
+        <button type="submit" class="gmi-submit" id="gmi-submit-btn">
+          <span class="spinner" aria-hidden="true"></span>
+          <span class="label"><i class="bi bi-check2-circle me-1"></i> Verify and sign in</span>
+        </button>
+      </form>
+
+      <div class="gmi-meta-row mt-2">
+        <form method="post" class="m-0">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="resend_otp">
+          <button type="submit" class="btn btn-link p-0 text-decoration-none fw-semibold">Resend OTP</button>
+        </form>
+        <form method="post" class="m-0">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="restart_login">
+          <button type="submit" class="btn btn-link p-0 text-decoration-none fw-semibold">Use another account</button>
+        </form>
+      </div>
+      {% else %}
       <form method="post" novalidate id="gmi-login-form" autocomplete="on">
         {% csrf_token %}
 
@@ -479,6 +514,7 @@
           <span class="label"><i class="bi bi-box-arrow-in-right me-1"></i> Sign in to dashboard</span>
         </button>
       </form>
+      {% endif %}
 
       <div class="gmi-divider">Need help?</div>
       <div class="gmi-help">

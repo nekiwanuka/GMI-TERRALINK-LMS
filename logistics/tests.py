@@ -1,9 +1,11 @@
 from io import BytesIO
 from decimal import Decimal
+import re
 import shutil
 import tempfile
 from unittest.mock import patch
 
+from django.core import mail
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
@@ -68,6 +70,84 @@ class DocumentExtractionTests(SimpleTestCase):
         self.assertIn("not supported", text.lower())
         self.assertEqual(upload.tell(), 0)
         self.assertFalse(_has_extractable_document_text(text))
+
+
+@override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
+class LoginOtpTests(TestCase):
+    def setUp(self):
+        mail.outbox = []
+        self.user = CustomUser.objects.create_user(
+            username="otp-user",
+            password="testpass123",
+            email="ops@example.com",
+            role="FINANCE",
+        )
+
+    def _latest_otp(self):
+        self.assertEqual(len(mail.outbox), 1)
+        match = re.search(r"\b(\d{6})\b", mail.outbox[0].body)
+        self.assertIsNotNone(match)
+        return match.group(1)
+
+    def test_password_login_sends_otp_without_authenticating(self):
+        response = self.client.post(
+            reverse("login"),
+            {
+                "username": "otp-user",
+                "password": "testpass123",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("login"))
+        self.assertIn("login_otp", self.client.session)
+        self.assertNotIn("_auth_user_id", self.client.session)
+        self.assertIn("Your GMI Terralink sign-in OTP", mail.outbox[0].subject)
+        self.assertEqual(mail.outbox[0].from_email, "otp@gmiterralink.com")
+        self.assertEqual(mail.outbox[0].to, ["ops@example.com"])
+
+    def test_correct_otp_completes_login(self):
+        self.client.post(
+            reverse("login"),
+            {
+                "username": "otp-user",
+                "password": "testpass123",
+                "next": reverse("dashboard"),
+            },
+        )
+        otp_code = self._latest_otp()
+
+        response = self.client.post(
+            reverse("login"),
+            {
+                "otp_code": otp_code,
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("dashboard"))
+        self.assertEqual(self.client.session.get("_auth_user_id"), str(self.user.pk))
+        self.assertNotIn("login_otp", self.client.session)
+
+    def test_account_without_email_cannot_start_otp_login(self):
+        CustomUser.objects.create_user(
+            username="no-email",
+            password="testpass123",
+            role="FINANCE",
+        )
+
+        response = self.client.post(
+            reverse("login"),
+            {
+                "username": "no-email",
+                "password": "testpass123",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn("login_otp", self.client.session)
+        self.assertNotIn("_auth_user_id", self.client.session)
+        self.assertEqual(len(mail.outbox), 0)
 
 
 class DocumentArchiveTests(TestCase):

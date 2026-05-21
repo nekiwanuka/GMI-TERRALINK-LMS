@@ -4,6 +4,7 @@ import csv
 import json
 import mimetypes
 import os
+import secrets
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from html import escape
@@ -16,6 +17,7 @@ from django.contrib.auth.decorators import login_required
 from django.conf import settings
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
+from django.core.mail import send_mail
 from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Q, Sum, ProtectedError, Count
@@ -23,6 +25,7 @@ from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.crypto import constant_time_compare, salted_hmac
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils._os import safe_join
 from django.views.decorators.clickjacking import xframe_options_sameorigin
@@ -1141,20 +1144,200 @@ def _ensure_sourcing_entry_for_transaction(
 
 # ===== AUTHENTICATION =====
 
+LOGIN_OTP_SESSION_KEY = "login_otp"
+
+
+def _safe_login_next(request):
+    target = request.POST.get("next") or request.GET.get("next") or reverse("dashboard")
+    if url_has_allowed_host_and_scheme(
+        target,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ) or (target.startswith("/") and not target.startswith("//")):
+        return target
+    return reverse("dashboard")
+
+
+def _mask_email_address(email):
+    local, separator, domain = (email or "").partition("@")
+    if not separator:
+        return "your registered email"
+    if len(local) <= 2:
+        masked_local = f"{local[:1]}***"
+    else:
+        masked_local = f"{local[:2]}***{local[-1:]}"
+    return f"{masked_local}@{domain}"
+
+
+def _hash_login_otp(code):
+    return salted_hmac("logistics.login_otp", code).hexdigest()
+
+
+def _generate_login_otp():
+    return f"{secrets.randbelow(1000000):06d}"
+
+
+def _store_login_otp(request, user, code, next_url, remember):
+    expires_at = timezone.now() + timedelta(
+        minutes=getattr(settings, "LOGIN_OTP_EXPIRY_MINUTES", 10)
+    )
+    request.session[LOGIN_OTP_SESSION_KEY] = {
+        "user_id": user.pk,
+        "code_hash": _hash_login_otp(code),
+        "expires_at": expires_at.timestamp(),
+        "attempts": 0,
+        "next": next_url,
+        "remember": bool(remember),
+        "email": user.email,
+    }
+    request.session.modified = True
+
+
+def _clear_login_otp(request):
+    request.session.pop(LOGIN_OTP_SESSION_KEY, None)
+    request.session.modified = True
+
+
+def _send_login_otp(user, code):
+    subject = "Your GMI Terralink sign-in OTP"
+    message = (
+        f"Hello {user.get_full_name() or user.username},\n\n"
+        f"Your GMI Terralink sign-in OTP is {code}. "
+        f"It expires in {getattr(settings, 'LOGIN_OTP_EXPIRY_MINUTES', 10)} minutes.\n\n"
+        "If you did not request this code, contact the system administrator immediately."
+    )
+    return send_mail(
+        subject,
+        message,
+        getattr(settings, "OTP_EMAIL_FROM", settings.DEFAULT_FROM_EMAIL),
+        [user.email],
+        fail_silently=False,
+    )
+
+
+def _start_login_otp(request, user, next_url, remember):
+    code = _generate_login_otp()
+    _store_login_otp(request, user, code, next_url, remember)
+    try:
+        _send_login_otp(user, code)
+    except Exception:  # noqa: BLE001
+        _clear_login_otp(request)
+        messages.error(
+            request,
+            "We could not send the OTP email. Please contact the system administrator to check email settings.",
+        )
+        return False
+    messages.success(
+        request,
+        f"We sent a sign-in OTP to {_mask_email_address(user.email)}.",
+    )
+    return True
+
+
+def _login_otp_context(request, **extra):
+    pending = request.session.get(LOGIN_OTP_SESSION_KEY) or {}
+    context = {
+        "otp_pending": bool(pending),
+        "otp_email": _mask_email_address(pending.get("email", "")),
+        "next": pending.get("next") or _safe_login_next(request),
+    }
+    context.update(extra)
+    return context
+
 
 def login_view(request):
-    """Authenticate user credentials and start a session."""
+    """Authenticate user credentials, verify OTP, then start a session."""
     if request.user.is_authenticated:
         return redirect("dashboard")
+
+    pending_otp = request.session.get(LOGIN_OTP_SESSION_KEY)
     if request.method == "POST":
+        if request.POST.get("action") == "restart_login":
+            _clear_login_otp(request)
+            return redirect("login")
+
+        if pending_otp:
+            user = CustomUser.objects.filter(
+                pk=pending_otp.get("user_id"), is_active=True
+            ).first()
+            if not user:
+                _clear_login_otp(request)
+                messages.error(
+                    request, "Your OTP session expired. Please sign in again."
+                )
+                return redirect("login")
+
+            if request.POST.get("action") == "resend_otp":
+                if _start_login_otp(
+                    request,
+                    user,
+                    pending_otp.get("next") or reverse("dashboard"),
+                    pending_otp.get("remember", False),
+                ):
+                    return redirect("login")
+                return render(
+                    request, "logistics/login.html", _login_otp_context(request)
+                )
+
+            if timezone.now().timestamp() > float(pending_otp.get("expires_at", 0)):
+                _clear_login_otp(request)
+                messages.error(request, "Your OTP expired. Please sign in again.")
+                return redirect("login")
+
+            attempts = int(pending_otp.get("attempts", 0)) + 1
+            pending_otp["attempts"] = attempts
+            request.session[LOGIN_OTP_SESSION_KEY] = pending_otp
+            request.session.modified = True
+
+            submitted_code = (
+                (request.POST.get("otp_code") or "").strip().replace(" ", "")
+            )
+            if constant_time_compare(
+                _hash_login_otp(submitted_code), pending_otp.get("code_hash", "")
+            ):
+                next_url = pending_otp.get("next") or reverse("dashboard")
+                remember = bool(pending_otp.get("remember"))
+                _clear_login_otp(request)
+                login(
+                    request, user, backend="django.contrib.auth.backends.ModelBackend"
+                )
+                if not remember:
+                    request.session.set_expiry(0)
+                return redirect(next_url)
+
+            if attempts >= getattr(settings, "LOGIN_OTP_MAX_ATTEMPTS", 5):
+                _clear_login_otp(request)
+                messages.error(
+                    request, "Too many incorrect OTP attempts. Please sign in again."
+                )
+                return redirect("login")
+            messages.error(request, "Invalid OTP. Please check the code and try again.")
+            return render(request, "logistics/login.html", _login_otp_context(request))
+
         username = request.POST.get("username")
         password = request.POST.get("password")
         user = authenticate(request, username=username, password=password)
         if user is not None:
-            login(request, user)
-            return redirect("dashboard")
+            if not user.email:
+                messages.error(
+                    request,
+                    "This account has no email address for OTP delivery. Please contact the system administrator.",
+                )
+                return render(
+                    request, "logistics/login.html", {"next": _safe_login_next(request)}
+                )
+            if _start_login_otp(
+                request,
+                user,
+                _safe_login_next(request),
+                request.POST.get("remember") == "on",
+            ):
+                return redirect("login")
+            return render(
+                request, "logistics/login.html", {"next": _safe_login_next(request)}
+            )
         messages.error(request, "Invalid username or password")
-    return render(request, "logistics/login.html")
+    return render(request, "logistics/login.html", _login_otp_context(request))
 
 
 def logout_view(request):
@@ -6420,12 +6603,35 @@ def _render_purchase_order_pdf_bytes(purchase_order):
     story.append(Spacer(1, 8))
 
     detail_rows = [
-        ["PO No.", purchase_order.po_number, "Transaction", purchase_order.transaction.transaction_id],
-        ["Supplier", purchase_order.supplier_name or "-", "Customer", purchase_order.transaction.customer.name],
-        ["Issue Date", purchase_order.created_at.strftime("%d %b %Y"), "Status", getattr(purchase_order, "effective_status_display", None) or purchase_order.get_status_display()],
+        [
+            "PO No.",
+            purchase_order.po_number,
+            "Transaction",
+            purchase_order.transaction.transaction_id,
+        ],
+        [
+            "Supplier",
+            purchase_order.supplier_name or "-",
+            "Customer",
+            purchase_order.transaction.customer.name,
+        ],
+        [
+            "Issue Date",
+            purchase_order.created_at.strftime("%d %b %Y"),
+            "Status",
+            getattr(purchase_order, "effective_status_display", None)
+            or purchase_order.get_status_display(),
+        ],
     ]
     if purchase_order.final_invoice:
-        detail_rows.append(["Invoice", display_document_number(purchase_order.final_invoice, "FI"), "", ""])
+        detail_rows.append(
+            [
+                "Invoice",
+                display_document_number(purchase_order.final_invoice, "FI"),
+                "",
+                "",
+            ]
+        )
     detail_table = Table(detail_rows, colWidths=[70, 170, 70, 170])
     detail_table.setStyle(
         TableStyle(
@@ -6450,12 +6656,20 @@ def _render_purchase_order_pdf_bytes(purchase_order):
 
     if purchase_order.supplier_address:
         story.append(Paragraph("Supplier Address", styles["Heading4"]))
-        story.append(Paragraph(escape(purchase_order.supplier_address).replace("\n", "<br />"), normal))
+        story.append(
+            Paragraph(
+                escape(purchase_order.supplier_address).replace("\n", "<br />"), normal
+            )
+        )
         story.append(Spacer(1, 8))
 
     item_rows = [["No", "Item Description", "Quantity", "Unit Cost", "Amount"]]
     for index, item in enumerate(purchase_order.items or [], start=1):
-        description = item.get("description") or item.get("name") or "Item description not recorded"
+        description = (
+            item.get("description")
+            or item.get("name")
+            or "Item description not recorded"
+        )
         quantity = _purchase_order_item_quantity(item)
         unit_price = _purchase_order_item_unit_price(item)
         amount = (quantity * unit_price).quantize(Decimal("0.01"))
@@ -6512,7 +6726,9 @@ def _render_purchase_order_pdf_bytes(purchase_order):
 
     if purchase_order.notes:
         story.append(Paragraph("Notes", styles["Heading4"]))
-        story.append(Paragraph(escape(purchase_order.notes).replace("\n", "<br />"), normal))
+        story.append(
+            Paragraph(escape(purchase_order.notes).replace("\n", "<br />"), normal)
+        )
         story.append(Spacer(1, 10))
 
     story.append(

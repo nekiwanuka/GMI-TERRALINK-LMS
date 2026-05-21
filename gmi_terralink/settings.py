@@ -175,6 +175,29 @@ AUTH_USER_MODEL = "logistics.CustomUser"
 LOGIN_URL = "login"
 LOGIN_REDIRECT_URL = "dashboard"
 
+# Email / OTP delivery. Local development uses the console backend by default;
+# production can use the free cPanel/domain mailbox by setting EMAIL_HOST and
+# EMAIL_HOST_PASSWORD in the environment.
+DEFAULT_FROM_EMAIL = config("DEFAULT_FROM_EMAIL", default="otp@gmiterralink.com")
+SERVER_EMAIL = DEFAULT_FROM_EMAIL
+EMAIL_BACKEND = config(
+    "EMAIL_BACKEND",
+    default=(
+        "django.core.mail.backends.console.EmailBackend"
+        if DEBUG
+        else "django.core.mail.backends.smtp.EmailBackend"
+    ),
+)
+EMAIL_HOST = config("EMAIL_HOST", default="mail.gmiterralink.com")
+EMAIL_PORT = config("EMAIL_PORT", default=587, cast=int)
+EMAIL_HOST_USER = config("EMAIL_HOST_USER", default="otp@gmiterralink.com")
+EMAIL_HOST_PASSWORD = config("EMAIL_HOST_PASSWORD", default="")
+EMAIL_USE_TLS = config("EMAIL_USE_TLS", default=True, cast=bool)
+EMAIL_USE_SSL = config("EMAIL_USE_SSL", default=False, cast=bool)
+OTP_EMAIL_FROM = config("OTP_EMAIL_FROM", default=DEFAULT_FROM_EMAIL)
+LOGIN_OTP_EXPIRY_MINUTES = config("LOGIN_OTP_EXPIRY_MINUTES", default=10, cast=int)
+LOGIN_OTP_MAX_ATTEMPTS = config("LOGIN_OTP_MAX_ATTEMPTS", default=5, cast=int)
+
 # Session settings for offline use
 SESSION_ENGINE = "django.contrib.sessions.backends.db"
 SESSION_COOKIE_AGE = 1209600  # 2 weeks
