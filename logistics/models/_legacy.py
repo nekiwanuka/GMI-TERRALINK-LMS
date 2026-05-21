@@ -660,6 +660,15 @@ class PaymentTransaction(models.Model):
                     "issued_to": client_name,
                 },
             )
+        if self.proof_of_payment and self.created_by_id:
+            DocumentArchive.create_from_file(
+                self.proof_of_payment,
+                archived_by=self.created_by,
+                document_type="RECEIPT",
+                source_label=f"Logistics Payment {self.receipt_number}",
+                source_model=self.__class__.__name__,
+                source_object_id=self.pk,
+            )
 
     def delete(self, *args, **kwargs):
         payment = self.payment
@@ -1316,10 +1325,18 @@ class DocumentArchive(models.Model):
     """Immutable archive snapshot for uploaded documents with extracted output."""
 
     document = models.ForeignKey(
-        Document, on_delete=models.CASCADE, related_name="archives"
+        Document,
+        on_delete=models.CASCADE,
+        related_name="archives",
+        null=True,
+        blank=True,
     )
     transaction = models.ForeignKey(
-        Transaction, on_delete=models.CASCADE, related_name="document_archives"
+        Transaction,
+        on_delete=models.CASCADE,
+        related_name="document_archives",
+        null=True,
+        blank=True,
     )
     document_type = models.CharField(
         max_length=20,
@@ -1330,6 +1347,9 @@ class DocumentArchive(models.Model):
     archived_file = models.FileField(upload_to="transactions/archive/originals/")
     extracted_text = models.TextField(blank=True)
     structured_data = models.JSONField(default=dict, blank=True)
+    source_label = models.CharField(max_length=120, blank=True)
+    source_model = models.CharField(max_length=80, blank=True)
+    source_object_id = models.CharField(max_length=80, blank=True)
     archived_by = models.ForeignKey(
         CustomUser, on_delete=models.PROTECT, related_name="archived_documents"
     )
@@ -1339,35 +1359,91 @@ class DocumentArchive(models.Model):
         ordering = ["-created_at"]
 
     def __str__(self):
-        return f"Archive {self.transaction.transaction_id} - {self.original_filename}"
+        if self.transaction_id:
+            return (
+                f"Archive {self.transaction.transaction_id} - {self.original_filename}"
+            )
+        return f"Archive {self.source_label or 'Document'} - {self.original_filename}"
 
     @classmethod
     def create_from_document(cls, document, archived_by=None):
         """Persist a file and extraction snapshot for later reference."""
-        import os
-        from django.core.files.base import ContentFile
-
-        if not document.original_file:
-            return None
-
-        archive = cls(
+        return cls.create_from_file(
+            document.original_file,
             document=document,
             transaction=document.transaction,
             document_type=document.document_type,
-            original_filename=os.path.basename(document.original_file.name or "upload"),
             extracted_text=document.extracted_text or "",
             structured_data=document.structured_data or {},
             archived_by=archived_by or document.uploaded_by,
+            source_label=document.get_document_type_display(),
+            source_model=document.__class__.__name__,
+            source_object_id=document.pk,
         )
 
-        document.original_file.open("rb")
-        try:
-            file_bytes = document.original_file.read()
-        finally:
-            document.original_file.close()
+    @classmethod
+    def create_from_file(
+        cls,
+        file_field,
+        *,
+        archived_by,
+        transaction=None,
+        document=None,
+        document_type="RECEIPT",
+        extracted_text="",
+        structured_data=None,
+        source_label="",
+        source_model="",
+        source_object_id=None,
+    ):
+        """Persist an immutable archive copy for any uploaded business file."""
+        import os
+        from django.core.files.base import ContentFile
 
+        if not file_field:
+            return None
+
+        original_filename = os.path.basename(file_field.name or "upload")
+        source_object_id = str(source_object_id or "")
+        if source_model and source_object_id:
+            existing = cls.objects.filter(
+                source_model=source_model,
+                source_object_id=source_object_id,
+                original_filename=original_filename,
+            ).first()
+            if existing:
+                return existing
+
+        archive = cls(
+            document=document,
+            transaction=transaction,
+            document_type=document_type,
+            original_filename=original_filename,
+            extracted_text=extracted_text or "",
+            structured_data=structured_data or {},
+            source_label=source_label,
+            source_model=source_model,
+            source_object_id=source_object_id,
+            archived_by=archived_by,
+        )
+
+        file_field.open("rb")
+        try:
+            file_bytes = file_field.read()
+        finally:
+            file_field.close()
+
+        reference = (
+            transaction.transaction_id if transaction else source_label or "archive"
+        )
+        safe_reference = (
+            "".join(
+                ch if ch.isalnum() or ch in {"-", "_"} else "_" for ch in str(reference)
+            )[:80]
+            or "archive"
+        )
         archive_name = (
-            f"{document.transaction.transaction_id}_"
+            f"{safe_reference}_"
             f"{timezone.now().strftime('%Y%m%d%H%M%S')}_"
             f"{archive.original_filename}"
         )
@@ -2371,6 +2447,16 @@ class TransactionPaymentRecord(models.Model):
                     "currency": self.currency,
                     "issued_to": client_name,
                 },
+            )
+        if self.proof_of_payment and self.created_by_id:
+            DocumentArchive.create_from_file(
+                self.proof_of_payment,
+                archived_by=self.created_by,
+                transaction=self.transaction,
+                document_type="RECEIPT",
+                source_label=f"Client Payment {self.reference}",
+                source_model=self.__class__.__name__,
+                source_object_id=self.pk,
             )
 
 
@@ -3386,6 +3472,18 @@ class BillingPayment(models.Model):
     def __str__(self):
         return f"{self.invoice.invoice_number} - {self.amount}"
 
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        if self.proof_of_payment and self.created_by_id:
+            DocumentArchive.create_from_file(
+                self.proof_of_payment,
+                archived_by=self.created_by,
+                document_type="RECEIPT",
+                source_label=f"Billing Payment {self.reference}",
+                source_model=self.__class__.__name__,
+                source_object_id=self.pk,
+            )
+
 
 # NOTE: Commission and COMMISSION_CURRENCY_CHOICES were extracted to
 # ``logistics.models.commission`` as the first proof of the package split.
@@ -3432,3 +3530,16 @@ class SupplierPayment(models.Model):
 
     def __str__(self):
         return f"{self.purchase_order.po_number} - {self.amount} {self.currency}"
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        if self.proof_of_payment and self.created_by_id:
+            DocumentArchive.create_from_file(
+                self.proof_of_payment,
+                archived_by=self.created_by,
+                transaction=self.purchase_order.transaction,
+                document_type="RECEIPT",
+                source_label=f"Supplier Payment {self.reference}",
+                source_model=self.__class__.__name__,
+                source_object_id=self.pk,
+            )

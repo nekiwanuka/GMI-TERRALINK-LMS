@@ -18,6 +18,7 @@ from logistics.models import (
     FinalInvoice,
     PurchaseOrder,
     ProformaInvoice,
+    SupplierPayment,
     Transaction,
 )
 from logistics.views import _extract_text_from_file, _has_extractable_document_text
@@ -105,6 +106,22 @@ class DocumentArchiveTests(TestCase):
             description="Hotel supplies",
             created_by=self.director,
         )
+        self.purchase_order = PurchaseOrder.objects.create(
+            transaction=self.transaction,
+            supplier_name="Archive Supplier",
+            supplier_address="Kampala",
+            items=[
+                {
+                    "description": "Solar battery",
+                    "quantity": "2",
+                    "unit_price": 100,
+                    "amount": 200,
+                    "total": 200,
+                }
+            ],
+            subtotal=200,
+            created_by=self.procurement,
+        )
 
     def _archive_for(self, user, filename):
         document = Document.objects.create(
@@ -137,6 +154,27 @@ class DocumentArchiveTests(TestCase):
         self.assertEqual(Document.objects.count(), 1)
         self.assertEqual(DocumentArchive.objects.count(), 1)
         self.assertEqual(DocumentArchive.objects.get().archived_by, self.finance)
+
+    def test_supplier_payment_proof_is_archived(self):
+        payment = SupplierPayment.objects.create(
+            purchase_order=self.purchase_order,
+            supplier_name="Archive Supplier",
+            amount="75.00",
+            currency="USD",
+            method="BANK",
+            reference="SUP-ARCH-1",
+            proof_of_payment=SimpleUploadedFile(
+                "supplier-proof.txt", b"supplier proof", content_type="text/plain"
+            ),
+            created_by=self.procurement,
+        )
+
+        archive = DocumentArchive.objects.get(source_model="SupplierPayment")
+        self.assertEqual(archive.source_object_id, str(payment.pk))
+        self.assertEqual(archive.transaction, self.transaction)
+        self.assertEqual(archive.archived_by, self.procurement)
+        self.assertEqual(archive.original_filename, "supplier-proof.txt")
+        self.assertTrue(archive.archived_file.name.startswith("transactions/archive/originals/"))
 
     def test_archive_visibility_is_limited_to_department_except_director(self):
         finance_archive = self._archive_for(self.finance, "finance.txt")

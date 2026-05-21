@@ -7,7 +7,7 @@
     <div class="d-flex justify-content-between align-items-center mb-3">
         <div>
             <h1 class="mb-0"><i class="bi bi-folder-symlink"></i> Document Archive</h1>
-            <small class="text-muted">Archived uploads for your department's trade transactions.</small>
+            <small class="text-muted">Archived document uploads and payment proof attachments for your department.</small>
         </div>
     </div>
 
@@ -31,10 +31,15 @@
                         {% for archive in archives %}
                         <tr>
                             <td>
+                                {% if archive.transaction %}
                                 <a href="{% url 'transaction_detail' archive.transaction.pk %}" class="fw-semibold text-decoration-none">
                                     {{ archive.transaction.transaction_id }}
                                 </a>
                                 <div class="small text-muted">{{ archive.transaction.customer.name }}</div>
+                                {% else %}
+                                <span class="fw-semibold">{{ archive.source_label|default:"General archive" }}</span>
+                                <div class="small text-muted">No linked trade transaction</div>
+                                {% endif %}
                             </td>
                             <td>
                                 <span class="badge {% if archive.document_type == 'CLIENT_PI' %}bg-primary{% else %}bg-secondary{% endif %}">
@@ -43,7 +48,7 @@
                             </td>
                             <td>
                                 <div class="fw-semibold">{{ archive.original_filename }}</div>
-                                <div class="small text-muted">{{ archive.document }}</div>
+                                <div class="small text-muted">{{ archive.source_label|default:archive.document }}</div>
                             </td>
                             <td>
                                 {% if archive.structured_data and archive.structured_data.items %}
