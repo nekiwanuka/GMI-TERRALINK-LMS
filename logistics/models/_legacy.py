@@ -1760,6 +1760,11 @@ class PurchaseOrder(models.Model):
         ("RECEIVED", "Received"),
         ("FULFILLED", "Fulfilled"),
     )
+    SPLIT_MODE_CHOICES = (
+        ("", "Not Split"),
+        ("ITEMS", "Whole Items"),
+        ("QUANTITY", "Line Quantity"),
+    )
 
     po_number = models.CharField(max_length=30, unique=True, editable=False)
     transaction = models.ForeignKey(
@@ -1794,6 +1799,10 @@ class PurchaseOrder(models.Model):
     split_quantity = models.DecimalField(
         max_digits=12, decimal_places=2, null=True, blank=True
     )
+    split_mode = models.CharField(
+        max_length=12, choices=SPLIT_MODE_CHOICES, blank=True, default=""
+    )
+    split_lines = models.JSONField(default=list, blank=True)
     supplier_name = models.CharField(max_length=255)
     supplier_address = models.TextField(blank=True)
     items = models.JSONField(default=list)

@@ -184,10 +184,94 @@ class PurchaseOrderSplitTests(TestCase):
         self.assertEqual(split_po.original_po_line_index, 0)
         self.assertEqual(split_po.original_po_line_quantity, Decimal("5.00"))
         self.assertEqual(split_po.split_quantity, Decimal("2.00"))
+        self.assertEqual(split_po.split_mode, "QUANTITY")
+        self.assertEqual(split_po.split_lines[0]["description"], "Solar battery")
         self.assertEqual(self.purchase_order.items[0]["quantity"], "3")
         self.assertEqual(split_po.items[0]["quantity"], "2")
         self.assertEqual(self.purchase_order.subtotal, Decimal("300.00"))
         self.assertEqual(split_po.subtotal, Decimal("200.00"))
+
+    def test_whole_item_split_moves_selected_lines_from_main_po(self):
+        self.purchase_order.items = [
+            {
+                "description": "Solar battery",
+                "quantity": "5",
+                "unit_price": 100,
+                "amount": 500,
+                "total": 500,
+            },
+            {
+                "description": "Inverter",
+                "quantity": "1",
+                "unit_price": 300,
+                "amount": 300,
+                "total": 300,
+            },
+        ]
+        self.purchase_order.subtotal = 800
+        self.purchase_order.save(update_fields=["items", "subtotal", "updated_at"])
+
+        response = self.client.post(
+            reverse(
+                "purchase_order_split_create", kwargs={"pk": self.purchase_order.pk}
+            ),
+            {
+                "split_mode": "ITEMS",
+                "selected_line_indices": ["1"],
+                "supplier_name": "Inverter Supplier",
+                "supplier_address": "Kampala",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        split_po = PurchaseOrder.objects.get(parent_po=self.purchase_order)
+        self.purchase_order.refresh_from_db()
+        self.assertEqual(split_po.split_mode, "ITEMS")
+        self.assertEqual(split_po.items[0]["description"], "Inverter")
+        self.assertEqual(split_po.items[0]["quantity"], "1")
+        self.assertEqual(split_po.split_lines[0]["description"], "Inverter")
+        self.assertEqual(len(self.purchase_order.items), 1)
+        self.assertEqual(self.purchase_order.items[0]["description"], "Solar battery")
+        self.assertEqual(self.purchase_order.subtotal, Decimal("500.00"))
+        self.assertEqual(split_po.subtotal, Decimal("300.00"))
+
+    def test_whole_item_split_cannot_move_every_main_po_line(self):
+        self.purchase_order.items = [
+            {
+                "description": "Solar battery",
+                "quantity": "5",
+                "unit_price": 100,
+                "amount": 500,
+                "total": 500,
+            },
+            {
+                "description": "Inverter",
+                "quantity": "1",
+                "unit_price": 300,
+                "amount": 300,
+                "total": 300,
+            },
+        ]
+        self.purchase_order.subtotal = 800
+        self.purchase_order.save(update_fields=["items", "subtotal", "updated_at"])
+
+        response = self.client.post(
+            reverse(
+                "purchase_order_split_create", kwargs={"pk": self.purchase_order.pk}
+            ),
+            {
+                "split_mode": "ITEMS",
+                "selected_line_indices": ["0", "1"],
+                "supplier_name": "All Items Supplier",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(
+            PurchaseOrder.objects.filter(parent_po=self.purchase_order).exists()
+        )
+        self.purchase_order.refresh_from_db()
+        self.assertEqual(len(self.purchase_order.items), 2)
 
     def test_split_requires_original_quantity_greater_than_two(self):
         self.purchase_order.items = [

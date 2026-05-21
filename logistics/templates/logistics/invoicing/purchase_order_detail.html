@@ -128,6 +128,28 @@
     table-layout: fixed;
     width: 100%;
 }
+.po-split-tracking {
+    border: 1px solid #d8d8d8;
+    border-radius: 8px;
+    margin-top: 1rem;
+    overflow: hidden;
+}
+.po-split-tracking-header {
+    align-items: center;
+    background: #f6f6f6;
+    border-bottom: 1px solid #d8d8d8;
+    display: flex;
+    justify-content: space-between;
+    padding: 0.65rem 0.8rem;
+}
+.po-split-tracking-header strong {
+    color: #1a1a1a;
+    font-size: 0.88rem;
+}
+.po-split-tracking-header span {
+    color: #666;
+    font-size: 0.76rem;
+}
 @page {
     size: A4;
     margin: 10mm;
@@ -198,14 +220,18 @@
             <a href="{% url 'purchase_order_pdf' purchase_order.pk %}" class="btn btn-primary" target="_blank" rel="noopener noreferrer">
                 <i class="bi bi-file-pdf"></i> Download PDF
             </a>
-            {% if can_edit_business_documents and purchase_order.can_edit_purchase_order %}
+            {% if can_edit_business_documents and purchase_order.can_edit_purchase_order and not purchase_order.is_split %}
             <a href="{% url 'purchase_order_update' purchase_order.pk %}" class="btn btn-outline-dark">Edit PO</a>
+            {% elif can_edit_business_documents and purchase_order.is_split and purchase_order.split_mode != 'ITEMS' and not purchase_order.edit_locked %}
+            <a href="{% url 'purchase_order_split_quantity_update' purchase_order.pk %}" class="btn btn-outline-dark">Edit Split Qty</a>
+            {% elif can_edit_business_documents and purchase_order.is_split and purchase_order.split_mode == 'ITEMS' %}
+            <span class="btn btn-outline-secondary disabled">Moved Items Fixed</span>
             {% elif can_manage_business_documents %}
             <span class="btn btn-outline-secondary disabled"><i class="bi bi-lock-fill"></i> Locked</span>
             <button type="button" class="btn btn-dark" data-bs-toggle="modal" data-bs-target="#poCorrectionModal">Request Correction</button>
             {% endif %}
             {% if can_manage_business_documents and can_split_purchase_order %}
-            <a href="{% url 'purchase_order_split_create' purchase_order.pk %}" class="btn btn-dark">Split to Supplier</a>
+            <a href="{% url 'purchase_order_split_create' purchase_order.pk %}" class="btn btn-dark">Split PO</a>
             {% elif can_manage_business_documents and purchase_order.is_split %}
             <span class="btn btn-outline-secondary disabled">Split PO</span>
             {% elif can_manage_business_documents and has_supplier_splits %}
@@ -305,6 +331,39 @@
                     </tbody>
                 </table>
             </div>
+
+            {% if purchase_order.line_quantity_summary %}
+            <div class="po-split-tracking no-print">
+                <div class="po-split-tracking-header">
+                    <strong>{% if purchase_order.is_split %}Split Source Lines{% else %}Main PO Split Balances{% endif %}</strong>
+                    <span>{% if purchase_order.is_split and purchase_order.split_mode == 'ITEMS' %}Whole item split{% elif purchase_order.is_split %}Quantity split{% else %}Available split balance by line{% endif %}</span>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-sm mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Line</th>
+                                <th>Item</th>
+                                <th class="text-end">Original Qty</th>
+                                <th class="text-end">Split Qty</th>
+                                {% if not purchase_order.is_split %}<th class="text-end">Main Balance</th>{% endif %}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for line in purchase_order.line_quantity_summary %}
+                            <tr>
+                                <td>{{ line.number }}</td>
+                                <td>{{ line.description }}</td>
+                                <td class="text-end">{{ line.original_quantity|default:"0" }}</td>
+                                <td class="text-end">{{ line.split_quantity|default:"0" }}</td>
+                                {% if not purchase_order.is_split %}<td class="text-end">{{ line.remaining_quantity }}</td>{% endif %}
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            {% endif %}
 
             {% if sibling_splits %}
             <div class="mt-4 no-print">

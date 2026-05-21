@@ -367,7 +367,7 @@
                         </td>
                         <td>
                             {% if po.parent_po %}
-                            <span class="po-type-pill is-split"><i class="bi bi-diagram-3"></i> Split</span>
+                            <span class="po-type-pill is-split"><i class="bi bi-diagram-3"></i> {% if po.split_mode == 'ITEMS' %}Item Split{% else %}Qty Split{% endif %}</span>
                             {% else %}
                             <span class="po-type-pill is-base"><i class="bi bi-layers"></i> Base</span>
                             {% endif %}
@@ -384,7 +384,7 @@
                                 <div>
                                     <strong>Line {{ line.number }}: {{ line.description|truncatechars:32 }}</strong>
                                     {% if po.parent_po %}
-                                    <span>Split qty {{ line.split_quantity|default:"0" }} of original {{ line.original_quantity|default:"0" }}</span>
+                                    <span>{% if po.split_mode == 'ITEMS' %}Moved qty{% else %}Split qty{% endif %} {{ line.split_quantity|default:"0" }} of original {{ line.original_quantity|default:"0" }}</span>
                                     {% else %}
                                     <span>Main {{ line.remaining_quantity }} / Original {{ line.original_quantity }}{% if line.split_quantity %} · Split {{ line.split_quantity }}{% endif %}</span>
                                     {% endif %}
@@ -453,23 +453,23 @@
                                 <a href="{% url 'purchase_order_pdf' po.pk %}" class="btn btn-sm btn-outline-primary" target="_blank" rel="noopener noreferrer">
                                     <i class="bi bi-file-pdf me-1"></i>PDF
                                 </a>
-                                {% if can_edit_business_documents and po.can_edit_purchase_order %}
+                                {% if can_edit_business_documents and po.can_edit_purchase_order and not po.parent_po %}
                                 <a href="{% url 'purchase_order_update' po.pk %}" class="btn btn-sm btn-outline-secondary">
                                     <i class="bi bi-pencil me-1"></i>Edit
                                 </a>
-                                {% elif can_manage_business_documents %}
+                                {% elif can_manage_business_documents and po.edit_locked %}
                                 <span class="btn btn-sm btn-outline-secondary disabled">
                                     <i class="bi bi-lock-fill me-1"></i>Locked
                                 </span>
                                 {% endif %}
                                 {% if can_edit_business_documents %}
-                                    {% if po.parent_po and not po.edit_locked %}
+                                    {% if po.parent_po and po.split_mode != 'ITEMS' and not po.edit_locked %}
                                     <a href="{% url 'purchase_order_split_quantity_update' po.pk %}" class="btn btn-sm btn-outline-dark">
                                         <i class="bi bi-sliders me-1"></i>Split Qty
                                     </a>
                                     {% elif not po.parent_po and not po.edit_locked %}
                                     <a href="{% url 'purchase_order_split_create' po.pk %}" class="btn btn-sm btn-outline-dark">
-                                        <i class="bi bi-diagram-3 me-1"></i>Split Line
+                                        <i class="bi bi-diagram-3 me-1"></i>Split PO
                                     </a>
                                     {% endif %}
                                 {% endif %}
