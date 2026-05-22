@@ -5,6 +5,8 @@ import shutil
 import tempfile
 from unittest.mock import patch
 
+from django.apps import apps
+from django.contrib import admin
 from django.core import mail
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import SimpleTestCase, TestCase, override_settings
@@ -24,6 +26,17 @@ from logistics.models import (
     Transaction,
 )
 from logistics.views import _extract_text_from_file, _has_extractable_document_text
+
+
+class AdminCoverageTests(SimpleTestCase):
+    def test_all_logistics_models_are_registered_in_admin(self):
+        missing_models = [
+            model.__name__
+            for model in apps.get_app_config("logistics").get_models()
+            if model not in admin.site._registry
+        ]
+
+        self.assertEqual(missing_models, [])
 
 
 class DocumentExtractionTests(SimpleTestCase):

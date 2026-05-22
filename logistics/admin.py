@@ -35,6 +35,16 @@ from .models import (
     TransactionPaymentRecord,
     Transit,
     ShipmentLeg,
+    BillingCharge,
+    BillingInvoiceLine,
+    DocumentArchive,
+    DomainEvent,
+    InventoryMovement,
+    InventoryPosition,
+    Notification,
+    NoticeboardTask,
+    PurchaseOrder,
+    WorkflowTransitionLog,
 )
 from .services import (
     WorkflowTransitionError,
@@ -152,6 +162,42 @@ class SignatureProfileAdmin(admin.ModelAdmin):
     list_filter = ("is_active", "updated_at")
     search_fields = ("user__username", "user__first_name", "user__last_name", "title")
     readonly_fields = ("created_at", "updated_at")
+    list_select_related = ("user",)
+
+
+@admin.register(Notification)
+class NotificationAdmin(admin.ModelAdmin):
+    list_display = ("title", "recipient", "category", "is_read", "created_at")
+    list_filter = ("category", "is_read", "created_at")
+    search_fields = ("title", "message", "recipient__username", "recipient__email")
+    raw_id_fields = ("recipient",)
+    readonly_fields = ("created_at",)
+    date_hierarchy = "created_at"
+    list_select_related = ("recipient",)
+
+
+@admin.register(NoticeboardTask)
+class NoticeboardTaskAdmin(admin.ModelAdmin):
+    list_display = (
+        "title",
+        "assigned_to",
+        "assigned_role",
+        "is_done",
+        "created_by",
+        "created_at",
+    )
+    list_filter = ("is_done", "assigned_role", "created_at", "completed_at")
+    search_fields = (
+        "title",
+        "description",
+        "assigned_to__username",
+        "assigned_to__email",
+        "created_by__username",
+    )
+    raw_id_fields = ("assigned_to", "created_by", "completed_by")
+    readonly_fields = ("created_at", "updated_at")
+    date_hierarchy = "created_at"
+    list_select_related = ("assigned_to", "created_by", "completed_by")
 
 
 @admin.register(DocumentSignature)
@@ -236,6 +282,30 @@ class PaymentAdmin(admin.ModelAdmin):
     search_fields = ("loading__loading_id", "receipt_number")
     list_filter = ("payment_date", "payment_method")
     readonly_fields = ("balance", "created_at", "updated_at")
+
+
+@admin.register(PaymentTransaction)
+class PaymentTransactionAdmin(admin.ModelAdmin):
+    list_display = (
+        "receipt_number",
+        "payment",
+        "amount",
+        "payment_method",
+        "verification_status",
+        "payment_date",
+        "created_by",
+    )
+    list_filter = ("verification_status", "payment_method", "payment_date")
+    search_fields = (
+        "reference",
+        "payment__loading__loading_id",
+        "payment__loading__client__name",
+        "created_by__username",
+    )
+    raw_id_fields = ("payment", "created_by", "verified_by")
+    readonly_fields = ("receipt_number", "created_at", "updated_at")
+    date_hierarchy = "payment_date"
+    list_select_related = ("payment", "created_by", "verified_by")
 
 
 @admin.register(ContainerReturn)
@@ -377,6 +447,31 @@ class DocumentAdmin(admin.ModelAdmin):
     readonly_fields = ("timestamp",)
 
 
+@admin.register(DocumentArchive)
+class DocumentArchiveAdmin(admin.ModelAdmin):
+    list_display = (
+        "original_filename",
+        "document_type",
+        "transaction",
+        "source_label",
+        "archived_by",
+        "created_at",
+    )
+    list_filter = ("document_type", "source_model", "created_at")
+    search_fields = (
+        "original_filename",
+        "source_label",
+        "source_model",
+        "source_object_id",
+        "transaction__transaction_id",
+        "archived_by__username",
+    )
+    raw_id_fields = ("document", "transaction", "archived_by")
+    readonly_fields = ("created_at",)
+    date_hierarchy = "created_at"
+    list_select_related = ("document", "transaction", "archived_by")
+
+
 @admin.register(Sourcing)
 class SourcingAdmin(admin.ModelAdmin):
     list_display = ("transaction", "supplier_name", "created_by", "created_at")
@@ -389,6 +484,35 @@ class ProformaInvoiceAdmin(admin.ModelAdmin):
     list_display = ("id", "transaction", "subtotal", "validity_date", "status")
     list_filter = ("status", "validity_date")
     readonly_fields = ("created_at", "updated_at")
+
+
+@admin.register(PurchaseOrder)
+class PurchaseOrderAdmin(admin.ModelAdmin):
+    list_display = (
+        "po_number",
+        "transaction",
+        "supplier_name",
+        "status",
+        "subtotal",
+        "created_at",
+    )
+    list_filter = ("status", "split_mode", "created_at")
+    search_fields = (
+        "po_number",
+        "supplier_name",
+        "transaction__transaction_id",
+        "transaction__customer__name",
+    )
+    raw_id_fields = (
+        "transaction",
+        "proforma",
+        "final_invoice",
+        "parent_po",
+        "created_by",
+    )
+    readonly_fields = ("po_number", "created_at", "updated_at")
+    date_hierarchy = "created_at"
+    list_select_related = ("transaction", "created_by", "parent_po")
 
 
 @admin.register(FinalInvoice)
@@ -442,6 +566,46 @@ class ReceiptAdmin(admin.ModelAdmin):
         "reversed_at",
         "reversed_by",
     )
+
+
+@admin.register(Commission)
+class CommissionAdmin(admin.ModelAdmin):
+    list_display = ("client", "amount", "currency", "date", "created_by", "created_at")
+    list_filter = ("currency", "date", "created_at")
+    search_fields = (
+        "client__name",
+        "client__client_id",
+        "notes",
+        "created_by__username",
+    )
+    raw_id_fields = ("client", "created_by")
+    readonly_fields = ("created_at", "updated_at")
+    date_hierarchy = "date"
+    list_select_related = ("client", "created_by")
+
+
+@admin.register(ProofOfDelivery)
+class ProofOfDeliveryAdmin(admin.ModelAdmin):
+    list_display = (
+        "pod_number",
+        "target_reference",
+        "business_side",
+        "received_by_name",
+        "delivered_at",
+        "created_by",
+    )
+    list_filter = ("delivered_at", "created_at")
+    search_fields = (
+        "pod_number",
+        "received_by_name",
+        "received_by_phone",
+        "loading__loading_id",
+        "fulfillment_order__transaction__transaction_id",
+    )
+    raw_id_fields = ("loading", "fulfillment_order", "created_by")
+    readonly_fields = ("pod_number", "created_at", "updated_at")
+    date_hierarchy = "delivered_at"
+    list_select_related = ("loading", "fulfillment_order", "created_by")
 
 
 @admin.register(ShipmentWorkflow)
@@ -579,6 +743,109 @@ class CargoItemWorkflowAdmin(admin.ModelAdmin):
         self._transition_queryset(request, queryset, "DELIVERED")
 
 
+@admin.register(InventoryPosition)
+class InventoryPositionAdmin(admin.ModelAdmin):
+    list_display = (
+        "cargo_item",
+        "qty_warehouse",
+        "qty_reserved",
+        "qty_in_transit",
+        "qty_delivered",
+        "version",
+        "updated_at",
+    )
+    list_filter = ("updated_at",)
+    search_fields = ("cargo_item__cargo_number", "cargo_item__description")
+    raw_id_fields = ("cargo_item",)
+    readonly_fields = ("updated_at",)
+    list_select_related = ("cargo_item",)
+
+
+@admin.register(DomainEvent)
+class DomainEventAdmin(admin.ModelAdmin):
+    list_display = (
+        "event_type",
+        "aggregate_type",
+        "aggregate_id",
+        "created_by",
+        "processed_at",
+        "created_at",
+    )
+    list_filter = ("aggregate_type", "event_type", "processed_at", "created_at")
+    search_fields = ("event_type", "aggregate_type", "aggregate_id", "idempotency_key")
+    raw_id_fields = ("created_by",)
+    readonly_fields = ("created_at",)
+    date_hierarchy = "created_at"
+    list_select_related = ("created_by",)
+
+
+@admin.register(InventoryMovement)
+class InventoryMovementAdmin(admin.ModelAdmin):
+    list_display = (
+        "cargo_item",
+        "shipment",
+        "movement_type",
+        "quantity",
+        "from_state",
+        "to_state",
+        "created_at",
+    )
+    list_filter = ("movement_type", "from_state", "to_state", "created_at")
+    search_fields = (
+        "cargo_item__cargo_number",
+        "shipment__shipment_number",
+        "idempotency_key",
+    )
+    raw_id_fields = ("position", "cargo_item", "shipment", "event", "created_by")
+    readonly_fields = ("created_at",)
+    date_hierarchy = "created_at"
+    list_select_related = ("position", "cargo_item", "shipment", "event", "created_by")
+
+
+@admin.register(WorkflowTransitionLog)
+class WorkflowTransitionLogAdmin(admin.ModelAdmin):
+    list_display = (
+        "entity_type",
+        "entity_id",
+        "from_status",
+        "to_status",
+        "created_by",
+        "created_at",
+    )
+    list_filter = ("entity_type", "from_status", "to_status", "created_at")
+    search_fields = ("entity_id", "notes", "created_by__username")
+    raw_id_fields = ("event", "created_by")
+    readonly_fields = ("created_at",)
+    date_hierarchy = "created_at"
+    list_select_related = ("event", "created_by")
+
+
+@admin.register(BillingCharge)
+class BillingChargeAdmin(admin.ModelAdmin):
+    list_display = (
+        "shipment",
+        "cargo_item",
+        "charge_type",
+        "status",
+        "quantity",
+        "unit_price",
+        "amount",
+        "currency",
+        "created_at",
+    )
+    list_filter = ("charge_type", "status", "currency", "created_at")
+    search_fields = (
+        "shipment__shipment_number",
+        "cargo_item__cargo_number",
+        "trigger_event",
+        "idempotency_key",
+    )
+    raw_id_fields = ("shipment", "cargo_item", "event")
+    readonly_fields = ("amount", "created_at")
+    date_hierarchy = "created_at"
+    list_select_related = ("shipment", "cargo_item", "event")
+
+
 @admin.register(BillingInvoice)
 class BillingInvoiceAdmin(admin.ModelAdmin):
     list_display = (
@@ -603,6 +870,18 @@ class BillingInvoiceAdmin(admin.ModelAdmin):
         "created_at",
         "updated_at",
     )
+
+
+@admin.register(BillingInvoiceLine)
+class BillingInvoiceLineAdmin(admin.ModelAdmin):
+    list_display = ("invoice", "description", "quantity", "unit_price", "amount")
+    search_fields = (
+        "invoice__invoice_number",
+        "description",
+        "charge__idempotency_key",
+    )
+    raw_id_fields = ("invoice", "charge")
+    list_select_related = ("invoice", "charge")
 
 
 @admin.register(BillingPayment)

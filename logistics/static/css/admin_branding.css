@@ -118,6 +118,128 @@ div.breadcrumbs {
   overflow: hidden;
 }
 
+#content {
+  padding: 1.5rem 2rem;
+}
+
+#content-main {
+  border-radius: 8px;
+}
+
+#changelist {
+  background: #fffdf8;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: 0 12px 30px rgba(79, 74, 82, 0.08);
+  overflow: hidden;
+}
+
+#changelist-filter {
+  background: #fbf7ef;
+  border-left: 1px solid var(--border-color);
+}
+
+#changelist-filter h2,
+#changelist-filter h3 {
+  color: var(--body-fg);
+  font-weight: 800;
+}
+
+#changelist-filter li.selected a {
+  color: #2e2a31 !important;
+  font-weight: 800;
+}
+
+#toolbar {
+  background: #fbf7ef;
+  border-bottom: 1px solid var(--border-color);
+  padding: 0.8rem 1rem;
+}
+
+#toolbar form input[type="submit"] {
+  min-height: 34px;
+}
+
+.object-tools a,
+.object-tools button {
+  border-radius: 8px;
+  font-weight: 800;
+}
+
+.actions {
+  align-items: center;
+  background: #fffaf0;
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0.65rem 1rem;
+}
+
+.actions select,
+.actions input,
+#toolbar input,
+#toolbar select,
+.filtered .actions select {
+  border: 1px solid rgba(103, 97, 107, 0.2);
+  border-radius: 8px;
+  min-height: 34px;
+}
+
+.results {
+  overflow-x: auto;
+}
+
+.results tbody tr:nth-child(even) {
+  background: #fffaf0;
+}
+
+.results tbody tr:hover {
+  background: rgba(212, 175, 55, 0.16);
+}
+
+.results th,
+.results td {
+  vertical-align: middle;
+}
+
+.fieldsets,
+form .aligned {
+  background: #fffdf8;
+}
+
+.aligned label {
+  color: var(--body-fg);
+  font-weight: 800;
+}
+
+form .aligned input,
+form .aligned textarea,
+form .aligned select,
+.vTextField,
+.vLargeTextField {
+  border: 1px solid rgba(103, 97, 107, 0.22);
+  border-radius: 8px;
+  min-height: 34px;
+}
+
+form .aligned input:focus,
+form .aligned textarea:focus,
+form .aligned select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.16);
+  outline: none;
+}
+
+.submit-row {
+  background: rgba(255, 252, 246, 0.96);
+  border-top: 1px solid var(--border-color);
+  bottom: 0;
+  box-shadow: 0 -10px 22px rgba(79, 74, 82, 0.08);
+  position: sticky;
+  z-index: 20;
+}
+
 .module h2,
 .module caption,
 .inline-group h2 {
