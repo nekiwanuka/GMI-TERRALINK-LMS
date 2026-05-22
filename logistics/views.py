@@ -6465,6 +6465,9 @@ def purchase_order_list(request):
             "can_edit_business_documents": _can_directly_edit_business_documents(
                 request.user
             ),
+            "can_edit_purchase_orders": _can_directly_edit_purchase_orders(
+                request.user
+            ),
         },
     )
 
