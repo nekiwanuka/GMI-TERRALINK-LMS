@@ -5246,7 +5246,7 @@ def final_invoice_detail(request, pk):
         split_purchase_orders = []
     can_generate_po = (
         not is_logistics_invoice
-        and payment_snapshot["procurement_ready"]
+        and (payment_snapshot["procurement_ready"] or total_paid_decimal > 0)
         and purchase_order is None
     )
     document_signature = _document_signature_for(invoice)
@@ -5669,10 +5669,10 @@ def final_invoice_generate_purchase_order(request, pk):
         )
         return redirect(_final_invoice_route_name(invoice, "detail"), pk=invoice.pk)
     payment_snapshot = _final_invoice_payment_snapshot(invoice)
-    if not payment_snapshot["procurement_ready"]:
+    if not (payment_snapshot["procurement_ready"] or payment_snapshot["total_paid"] > 0):
         messages.error(
             request,
-            "Purchase orders can only be generated from invoices marked Paid or Post Pay. Record enough client payment to cover the item funds first.",
+            "Purchase orders can only be generated once the client has made at least a partial payment deposit.",
         )
         return redirect(_final_invoice_route_name(invoice, "detail"), pk=invoice.pk)
 
@@ -9861,6 +9861,8 @@ def _po_supplier_summary(purchase_order):
 def _decorate_purchase_order_supplier_payment(
     purchase_order, user=None, *, has_supplier_splits=None
 ):
+    from decimal import Decimal
+    from django.db.models import Sum
     payments, total_paid, balance_due = _po_supplier_summary(purchase_order)
     if has_supplier_splits is None:
         has_supplier_splits = (
@@ -9868,14 +9870,33 @@ def _decorate_purchase_order_supplier_payment(
             and purchase_order.split_purchase_orders.exists()
         )
     payments_include_splits = not purchase_order.is_split and has_supplier_splits
+
+    client_deposit = Decimal("0.00")
+    if purchase_order.final_invoice:
+        client_deposit = _final_invoice_total_paid(purchase_order.final_invoice)
+    else:
+        client_deposit = purchase_order.transaction.payment_records.aggregate(
+            total=Sum("amount")
+        )["total"] or Decimal("0.00")
+
+    recorded_supplier_paid_total = SupplierPayment.objects.filter(
+        purchase_order__transaction=purchase_order.transaction
+    ).aggregate(total=Sum("amount"))["total"] or Decimal("0.00")
+
+    client_deposit_room = max(client_deposit - recorded_supplier_paid_total, Decimal("0.00"))
+
     can_attempt_payment = (
         not purchase_order.transaction.is_closed
         and not purchase_order.payment_entry_locked
         and balance_due > Decimal("0.00")
         and not payments_include_splits
+        and client_deposit_room > Decimal("0.00")
     )
     can_record = can_attempt_payment and _can_record_supplier_payment_entry(user)
 
+    purchase_order.client_deposit = client_deposit
+    purchase_order.supplier_payments_total = recorded_supplier_paid_total
+    purchase_order.client_deposit_room = client_deposit_room
     purchase_order.supplier_payment_records = payments
     purchase_order.supplier_total_paid = total_paid
     purchase_order.supplier_balance_due = balance_due
@@ -10015,6 +10036,28 @@ def record_supplier_payment(request, po_pk):
         _decorate_purchase_order_status(purchase_order, persist=True)
         return redirect("purchase_order_detail", pk=purchase_order.pk)
 
+    from django.db.models import Sum
+    client_deposit = Decimal("0.00")
+    if purchase_order.final_invoice:
+        client_deposit = _final_invoice_total_paid(purchase_order.final_invoice)
+    else:
+        client_deposit = purchase_order.transaction.payment_records.aggregate(
+            total=Sum("amount")
+        )["total"] or Decimal("0.00")
+
+    recorded_supplier_paid_total = SupplierPayment.objects.filter(
+        purchase_order__transaction=purchase_order.transaction
+    ).aggregate(total=Sum("amount"))["total"] or Decimal("0.00")
+
+    client_deposit_room = max(client_deposit - recorded_supplier_paid_total, Decimal("0.00"))
+
+    if client_deposit_room <= Decimal("0.00"):
+        messages.error(
+            request,
+            f"Cannot pay suppliers beyond the client's partial payment deposit of {client_deposit}. Total supplier payments already equal or exceed this amount.",
+        )
+        return redirect("purchase_order_detail", pk=purchase_order.pk)
+
     if request.method == "POST":
         form = SupplierPaymentForm(request.POST, request.FILES)
         if form.is_valid():
@@ -10023,6 +10066,11 @@ def record_supplier_payment(request, po_pk):
                 form.add_error(
                     "amount",
                     f"Payment cannot exceed the remaining supplier balance of {balance_due}.",
+                )
+            elif payment.amount > client_deposit_room:
+                form.add_error(
+                    "amount",
+                    f"Payment of {payment.amount} exceeds the allowed client deposit room of {client_deposit_room} (Total client deposit: {client_deposit}, Already paid to suppliers: {recorded_supplier_paid_total}).",
                 )
             else:
                 payment.purchase_order = purchase_order
@@ -10060,11 +10108,11 @@ def record_supplier_payment(request, po_pk):
             initial={
                 "supplier_name": purchase_order.supplier_name,
                 "currency": "USD",
-                "amount": balance_due,
+                "amount": min(balance_due, client_deposit_room),
                 "paid_at": timezone.now(),
             }
         )
-    form.fields["amount"].widget.attrs["max"] = balance_due
+    form.fields["amount"].widget.attrs["max"] = min(balance_due, client_deposit_room)
 
     return render(
         request,
@@ -10075,6 +10123,9 @@ def record_supplier_payment(request, po_pk):
             "payments": payments,
             "total_paid": total_paid,
             "balance_due": balance_due,
+            "client_deposit": client_deposit,
+            "recorded_supplier_paid_total": recorded_supplier_paid_total,
+            "client_deposit_room": client_deposit_room,
         },
     )
 

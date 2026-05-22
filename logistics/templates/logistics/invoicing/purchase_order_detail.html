@@ -299,6 +299,12 @@
                     <span class="badge {{ purchase_order.fee_payment_status_class|default:'bg-secondary' }} mt-2">{{ purchase_order.fee_payment_status_label|default:'Fees Status Pending' }}</span>
                 </div>
             </div>
+            {% if purchase_order.client_deposit_room <= 0 and purchase_order.supplier_balance_due > 0 %}
+            <div class="alert alert-warning mt-3 no-print">
+                <i class="bi bi-exclamation-triangle-fill"></i>
+                <strong>Supplier Payments Locked:</strong> More supplier payments can only be recorded once the client makes an additional deposit. (Current Client Deposit: {{ purchase_order.client_deposit|floatformat:2 }} USD, Record Limit Reached).
+            </div>
+            {% endif %}
             {% endif %}
 
             <div class="po-divider"></div>
