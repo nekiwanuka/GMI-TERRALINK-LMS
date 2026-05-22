@@ -403,8 +403,9 @@
                         <td>
                             <div class="po-badge-stack">
                                 <span class="badge {{ po.supplier_payment_status_class|default:'bg-secondary' }}">{{ po.supplier_payment_status_label|default:'Unpaid' }}</span>
-                                <span>{% if po.supplier_payments_include_splits %}Split paid{% else %}Paid{% endif %}: {{ po.supplier_total_paid|default:'0.00' }} USD</span>
+                                <span>Paid: {{ po.supplier_total_paid|default:'0.00' }} USD</span>
                                 <span>Balance {{ po.supplier_balance_due|default:po.subtotal }} USD</span>
+                                <span>Can pay now {{ po.supplier_payment_available_room|default:'0.00' }} USD</span>
                             </div>
                         </td>
                         <td>

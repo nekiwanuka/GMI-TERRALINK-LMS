@@ -6608,12 +6608,22 @@ def _purchase_order_display_context(purchase_order, user):
         _decorate_purchase_order_invoice_payment(split_purchase_order)
         _decorate_purchase_order_edit_lock(split_purchase_order)
         _decorate_purchase_order_line_quantities(split_purchase_order)
+        _decorate_purchase_order_supplier_payment(split_purchase_order, user)
     can_start_invoice_fulfillment = getattr(
         purchase_order, "can_start_invoice_fulfillment", False
     )
     _decorate_purchase_order_supplier_payment(
         purchase_order, user, has_supplier_splits=has_supplier_splits
     )
+    family_payment_orders = []
+    if has_supplier_splits or purchase_order.is_split:
+        if base_po.pk != purchase_order.pk:
+            _decorate_purchase_order_status(base_po)
+            _decorate_purchase_order_invoice_payment(base_po)
+            _decorate_purchase_order_edit_lock(base_po)
+            _decorate_purchase_order_supplier_payment(base_po, user)
+        family_payment_orders.append(base_po)
+        family_payment_orders.extend(list(sibling_splits))
     can_split_purchase_order = (
         not purchase_order.is_split
         and not purchase_order.transaction.is_closed
@@ -6645,6 +6655,7 @@ def _purchase_order_display_context(purchase_order, user):
         "can_edit_purchase_orders": _can_directly_edit_purchase_orders(user),
         "has_supplier_splits": has_supplier_splits,
         "supplier_payments_include_splits": purchase_order.supplier_payments_include_splits,
+        "family_payment_orders": family_payment_orders,
     }
 
 
@@ -9853,20 +9864,28 @@ def reopen_loading(request, pk):
 
 def _po_supplier_summary(purchase_order):
     """Return (payments_qs, total_paid, balance_due) for a PO."""
-    if not purchase_order.is_split and purchase_order.split_purchase_orders.exists():
-        payments = SupplierPayment.objects.filter(
-            Q(purchase_order=purchase_order)
-            | Q(purchase_order__parent_po=purchase_order)
-        ).select_related("created_by", "purchase_order")
-    else:
-        payments = purchase_order.supplier_payments.select_related(
-            "created_by", "purchase_order"
-        )
+    payments = purchase_order.supplier_payments.select_related(
+        "created_by", "purchase_order"
+    )
     payments = payments.order_by("-paid_at", "-id")
     total_paid = payments.aggregate(total=Sum("amount"))["total"] or Decimal("0.00")
     subtotal = purchase_order.subtotal or Decimal("0.00")
     balance_due = max(subtotal - total_paid, Decimal("0.00"))
     return payments, total_paid, balance_due
+
+
+def _po_family_supplier_summary(base_po):
+    payments = SupplierPayment.objects.filter(
+        Q(purchase_order=base_po) | Q(purchase_order__parent_po=base_po)
+    ).select_related("created_by", "purchase_order")
+    payments = payments.order_by("-paid_at", "-id")
+    total_paid = payments.aggregate(total=Sum("amount"))["total"] or Decimal("0.00")
+    split_subtotal = base_po.split_purchase_orders.aggregate(total=Sum("subtotal"))[
+        "total"
+    ] or Decimal("0.00")
+    subtotal = (base_po.subtotal or Decimal("0.00")) + split_subtotal
+    balance_due = max(subtotal - total_paid, Decimal("0.00"))
+    return payments, total_paid, balance_due, subtotal
 
 
 def _decorate_purchase_order_supplier_payment(
@@ -9880,7 +9899,7 @@ def _decorate_purchase_order_supplier_payment(
             not purchase_order.is_split
             and purchase_order.split_purchase_orders.exists()
         )
-    payments_include_splits = not purchase_order.is_split and has_supplier_splits
+    payments_include_splits = False
 
     client_deposit = Decimal("0.00")
     if purchase_order.final_invoice:
@@ -9900,7 +9919,6 @@ def _decorate_purchase_order_supplier_payment(
         not purchase_order.transaction.is_closed
         and not purchase_order.payment_entry_locked
         and balance_due > Decimal("0.00")
-        and not payments_include_splits
         and client_deposit_room > Decimal("0.00")
     )
     can_record = can_attempt_payment and _can_record_supplier_payment_entry(user)
@@ -9912,6 +9930,24 @@ def _decorate_purchase_order_supplier_payment(
     purchase_order.supplier_total_paid = total_paid
     purchase_order.supplier_balance_due = balance_due
     purchase_order.supplier_payments_include_splits = payments_include_splits
+    purchase_order.supplier_payment_available_room = min(
+        balance_due, client_deposit_room
+    )
+    purchase_order.family_supplier_payment_records = SupplierPayment.objects.none()
+    purchase_order.family_supplier_subtotal = purchase_order.subtotal or Decimal("0.00")
+    purchase_order.family_supplier_total_paid = total_paid
+    purchase_order.family_supplier_balance_due = balance_due
+    if not purchase_order.is_split and has_supplier_splits:
+        (
+            family_payments,
+            family_total_paid,
+            family_balance_due,
+            family_subtotal,
+        ) = _po_family_supplier_summary(purchase_order)
+        purchase_order.family_supplier_payment_records = family_payments
+        purchase_order.family_supplier_subtotal = family_subtotal
+        purchase_order.family_supplier_total_paid = family_total_paid
+        purchase_order.family_supplier_balance_due = family_balance_due
     purchase_order.can_record_supplier_payment = can_record
     purchase_order.can_request_supplier_payment = can_attempt_payment and not can_record
     if balance_due <= Decimal("0.00") and total_paid > 0:
@@ -10029,13 +10065,6 @@ def record_supplier_payment(request, po_pk):
     _decorate_purchase_order_edit_lock(purchase_order)
     if purchase_order.payment_entry_locked:
         messages.error(request, purchase_order.edit_lock_message)
-        return redirect("purchase_order_detail", pk=purchase_order.pk)
-
-    if not purchase_order.is_split and purchase_order.split_purchase_orders.exists():
-        messages.warning(
-            request,
-            "This purchase order has supplier splits. Record supplier payments on the split purchase orders instead.",
-        )
         return redirect("purchase_order_detail", pk=purchase_order.pk)
 
     payments, total_paid, balance_due = _po_supplier_summary(purchase_order)

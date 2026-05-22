@@ -20,6 +20,7 @@ from logistics.models import (
     Document,
     DocumentArchive,
     FinalInvoice,
+    PaymentTransaction,
     PurchaseOrder,
     ProformaInvoice,
     SupplierPayment,
@@ -526,6 +527,50 @@ class PurchaseOrderSplitTests(TestCase):
         self.assertEqual(split_po.items[0]["quantity"], "2")
         self.assertEqual(self.purchase_order.subtotal, Decimal("300.00"))
         self.assertEqual(split_po.subtotal, Decimal("200.00"))
+
+    def test_base_and_split_pos_are_paid_individually_with_shared_deposit_cap(self):
+        split_po = self._create_split("2")
+        PaymentTransaction.objects.create(
+            transaction=self.transaction,
+            amount_due_snapshot=Decimal("500.00"),
+            amount=Decimal("350.00"),
+            currency="USD",
+            payment_method="bank_transfer",
+            reference="CLIENT-DEP-1",
+            created_by=self.user,
+        )
+
+        base_payment_response = self.client.post(
+            reverse("record_supplier_payment", kwargs={"po_pk": self.purchase_order.pk}),
+            {
+                "supplier_name": "Main Supplier",
+                "amount": "250.00",
+                "currency": "USD",
+                "method": "BANK",
+                "reference": "SUP-BASE-1",
+                "paid_at": "2026-05-22T10:00",
+                "notes": "Base PO supplier portion",
+            },
+        )
+        over_cap_response = self.client.post(
+            reverse("record_supplier_payment", kwargs={"po_pk": split_po.pk}),
+            {
+                "supplier_name": "Split Supplier",
+                "amount": "150.00",
+                "currency": "USD",
+                "method": "BANK",
+                "reference": "SUP-SPLIT-1",
+                "paid_at": "2026-05-22T10:05",
+                "notes": "Split PO supplier portion",
+            },
+        )
+
+        self.assertEqual(base_payment_response.status_code, 302)
+        self.assertEqual(over_cap_response.status_code, 200)
+        self.assertEqual(SupplierPayment.objects.count(), 1)
+        payment = SupplierPayment.objects.get()
+        self.assertEqual(payment.purchase_order_id, self.purchase_order.pk)
+        self.assertContains(over_cap_response, "exceeds the allowed client deposit room")
 
     def test_quantity_splits_use_sequence_numbers_and_supplier_cost(self):
         first_response = self.client.post(

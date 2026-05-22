@@ -19,7 +19,7 @@
                 <div><strong>Validity:</strong> {{ proforma.validity_date|date:"d M Y" }}</div>
             </div>
 
-            <form method="post">
+            <form method="post" data-confirm="Create the final invoice from this proforma now? This proforma cannot create another final invoice after confirmation.">
                 {% csrf_token %}
                 {% if closed_trade_edit %}
                 <div class="alert alert-warning border-warning rounded-3 mb-3">

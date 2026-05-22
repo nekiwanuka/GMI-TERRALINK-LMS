@@ -101,7 +101,7 @@
                 <a href="{% if is_freight %}{% url 'logistics_proforma_list' %}{% else %}{% url 'sourcing_proforma_list' %}{% endif %}" class="btn btn-outline-secondary">Back to Proformas</a>
             </div>
 
-            <form method="post" class="card shadow-sm">
+            <form method="post" class="card shadow-sm" {% if not proforma %}data-confirm="Create this proforma document now? Please confirm the supplier, quantities and totals before continuing."{% endif %}>
                 {% csrf_token %}
                 <div class="card-body p-4">
                     <div id="closed-trade-reason-panel" class="alert alert-warning border-warning rounded-3 mb-4 {% if not closed_trade_edit %}d-none{% endif %}">

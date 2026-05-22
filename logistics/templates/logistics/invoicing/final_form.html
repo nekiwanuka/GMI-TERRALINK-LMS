@@ -102,7 +102,7 @@
                 <a href="{% if invoice %}{% if invoice.loading %}{% url 'logistics_final_invoice_detail' invoice.pk %}{% else %}{% url 'sourcing_final_invoice_detail' invoice.pk %}{% endif %}{% else %}{% if '/logistics/' in request.path %}{% url 'logistics_final_invoice_list' %}{% else %}{% url 'sourcing_final_invoice_list' %}{% endif %}{% endif %}" class="btn btn-outline-secondary">Back</a>
             </div>
 
-            <form method="post" class="card shadow-sm">
+            <form method="post" class="card shadow-sm" {% if not invoice %}data-confirm="Create this final invoice now? Please confirm the client, line totals and fees before continuing."{% endif %}>
                 {% csrf_token %}
                 <div class="card-body p-4">
                     <div id="closed-trade-reason-panel" class="alert alert-warning border-warning rounded-3 mb-4 {% if not closed_trade_edit %}d-none{% endif %}">

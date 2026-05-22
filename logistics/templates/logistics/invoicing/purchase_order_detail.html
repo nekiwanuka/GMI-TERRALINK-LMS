@@ -373,15 +373,51 @@
 
             {% if sibling_splits %}
             <div class="mt-4 no-print">
-                <h6 class="mb-2">Supplier Split POs (Same Invoice Details)</h6>
-                <div class="d-flex flex-wrap gap-2">
-                    {% for split in sibling_splits %}
-                    <a href="{% url 'purchase_order_detail' split.pk %}" class="btn btn-sm {% if split.pk == purchase_order.pk %}btn-dark{% else %}btn-outline-secondary{% endif %}">
-                        {{ split.po_number }} - {{ split.supplier_name }}
-                        {% if split.fee_payment_status_label %}<span class="badge {{ split.fee_payment_status_class }} ms-1">{{ split.fee_payment_status_label }}</span>{% endif %}
-                    </a>
-                    {% endfor %}
+                <h6 class="mb-2">Supplier PO Payment Register</h6>
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>PO</th>
+                                <th>Supplier</th>
+                                <th class="text-end">PO Portion</th>
+                                <th class="text-end">Paid</th>
+                                <th class="text-end">Balance</th>
+                                <th class="text-end">Can Pay Now</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for supplier_po in family_payment_orders %}
+                            <tr class="{% if supplier_po.pk == purchase_order.pk %}table-active{% endif %}">
+                                <td>
+                                    <a href="{% url 'purchase_order_detail' supplier_po.pk %}">{{ supplier_po.po_number }}</a>
+                                    {% if supplier_po.parent_po %}<span class="badge bg-light text-dark border ms-1">Split</span>{% else %}<span class="badge bg-light text-dark border ms-1">Original</span>{% endif %}
+                                </td>
+                                <td>{{ supplier_po.supplier_name|default:"Supplier Pending" }}</td>
+                                <td class="text-end">{{ supplier_po.subtotal|default:"0.00" }} USD</td>
+                                <td class="text-end text-success">{{ supplier_po.supplier_total_paid|default:"0.00" }} USD</td>
+                                <td class="text-end {% if supplier_po.supplier_balance_due > 0 %}text-danger{% else %}text-success{% endif %}">{{ supplier_po.supplier_balance_due|default:"0.00" }} USD</td>
+                                <td class="text-end">{{ supplier_po.supplier_payment_available_room|default:"0.00" }} USD</td>
+                                <td class="text-end">
+                                    {% if supplier_po.can_record_supplier_payment %}
+                                    <a href="{% url 'record_supplier_payment' supplier_po.pk %}" class="btn btn-sm btn-success"><i class="bi bi-cash-stack"></i> Pay</a>
+                                    {% elif supplier_po.supplier_balance_due <= 0 %}
+                                    <span class="badge bg-success">Paid</span>
+                                    {% elif supplier_po.client_deposit_room <= 0 %}
+                                    <span class="badge bg-warning text-dark">Deposit limit</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary">Locked</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
                 </div>
+                {% if not purchase_order.is_split %}
+                <div class="small text-muted mt-2">Family total: {{ purchase_order.family_supplier_subtotal|default:"0.00" }} USD | Paid: {{ purchase_order.family_supplier_total_paid|default:"0.00" }} USD | Balance: {{ purchase_order.family_supplier_balance_due|default:"0.00" }} USD</div>
+                {% endif %}
             </div>
             {% endif %}
 
@@ -405,20 +441,19 @@
               <div class="card-body py-2">
                 <div class="row g-2">
                   <div class="col-md-4"><small class="text-muted d-block">PO Subtotal</small><strong>{{ purchase_order.subtotal|default:"0.00" }}</strong></div>
-                  <div class="col-md-4"><small class="text-muted d-block">{% if supplier_payments_include_splits %}Split Payments Paid{% else %}Total Paid{% endif %}</small><strong class="text-success">{{ supplier_total_paid }}</strong></div>
+                  <div class="col-md-4"><small class="text-muted d-block">Total Paid</small><strong class="text-success">{{ supplier_total_paid }}</strong></div>
                   <div class="col-md-4"><small class="text-muted d-block">Balance Due</small><strong class="{% if supplier_balance_due > 0 %}text-danger{% else %}text-success{% endif %}">{{ supplier_balance_due }}</strong></div>
                 </div>
               </div>
               <div class="table-responsive">
                 <table class="table table-sm mb-0">
                   <thead class="table-light">
-                    <tr><th>Date</th>{% if supplier_payments_include_splits %}<th>Split PO</th>{% endif %}<th>Amount</th><th>Method</th><th>Reference</th><th>Proof</th><th>By</th><th></th></tr>
+                    <tr><th>Date</th><th>Amount</th><th>Method</th><th>Reference</th><th>Proof</th><th>By</th><th></th></tr>
                   </thead>
                   <tbody>
                     {% for p in supplier_payments %}
                     <tr>
                       <td>{{ p.paid_at|date:"Y-m-d H:i" }}</td>
-                      {% if supplier_payments_include_splits %}<td>{{ p.purchase_order.po_number }}</td>{% endif %}
                       <td>{{ p.amount }} {{ p.currency }}</td>
                       <td>{{ p.get_method_display }}</td>
                       <td>{{ p.reference|default:"—" }}</td>

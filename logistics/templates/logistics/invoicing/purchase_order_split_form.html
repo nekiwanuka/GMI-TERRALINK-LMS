@@ -183,7 +183,7 @@
             <div><span>Invoice</span><strong>{% if invoice %}{{ invoice|doc_number:"FI" }}{% else %}Not linked{% endif %}</strong></div>
         </div>
 
-        <form method="post" novalidate>
+        <form method="post" novalidate {% if not is_split_quantity_edit %}data-confirm="Create this independent supplier purchase order split now? Confirm supplier, quantity and cost before continuing."{% endif %}>
             {% csrf_token %}
             <div class="po-split-body">
                 {% if is_split_quantity_edit %}

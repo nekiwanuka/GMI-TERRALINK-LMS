@@ -699,6 +699,21 @@
                 try { new bootstrap.Tooltip(element, { trigger: 'hover focus', container: 'body' }); }
                 catch (e) { /* ignore */ }
             });
+
+            document.querySelectorAll('[data-confirm]').forEach(function (element) {
+                if (element.tagName === 'FORM') {
+                    element.addEventListener('submit', function (event) {
+                        var submitter = event.submitter;
+                        var message = (submitter && submitter.getAttribute('data-confirm')) || element.getAttribute('data-confirm');
+                        if (message && !window.confirm(message)) event.preventDefault();
+                    });
+                    return;
+                }
+                element.addEventListener('click', function (event) {
+                    var message = element.getAttribute('data-confirm');
+                    if (message && !window.confirm(message)) event.preventDefault();
+                });
+            });
         })();
     </script>
     {% block extra_js %}{% endblock %}
