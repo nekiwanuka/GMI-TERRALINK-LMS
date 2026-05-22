@@ -37,10 +37,9 @@
 }
 
 body {
-  background-color: #f8fafc;
-  background-image: 
-    radial-gradient(at 0% 0%, rgba(37, 99, 235, 0.02) 0px, transparent 50%),
-    radial-gradient(at 100% 100%, rgba(37, 99, 235, 0.01) 0px, transparent 50%);
+  background-color: #f7f2e6;
+  background-image:
+    linear-gradient(180deg, rgba(239, 246, 255, 0.85) 0%, rgba(255, 247, 230, 0.7) 100%);
   color: var(--body-fg);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
@@ -50,9 +49,9 @@ body {
 #header {
   align-items: center;
   backdrop-filter: blur(8px);
-  background: rgba(255, 255, 255, 0.9);
-  border-bottom: 1px solid var(--border-color);
-  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  background: rgba(255, 255, 255, 0.96);
+  border-bottom: 1px solid #dbe4f3;
+  box-shadow: 0 8px 22px rgba(30, 58, 138, 0.08);
   color: var(--body-fg);
   display: grid;
   gap: 1rem;
@@ -192,7 +191,7 @@ div.breadcrumbs a:hover {
 
 #content {
   animation: gmi-fade-up 0.36s ease;
-  padding: 2rem 2.2rem;
+  padding: 1.55rem 1.75rem;
 }
 
 #container {
@@ -205,25 +204,26 @@ div.breadcrumbs a:hover {
 }
 
 #nav-sidebar {
-  background: linear-gradient(180deg, #fffaf0 0%, #f7ead0 100%);
+  background: linear-gradient(180deg, #fffaf0 0%, #f7ead0 58%, #eff6ff 100%);
   border-right: 1px solid #d7c7a7;
-  box-shadow: 8px 0 22px rgba(30, 58, 138, 0.08);
+  box-shadow: 8px 0 22px rgba(30, 58, 138, 0.1);
   color: #1e293b;
-  padding: 0.8rem 0.65rem 1.1rem;
-  width: 300px;
+  padding: 0.75rem 0.58rem 1rem;
+  width: 288px;
 }
 
 #nav-sidebar .current-app .section,
 #nav-sidebar caption,
 #nav-sidebar .module caption {
   background: #1e3a8a;
-  border-radius: 6px 6px 0 0;
+  border-radius: 7px 7px 0 0;
   color: #ffffff;
-  font-size: 0.72rem;
+  font-size: 0.7rem;
   font-weight: 800;
-  letter-spacing: 0.08em;
-  margin-top: 0.75rem;
-  padding: 0.72rem 0.75rem;
+  letter-spacing: 0.07em;
+  line-height: 1.35;
+  margin-top: 0.62rem;
+  padding: 0.66rem 0.72rem;
   text-transform: uppercase;
 }
 
@@ -231,8 +231,8 @@ div.breadcrumbs a:hover {
   background: rgba(255, 255, 255, 0.72);
   border-collapse: separate;
   border-radius: 0 0 6px 6px;
-  border-spacing: 0 0.28rem;
-  padding: 0.35rem;
+  border-spacing: 0 0.22rem;
+  padding: 0.32rem;
   width: 100%;
 }
 
@@ -258,10 +258,10 @@ div.breadcrumbs a:hover {
   border-radius: 6px;
   color: #1f2a44 !important;
   display: flex;
-  font-size: 0.84rem;
+  font-size: 0.82rem;
   font-weight: 700;
-  min-height: 2.5rem;
-  padding: 0.56rem 0.68rem;
+  min-height: 2.32rem;
+  padding: 0.48rem 0.6rem;
   text-decoration: none;
   transition: background-color 0.16s ease, border-color 0.16s ease, color 0.16s ease, transform 0.16s ease;
 }
@@ -273,7 +273,7 @@ div.breadcrumbs a:hover {
   content: "";
   display: inline-block;
   height: 0.42rem;
-  margin-right: 0.52rem;
+  margin-right: 0.48rem;
   width: 0.42rem;
 }
 
@@ -311,7 +311,7 @@ div.breadcrumbs a:hover {
 #nav-sidebar .changelink {
   font-size: 0;
   justify-content: center;
-  min-width: 2.5rem;
+  min-width: 2.32rem;
   padding-left: 0.45rem;
   padding-right: 0.45rem;
 }
@@ -342,7 +342,7 @@ div.breadcrumbs a:hover {
   border: 1px solid #d7c7a7;
   border-radius: 8px;
   color: #1f2a44;
-  margin: 0 0 0.65rem;
+  margin: 0 0 0.55rem;
   min-height: 2.35rem;
   padding: 0.45rem 0.68rem;
   width: 100%;
@@ -748,20 +748,20 @@ p.help,
 
 .gmi-admin-home {
   display: grid;
-  gap: 1.5rem;
+  gap: 1.15rem;
 }
 
 .gmi-admin-hero {
   align-items: center;
-  background: #ffffff;
-  border: 1px solid var(--border-color);
+  background: linear-gradient(135deg, #ffffff 0%, #eff6ff 58%, #fff7e6 100%);
+  border: 1px solid #dbe4f3;
   border-radius: 8px;
-  box-shadow: var(--gmi-shadow);
+  box-shadow: 0 10px 26px rgba(30, 58, 138, 0.08);
   color: var(--body-fg);
   display: grid;
   gap: 1.5rem;
   grid-template-columns: 1fr auto;
-  padding: 2rem 2.25rem;
+  padding: 1.35rem 1.55rem;
 }
 
 .gmi-admin-eyebrow {
@@ -776,7 +776,7 @@ p.help,
 
 .gmi-admin-hero h1 {
   color: var(--primary);
-  font-size: 2rem;
+  font-size: 1.7rem;
   font-weight: 700;
   margin: 0;
 }
@@ -784,7 +784,7 @@ p.help,
 .gmi-admin-hero p {
   color: var(--body-quiet-color);
   margin: 0.5rem 0 0;
-  font-size: 0.95rem;
+  font-size: 0.9rem;
   line-height: 1.5;
 }
 
@@ -829,18 +829,18 @@ p.help,
 
 .gmi-admin-home-grid {
   display: grid;
-  gap: 1.5rem;
-  grid-template-columns: minmax(0, 1.65fr) minmax(320px, 0.95fr);
+  gap: 1.15rem;
+  grid-template-columns: minmax(0, 1.7fr) minmax(300px, 0.82fr);
   align-items: start;
 }
 
 .gmi-admin-apps,
 .gmi-admin-activity {
   background: #ffffff;
-  border: 1px solid var(--border-color);
+  border: 1px solid #dbe4f3;
   border-radius: 8px;
-  box-shadow: var(--gmi-shadow);
-  padding: 1.5rem;
+  box-shadow: 0 8px 22px rgba(30, 58, 138, 0.06);
+  padding: 1.15rem;
 }
 
 .gmi-admin-apps > header,
@@ -871,8 +871,8 @@ p.help,
 
 .gmi-admin-app-grid {
   display: grid;
-  gap: 1rem;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.85rem;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
 }
 
 .gmi-admin-app-card {
@@ -880,13 +880,19 @@ p.help,
   border: 1px solid #dbe4f3;
   border-radius: 8px;
   min-height: 100%;
-  padding: 1.25rem;
+  padding: 1rem;
+}
+
+.gmi-admin-app-card:hover {
+  border-color: #93c5fd;
+  box-shadow: 0 10px 22px rgba(30, 58, 138, 0.08);
 }
 
 .gmi-admin-app-card h3 {
-  font-size: 1rem;
+  color: #1e3a8a;
+  font-size: 0.96rem;
   font-weight: 600;
-  margin: 0 0 0.75rem;
+  margin: 0 0 0.7rem;
 }
 
 .gmi-admin-app-card h3 a {
@@ -909,8 +915,9 @@ p.help,
   align-items: center;
   border-top: 1px dashed var(--border-color);
   display: flex;
+  gap: 0.75rem;
   justify-content: space-between;
-  padding: 0.65rem 0;
+  padding: 0.56rem 0;
 }
 
 .gmi-admin-app-card li:first-child {
@@ -930,10 +937,10 @@ p.help,
 }
 
 .gmi-admin-model-actions a {
-  background: #f1f5f9;
-  border: 1px solid var(--border-color);
+  background: #eff6ff;
+  border: 1px solid #dbe4f3;
   border-radius: 4px;
-  color: var(--body-fg);
+  color: #1e3a8a;
   font-size: 0.7rem;
   font-weight: 600;
   padding: 0.25rem 0.5rem;
@@ -943,9 +950,22 @@ p.help,
 }
 
 .gmi-admin-model-actions a:hover {
-  background: var(--accent-light);
+  background: #1d4ed8;
   border-color: var(--accent);
-  color: var(--accent);
+  color: #ffffff;
+}
+
+.gmi-admin-activity {
+  background: linear-gradient(180deg, #ffffff 0%, #eff6ff 100%);
+}
+
+.gmi-admin-activity .gmi-admin-empty {
+  background: #fff7e6;
+  border: 1px solid #f6e7c5;
+  border-radius: 8px;
+  color: #4b5563;
+  margin: 0;
+  padding: 0.95rem;
 }
 
 .gmi-admin-activity-list li {
