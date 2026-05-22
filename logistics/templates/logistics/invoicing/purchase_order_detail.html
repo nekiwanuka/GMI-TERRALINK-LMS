@@ -218,7 +218,10 @@
                 <i class="bi bi-printer"></i> Print
             </button>
             <a href="{% url 'purchase_order_pdf' purchase_order.pk %}" class="btn btn-primary" target="_blank" rel="noopener noreferrer">
-                <i class="bi bi-file-pdf"></i> Download PDF
+                <i class="bi bi-file-pdf"></i> View PDF
+            </a>
+            <a href="{% url 'purchase_order_pdf' purchase_order.pk %}?download=1" class="btn btn-outline-primary">
+                <i class="bi bi-download"></i> Download
             </a>
             {% if can_edit_purchase_orders and purchase_order.can_edit_purchase_order and not purchase_order.is_split %}
             <a href="{% url 'purchase_order_update' purchase_order.pk %}" class="btn btn-outline-dark">Edit PO</a>
@@ -384,7 +387,7 @@
                                 <th class="text-end">Paid</th>
                                 <th class="text-end">Balance</th>
                                 <th class="text-end">Can Pay Now</th>
-                                <th></th>
+                                <th class="text-end">Documents</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -400,6 +403,10 @@
                                 <td class="text-end {% if supplier_po.supplier_balance_due > 0 %}text-danger{% else %}text-success{% endif %}">{{ supplier_po.supplier_balance_due|default:"0.00" }} USD</td>
                                 <td class="text-end">{{ supplier_po.supplier_payment_available_room|default:"0.00" }} USD</td>
                                 <td class="text-end">
+                                    <div class="d-flex flex-wrap gap-1 justify-content-end">
+                                    <a href="{% url 'purchase_order_detail' supplier_po.pk %}" class="btn btn-sm btn-outline-dark"><i class="bi bi-eye"></i> View</a>
+                                    <a href="{% url 'purchase_order_html_preview' supplier_po.pk %}?download=1" class="btn btn-sm btn-outline-secondary" target="_blank" rel="noopener noreferrer"><i class="bi bi-printer"></i> Print</a>
+                                    <a href="{% url 'purchase_order_pdf' supplier_po.pk %}?download=1" class="btn btn-sm btn-outline-primary"><i class="bi bi-download"></i> Download</a>
                                     {% if supplier_po.can_record_supplier_payment %}
                                     <a href="{% url 'record_supplier_payment' supplier_po.pk %}" class="btn btn-sm btn-success"><i class="bi bi-cash-stack"></i> Pay</a>
                                     {% elif supplier_po.supplier_balance_due <= 0 %}
@@ -409,6 +416,7 @@
                                     {% else %}
                                     <span class="badge bg-secondary">Locked</span>
                                     {% endif %}
+                                    </div>
                                 </td>
                             </tr>
                             {% endfor %}

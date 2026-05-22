@@ -487,6 +487,36 @@ class PurchaseOrderSplitTests(TestCase):
             f"{self.purchase_order.po_number}.pdf", response["Content-Disposition"]
         )
 
+    def test_purchase_order_pdf_downloads_as_attachment(self):
+        response = self.client.get(
+            f"{reverse('purchase_order_pdf', kwargs={'pk': self.purchase_order.pk})}?download=1"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "application/pdf")
+        self.assertIn("attachment", response["Content-Disposition"])
+
+    def test_parent_po_detail_exposes_split_document_actions(self):
+        split_po = self._create_split("2")
+
+        response = self.client.get(
+            reverse("purchase_order_detail", kwargs={"pk": self.purchase_order.pk})
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, split_po.po_number)
+        self.assertContains(
+            response, reverse("purchase_order_detail", kwargs={"pk": split_po.pk})
+        )
+        self.assertContains(
+            response,
+            f"{reverse('purchase_order_html_preview', kwargs={'pk': split_po.pk})}?download=1",
+        )
+        self.assertContains(
+            response,
+            f"{reverse('purchase_order_pdf', kwargs={'pk': split_po.pk})}?download=1",
+        )
+
     def test_finance_can_access_purchase_orders(self):
         finance_user = CustomUser.objects.create_user(
             username="po-finance",

@@ -6866,8 +6866,9 @@ def purchase_order_pdf(request, pk):
     )
     pdf_bytes = _render_purchase_order_pdf_bytes(purchase_order)
     response = HttpResponse(pdf_bytes, content_type="application/pdf")
+    disposition = "attachment" if request.GET.get("download") == "1" else "inline"
     response["Content-Disposition"] = (
-        f'inline; filename="{purchase_order.po_number}.pdf"; '
+        f'{disposition}; filename="{purchase_order.po_number}.pdf"; '
         f"filename*=UTF-8''{quote(f'{purchase_order.po_number}.pdf')}"
     )
     return _prevent_stale_pdf_cache(response)
