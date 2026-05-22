@@ -539,6 +539,25 @@ a:hover {
   color: #7a5e05;
 }
 
+.sidebar .sidebar-admin-link {
+  background: #312d35;
+  border-color: rgba(255, 255, 255, 0.1);
+  border-left-color: #d4af37;
+  color: #fffdf6;
+  margin-top: 0.18rem;
+}
+
+.sidebar .sidebar-admin-link .bi {
+  color: #f6df7c;
+}
+
+.sidebar .sidebar-admin-link:hover,
+.sidebar .sidebar-admin-link:focus {
+  background: #211f24;
+  color: #ffffff;
+  transform: translateX(2px);
+}
+
 .sidebar .nav-link-toggle {
   width: 100%;
   border: 0;
