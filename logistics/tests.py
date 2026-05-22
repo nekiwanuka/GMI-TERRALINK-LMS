@@ -404,6 +404,19 @@ class ProformaFinalInvoiceOneToOneTests(TestCase):
         self.assertEqual(invoice.proforma_id, self.proforma.pk)
         self.assertIn(str(invoice.pk), second_response["Location"])
 
+    def test_confirming_proforma_preserves_line_total_amounts(self):
+        self.client.force_login(self.user)
+        url = reverse("sourcing_proforma_confirm", kwargs={"pk": self.proforma.pk})
+
+        response = self.client.post(url)
+
+        self.assertEqual(response.status_code, 302)
+        invoice = FinalInvoice.objects.get()
+        self.assertEqual(invoice.subtotal, Decimal("200.00"))
+        self.assertEqual(invoice.items[0]["amount"], 200.0)
+        self.assertEqual(invoice.items[0]["total"], 200.0)
+        self.assertEqual(invoice.items[0]["unit_price"], 100.0)
+
 
 class PurchaseOrderSplitTests(TestCase):
     def setUp(self):

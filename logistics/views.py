@@ -4906,15 +4906,26 @@ def proforma_confirm(request, pk):
         final_items = []
         subtotal = Decimal("0")
         for it in proforma.items or []:
-            sp = Decimal(str(it.get("sales_price") or it.get("amount") or "0"))
             qty = Decimal(str(it.get("quantity") or "1"))
-            line = sp * qty
+            line_total = it.get("total")
+            if line_total in (None, ""):
+                line_total = it.get("amount")
+            if line_total not in (None, ""):
+                line = _decimal_from_value(line_total, "0")
+            else:
+                unit_price = _decimal_from_value(
+                    it.get("unit_price", it.get("sales_price", "0")), "0"
+                )
+                line = unit_price * qty
+            unit_price = (line / qty) if qty else line
             subtotal += line
             final_items.append(
                 {
                     "description": it.get("description", ""),
                     "quantity": str(qty),
+                    "unit_price": float(unit_price),
                     "amount": float(line),
+                    "total": float(line),
                 }
             )
         invoice = FinalInvoice.objects.create(
