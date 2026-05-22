@@ -6429,6 +6429,17 @@ def purchase_order_list(request):
             for purchase_order in decorated_purchase_orders
             if purchase_order.effective_status == "FULFILLED"
         ),
+        "payable": sum(
+            1
+            for purchase_order in decorated_purchase_orders
+            if purchase_order.can_record_supplier_payment
+        ),
+        "deposit_limited": sum(
+            1
+            for purchase_order in decorated_purchase_orders
+            if purchase_order.supplier_balance_due > 0
+            and purchase_order.client_deposit_room <= 0
+        ),
     }
 
     page_obj, query_string, page_range = paginate_queryset(
