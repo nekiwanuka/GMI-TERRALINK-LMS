@@ -5,7 +5,7 @@
 
 {% block extrastyle %}
 {{ block.super }}
-<link rel="stylesheet" href="{% static 'css/admin_branding.css' %}?v=20260504-admin-brand">
+<link rel="stylesheet" href="{% static 'css/admin_branding.css' %}?v=20260522-admin-refresh">
 {% endblock %}
 
 {% block branding %}
@@ -22,4 +22,5 @@
 
 {% block nav-global %}
 <a class="gmi-admin-portal-link" href="{% url 'dashboard' %}">Open Portal</a>
+<span class="gmi-admin-status-pill">Secure Operations</span>
 {% endblock %}

@@ -1,37 +1,60 @@
 :root {
-  --primary: #4f4a52;
-  --secondary: #67616b;
-  --accent: #d4af37;
-  --primary-fg: #ffffff;
-  --body-fg: #3f3a43;
-  --body-bg: #f5f1e7;
-  --body-quiet-color: #7c7580;
-  --border-color: rgba(103, 97, 107, 0.16);
-  --link-fg: #4f4a52;
-  --link-hover-color: #b79224;
-  --button-bg: #4f4a52;
-  --button-hover-bg: #3f3a43;
-  --default-button-bg: #d4af37;
-  --default-button-hover-bg: #b79224;
-  --delete-button-bg: #b23a33;
-  --delete-button-hover-bg: #912d29;
-  --gmi-shadow: 0 24px 64px rgba(79, 74, 82, 0.18);
+  --primary: #0f4c5c;
+  --secondary: #136f82;
+  --accent: #f2a541;
+  --primary-fg: #f7fbfc;
+  --body-fg: #13333b;
+  --body-bg: #eaf3f5;
+  --body-quiet-color: #557780;
+  --border-color: rgba(19, 111, 130, 0.18);
+  --link-fg: #0f4c5c;
+  --link-hover-color: #e58e21;
+  --button-bg: #0f4c5c;
+  --button-hover-bg: #0d404d;
+  --default-button-bg: #f2a541;
+  --default-button-hover-bg: #e58e21;
+  --delete-button-bg: #bf3f36;
+  --delete-button-hover-bg: #9e322b;
+  --gmi-shadow: 0 24px 60px rgba(8, 43, 52, 0.18);
+  --gmi-card-bg: rgba(255, 255, 255, 0.88);
+}
+
+@keyframes gmi-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 body {
   background:
-    radial-gradient(circle at top left, rgba(212, 175, 55, 0.18), transparent 30%),
-    linear-gradient(180deg, #fbfaf5 0%, #f0eadc 100%);
+    radial-gradient(circle at 8% 12%, rgba(242, 165, 65, 0.28), transparent 34%),
+    radial-gradient(circle at 92% 4%, rgba(19, 111, 130, 0.22), transparent 32%),
+    linear-gradient(155deg, #f4fafb 0%, #eaf3f5 42%, #deedf1 100%);
   color: var(--body-fg);
-  font-family: "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: "Trebuchet MS", "Segoe UI", Verdana, sans-serif;
 }
 
 #header {
-  min-height: 64px;
-  background: rgba(255, 252, 246, 0.96);
+  align-items: center;
+  backdrop-filter: blur(14px);
+  background: rgba(255, 255, 255, 0.78);
   border-bottom: 1px solid var(--border-color);
+  box-shadow: 0 8px 26px rgba(12, 68, 81, 0.11);
   color: var(--body-fg);
-  box-shadow: 0 10px 26px rgba(79, 74, 82, 0.08);
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: 1fr auto;
+  min-height: 72px;
+  padding: 0.65rem 1.25rem;
+  position: sticky;
+  top: 0;
+  z-index: 100;
 }
 
 #branding h1,
@@ -42,39 +65,42 @@ body {
 
 .gmi-admin-brand,
 .gmi-admin-brand-link {
-  display: flex;
   align-items: center;
+  display: flex;
 }
 
 .gmi-admin-brand-link {
-  gap: 0.8rem;
   color: var(--body-fg) !important;
+  gap: 0.9rem;
   text-decoration: none;
 }
 
 .gmi-admin-logo {
-  width: auto;
-  height: 38px;
+  filter: drop-shadow(0 5px 10px rgba(19, 111, 130, 0.24));
+  height: 40px;
   object-fit: contain;
+  width: auto;
 }
 
 .gmi-admin-brand-copy {
   display: flex;
   flex-direction: column;
-  line-height: 1.05;
+  line-height: 1.1;
 }
 
 .gmi-admin-brand-copy strong {
-  font-size: 0.95rem;
+  font-size: 0.98rem;
+  font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
 .gmi-admin-brand-copy small {
   color: var(--body-quiet-color);
-  font-size: 0.68rem;
+  font-size: 0.67rem;
   font-weight: 700;
-  letter-spacing: 0.16em;
+  letter-spacing: 0.18em;
+  margin-top: 0.1rem;
   text-transform: uppercase;
 }
 
@@ -82,7 +108,7 @@ body {
 #user-tools a,
 #logout-form button {
   color: var(--body-fg);
-  font-weight: 600;
+  font-weight: 700;
 }
 
 #user-tools a:hover,
@@ -90,52 +116,79 @@ body {
   color: var(--accent);
 }
 
+#user-tools {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
 .gmi-admin-portal-link {
   align-self: center;
-  border: 1px solid rgba(212, 175, 55, 0.45);
+  background: linear-gradient(120deg, rgba(15, 76, 92, 0.1), rgba(19, 111, 130, 0.05));
+  border: 1px solid rgba(19, 111, 130, 0.22);
   border-radius: 999px;
   color: var(--body-fg) !important;
-  font-weight: 700;
-  padding: 0.45rem 0.85rem;
+  display: inline-flex;
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  margin-right: 0.35rem;
+  padding: 0.45rem 0.9rem;
   text-decoration: none;
 }
 
 .gmi-admin-portal-link:hover {
-  background: rgba(212, 175, 55, 0.16);
+  background: rgba(19, 111, 130, 0.12);
+}
+
+.gmi-admin-status-pill {
+  background: rgba(242, 165, 65, 0.2);
+  border: 1px solid rgba(242, 165, 65, 0.45);
+  border-radius: 999px;
+  color: #7c4d12;
+  display: inline-flex;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  padding: 0.42rem 0.78rem;
+  text-transform: uppercase;
 }
 
 div.breadcrumbs {
-  background: #67616b;
-  color: #fff;
+  background: linear-gradient(90deg, #0f4c5c, #136f82);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.16);
+  color: #f7fcfd;
+  font-weight: 600;
 }
 
-.module,
-.inline-group,
-#content-related {
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  box-shadow: 0 10px 24px rgba(79, 74, 82, 0.07);
-  overflow: hidden;
+div.breadcrumbs a {
+  color: #f7fcfd;
 }
 
 #content {
-  padding: 1.5rem 2rem;
+  animation: gmi-fade-up 0.36s ease;
+  padding: 1.6rem 1.8rem;
 }
 
-#content-main {
-  border-radius: 8px;
-}
-
+#content-main,
+#content-related,
+.module,
+.inline-group,
 #changelist {
-  background: #fffdf8;
+  background: var(--gmi-card-bg);
   border: 1px solid var(--border-color);
-  border-radius: 8px;
-  box-shadow: 0 12px 30px rgba(79, 74, 82, 0.08);
+  border-radius: 16px;
+  box-shadow: 0 14px 36px rgba(12, 63, 75, 0.09);
   overflow: hidden;
 }
 
+#changelist {
+  margin-top: 0.5rem;
+}
+
 #changelist-filter {
-  background: #fbf7ef;
+  background: rgba(232, 246, 249, 0.85);
   border-left: 1px solid var(--border-color);
 }
 
@@ -146,56 +199,74 @@ div.breadcrumbs {
 }
 
 #changelist-filter li.selected a {
-  color: #2e2a31 !important;
+  color: #0f4c5c !important;
   font-weight: 800;
 }
 
 #toolbar {
-  background: #fbf7ef;
+  background: linear-gradient(180deg, rgba(252, 254, 255, 0.92), rgba(238, 248, 250, 0.92));
   border-bottom: 1px solid var(--border-color);
   padding: 0.8rem 1rem;
 }
 
-#toolbar form input[type="submit"] {
-  min-height: 34px;
-}
-
 .object-tools a,
 .object-tools button {
-  border-radius: 8px;
+  border-radius: 10px;
   font-weight: 800;
 }
 
 .actions {
   align-items: center;
-  background: #fffaf0;
+  background: rgba(242, 165, 65, 0.1);
   border-bottom: 1px solid var(--border-color);
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
-  padding: 0.65rem 1rem;
+  padding: 0.68rem 1rem;
 }
 
 .actions select,
 .actions input,
 #toolbar input,
 #toolbar select,
-.filtered .actions select {
-  border: 1px solid rgba(103, 97, 107, 0.2);
-  border-radius: 8px;
-  min-height: 34px;
+.filtered .actions select,
+form .aligned input,
+form .aligned textarea,
+form .aligned select,
+.vTextField,
+.vLargeTextField {
+  border: 1px solid rgba(19, 111, 130, 0.28);
+  border-radius: 10px;
+  min-height: 36px;
+}
+
+form .aligned input:focus,
+form .aligned textarea:focus,
+form .aligned select:focus,
+.actions select:focus,
+#toolbar input:focus,
+#toolbar select:focus,
+.vTextField:focus,
+.vLargeTextField:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(242, 165, 65, 0.2);
+  outline: none;
 }
 
 .results {
   overflow-x: auto;
 }
 
+.results tbody tr:nth-child(odd) {
+  background: rgba(255, 255, 255, 0.76);
+}
+
 .results tbody tr:nth-child(even) {
-  background: #fffaf0;
+  background: rgba(241, 249, 251, 0.82);
 }
 
 .results tbody tr:hover {
-  background: rgba(212, 175, 55, 0.16);
+  background: rgba(242, 165, 65, 0.16);
 }
 
 .results th,
@@ -203,9 +274,18 @@ div.breadcrumbs {
   vertical-align: middle;
 }
 
-.fieldsets,
-form .aligned {
-  background: #fffdf8;
+.module h2,
+.module caption,
+.inline-group h2 {
+  background: linear-gradient(90deg, #0f4c5c, #136f82);
+  color: #f7fbfc;
+  font-weight: 700;
+}
+
+table thead th,
+.results thead th {
+  background: rgba(227, 243, 247, 0.94);
+  color: var(--body-fg);
 }
 
 .aligned label {
@@ -213,71 +293,45 @@ form .aligned {
   font-weight: 800;
 }
 
-form .aligned input,
-form .aligned textarea,
-form .aligned select,
-.vTextField,
-.vLargeTextField {
-  border: 1px solid rgba(103, 97, 107, 0.22);
-  border-radius: 8px;
-  min-height: 34px;
-}
-
-form .aligned input:focus,
-form .aligned textarea:focus,
-form .aligned select:focus {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.16);
-  outline: none;
-}
-
-.submit-row {
-  background: rgba(255, 252, 246, 0.96);
-  border-top: 1px solid var(--border-color);
-  bottom: 0;
-  box-shadow: 0 -10px 22px rgba(79, 74, 82, 0.08);
-  position: sticky;
-  z-index: 20;
-}
-
-.module h2,
-.module caption,
-.inline-group h2 {
-  background: #4f4a52;
-  color: #fff;
-  font-weight: 700;
-}
-
-table thead th,
-.results thead th {
-  background: #faf7ef;
-  color: var(--body-fg);
-}
-
 .button,
 input[type="submit"],
 input[type="button"],
 .submit-row input,
 a.button {
-  border-radius: 8px;
-  font-weight: 700;
+  border-radius: 10px;
+  font-weight: 800;
+}
+
+.submit-row {
+  background: rgba(255, 255, 255, 0.88);
+  border-top: 1px solid var(--border-color);
+  bottom: 0;
+  box-shadow: 0 -8px 22px rgba(11, 66, 80, 0.12);
+  position: sticky;
+  z-index: 20;
 }
 
 .submit-row input.default,
 input[type="submit"].default {
-  background: var(--default-button-bg);
-  color: #2e2a31;
+  background: linear-gradient(130deg, #f2a541, #f9b65f);
+  color: #4e300a;
 }
 
 .submit-row input.default:hover,
 input[type="submit"].default:hover {
-  background: var(--default-button-hover-bg);
+  background: linear-gradient(130deg, #e58e21, #f2a541);
+}
+
+.help,
+p.help,
+.helptext {
+  color: var(--body-quiet-color);
 }
 
 .gmi-admin-login #container {
-  width: 100%;
-  min-width: 0;
   background: transparent;
+  min-width: 0;
+  width: 100%;
 }
 
 .gmi-admin-login #header {
@@ -293,36 +347,57 @@ input[type="submit"].default:hover {
 }
 
 .gmi-admin-login-shell {
+  align-items: center;
   display: grid;
   min-height: 100vh;
+  padding: 2.2rem;
   place-items: center;
-  padding: 2rem;
 }
 
 .gmi-admin-login-panel {
-  width: min(440px, 100%);
-  background: rgba(255, 255, 255, 0.94);
-  border: 1px solid rgba(103, 97, 107, 0.14);
-  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(19, 111, 130, 0.2);
+  border-radius: 20px;
   box-shadow: var(--gmi-shadow);
+  max-width: 460px;
   padding: 2rem;
+  position: relative;
+  width: 100%;
+}
+
+.gmi-admin-login-panel::before {
+  background: linear-gradient(120deg, rgba(19, 111, 130, 0.12), rgba(242, 165, 65, 0.15));
+  border-radius: 20px;
+  content: "";
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+}
+
+.gmi-admin-login-brand,
+.gmi-admin-login-form,
+.errornote,
+.password-reset-link {
+  position: relative;
+  z-index: 1;
 }
 
 .gmi-admin-login-brand {
-  display: flex;
   align-items: center;
+  display: flex;
   gap: 1rem;
-  margin-bottom: 1.6rem;
+  margin-bottom: 1.3rem;
 }
 
 .gmi-admin-login-logo {
-  width: 128px;
+  filter: drop-shadow(0 6px 12px rgba(19, 111, 130, 0.22));
   height: auto;
   object-fit: contain;
+  width: 132px;
 }
 
 .gmi-admin-kicker {
-  color: var(--accent);
+  color: #da8318;
   display: block;
   font-size: 0.72rem;
   font-weight: 800;
@@ -332,76 +407,122 @@ input[type="submit"].default:hover {
 
 .gmi-admin-login-brand h1 {
   color: var(--body-fg);
-  font-size: 1.55rem;
-  margin: 0.15rem 0 0;
+  font-size: 1.62rem;
+  margin: 0.1rem 0 0;
+}
+
+.gmi-admin-login-subtitle {
+  color: var(--body-quiet-color);
+  font-size: 0.9rem;
+  line-height: 1.4;
+  margin: 0.45rem 0 0;
 }
 
 .gmi-admin-login-form .form-row {
-  padding: 0 0 1rem;
+  padding: 0 0 0.95rem;
 }
 
 .gmi-admin-login-form label {
   color: var(--body-fg);
   display: block;
-  font-size: 0.78rem;
+  font-size: 0.76rem;
   font-weight: 800;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.09em;
   margin-bottom: 0.45rem;
   text-transform: uppercase;
 }
 
 .gmi-admin-login-form input[type="text"],
 .gmi-admin-login-form input[type="password"] {
-  border: 1px solid rgba(103, 97, 107, 0.2);
-  border-radius: 8px;
+  border: 1px solid rgba(19, 111, 130, 0.28);
+  border-radius: 11px;
   box-sizing: border-box;
   font-size: 1rem;
-  min-height: 44px;
-  padding: 0.7rem 0.85rem;
+  min-height: 46px;
+  padding: 0.72rem 0.9rem;
   width: 100%;
 }
 
 .gmi-admin-login-form input[type="text"]:focus,
 .gmi-admin-login-form input[type="password"]:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.18);
+  box-shadow: 0 0 0 3px rgba(242, 165, 65, 0.2);
   outline: none;
 }
 
 .gmi-admin-login-form .submit-row {
   background: transparent;
   border: 0;
+  box-shadow: none;
   padding: 0;
+  position: static;
 }
 
 .gmi-admin-login-form .submit-row input {
-  background: #4f4a52;
-  border-radius: 8px;
+  background: linear-gradient(115deg, #0f4c5c, #136f82);
+  border-radius: 11px;
   font-size: 0.95rem;
-  min-height: 44px;
+  letter-spacing: 0.03em;
+  min-height: 46px;
   width: 100%;
 }
 
 .gmi-admin-login-form .submit-row input:hover {
-  background: #3f3a43;
+  background: linear-gradient(115deg, #0d404d, #105f70);
 }
 
 .password-reset-link {
-  margin: -0.2rem 0 1rem;
+  margin: -0.12rem 0 1rem;
   text-align: right;
 }
 
+.password-reset-link a {
+  color: #0f4c5c;
+  font-weight: 700;
+}
+
+.errornote {
+  border-radius: 10px;
+}
+
+@media (max-width: 860px) {
+  #header {
+    grid-template-columns: 1fr;
+  }
+
+  #user-tools {
+    justify-content: flex-start;
+  }
+}
+
 @media (max-width: 640px) {
+  #content {
+    padding: 1rem;
+  }
+
   .gmi-admin-login-shell {
     padding: 1rem;
   }
 
   .gmi-admin-login-panel {
+    border-radius: 16px;
     padding: 1.35rem;
+  }
+
+  .gmi-admin-login-panel::before {
+    border-radius: 16px;
   }
 
   .gmi-admin-login-brand {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .gmi-admin-login-logo {
+    width: 120px;
+  }
+
+  .gmi-admin-status-pill {
+    display: none;
   }
 }
