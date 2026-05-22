@@ -1468,12 +1468,44 @@ def user_list(request):
         (value, label) for value, label in CustomUser.ROLE_CHOICES if value != "ADMIN"
     ]
     if request.method == "POST":
+        action = request.POST.get("action") or "update_role"
+        if action == "test_otp_email":
+            subject = "GMI Terralink OTP email configuration test"
+            message = (
+                f"Hello {request.user.get_full_name() or request.user.username},\n\n"
+                "This is a test email for the configured OTP delivery channel.\n\n"
+                f"Backend: {getattr(settings, 'EMAIL_BACKEND', '')}\n"
+                f"From: {getattr(settings, 'OTP_EMAIL_FROM', settings.DEFAULT_FROM_EMAIL)}\n"
+                f"To: {_login_otp_recipient_email()}\n"
+                f"Host: {getattr(settings, 'EMAIL_HOST', '')}:{getattr(settings, 'EMAIL_PORT', '')}\n"
+                f"User: {getattr(settings, 'EMAIL_HOST_USER', '')}\n"
+            )
+            try:
+                send_mail(
+                    subject,
+                    message,
+                    getattr(settings, "OTP_EMAIL_FROM", settings.DEFAULT_FROM_EMAIL),
+                    [_login_otp_recipient_email()],
+                    fail_silently=False,
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.exception("Admin OTP email test failed")
+                messages.error(
+                    request,
+                    f"OTP email test failed: {exc.__class__.__name__}: {exc}",
+                )
+            else:
+                messages.success(
+                    request,
+                    f"OTP email test sent successfully to {_login_otp_recipient_email()}.",
+                )
+            return redirect(request.resolver_match.url_name or "user_list")
+
         user_id = request.POST.get("user_id")
         target = CustomUser.objects.filter(pk=user_id).first()
         if not target:
             messages.error(request, "User account not found.")
         else:
-            action = request.POST.get("action") or "update_role"
             if action == "update_email":
                 new_email = (request.POST.get("email") or "").strip().lower()
                 if not new_email:

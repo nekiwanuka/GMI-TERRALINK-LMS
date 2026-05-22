@@ -9,9 +9,18 @@
             <h1 class="mb-1"><i class="bi bi-shield-lock"></i> {% if settings_mode %}Settings{% else %}User Management{% endif %}</h1>
             <p class="text-muted mb-0">Only the system owner or System Admin can switch staff roles. Accounts cannot be promoted to System Admin here.</p>
         </div>
-        <a href="{% url 'register' %}" class="btn btn-primary">
-            <i class="bi bi-plus-circle"></i> Add New User
-        </a>
+        <div class="d-flex gap-2 flex-wrap">
+            <form method="post" class="m-0">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="test_otp_email">
+                <button type="submit" class="btn btn-outline-secondary">
+                    <i class="bi bi-envelope-check"></i> Test OTP Email
+                </button>
+            </form>
+            <a href="{% url 'register' %}" class="btn btn-primary">
+                <i class="bi bi-plus-circle"></i> Add New User
+            </a>
+        </div>
     </div>
 
     <div class="card">
