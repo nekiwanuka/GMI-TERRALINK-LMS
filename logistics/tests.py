@@ -117,7 +117,7 @@ class LoginOtpTests(TestCase):
         self.assertNotIn("_auth_user_id", self.client.session)
         self.assertIn("Your GMI Terralink sign-in OTP", mail.outbox[0].subject)
         self.assertEqual(mail.outbox[0].from_email, "otp@gmiterralink.com")
-        self.assertEqual(mail.outbox[0].to, ["ops@example.com"])
+        self.assertEqual(mail.outbox[0].to, ["otp@gmiterralink.com"])
 
     def test_correct_otp_completes_login(self):
         self.client.post(
@@ -142,7 +142,7 @@ class LoginOtpTests(TestCase):
         self.assertEqual(self.client.session.get("_auth_user_id"), str(self.user.pk))
         self.assertNotIn("login_otp", self.client.session)
 
-    def test_account_without_email_cannot_start_otp_login(self):
+    def test_account_without_email_still_uses_shared_otp_inbox(self):
         CustomUser.objects.create_user(
             username="no-email",
             password="testpass123",
@@ -157,10 +157,12 @@ class LoginOtpTests(TestCase):
             },
         )
 
-        self.assertEqual(response.status_code, 200)
-        self.assertNotIn("login_otp", self.client.session)
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("login"))
+        self.assertIn("login_otp", self.client.session)
         self.assertNotIn("_auth_user_id", self.client.session)
-        self.assertEqual(len(mail.outbox), 0)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].to, ["otp@gmiterralink.com"])
 
 
 class UserManagementTests(TestCase):

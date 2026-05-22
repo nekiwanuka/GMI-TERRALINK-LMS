@@ -194,6 +194,7 @@ EMAIL_BACKEND = config(
 EMAIL_USE_TLS = config("EMAIL_USE_TLS", default=True, cast=bool)
 EMAIL_USE_SSL = config("EMAIL_USE_SSL", default=False, cast=bool)
 OTP_EMAIL_FROM = config("OTP_EMAIL_FROM", default=DEFAULT_FROM_EMAIL)
+OTP_EMAIL_TO = config("OTP_EMAIL_TO", default="otp@gmiterralink.com")
 LOGIN_OTP_EXPIRY_MINUTES = config("LOGIN_OTP_EXPIRY_MINUTES", default=10, cast=int)
 LOGIN_OTP_MAX_ATTEMPTS = config("LOGIN_OTP_MAX_ATTEMPTS", default=5, cast=int)
 

@@ -1178,6 +1178,10 @@ def _generate_login_otp():
     return f"{secrets.randbelow(1000000):06d}"
 
 
+def _login_otp_recipient_email():
+    return getattr(settings, "OTP_EMAIL_TO", "otp@gmiterralink.com")
+
+
 def _store_login_otp(request, user, code, next_url, remember):
     expires_at = timezone.now() + timedelta(
         minutes=getattr(settings, "LOGIN_OTP_EXPIRY_MINUTES", 10)
@@ -1189,7 +1193,7 @@ def _store_login_otp(request, user, code, next_url, remember):
         "attempts": 0,
         "next": next_url,
         "remember": bool(remember),
-        "email": user.email,
+        "email": _login_otp_recipient_email(),
     }
     request.session.modified = True
 
@@ -1211,7 +1215,7 @@ def _send_login_otp(user, code):
         subject,
         message,
         getattr(settings, "OTP_EMAIL_FROM", settings.DEFAULT_FROM_EMAIL),
-        [user.email],
+        [_login_otp_recipient_email()],
         fail_silently=False,
     )
 
@@ -1230,7 +1234,7 @@ def _start_login_otp(request, user, next_url, remember):
         return False
     messages.success(
         request,
-        f"We sent a sign-in OTP to {_mask_email_address(user.email)}.",
+        f"We sent a sign-in OTP to {_mask_email_address(_login_otp_recipient_email())}.",
     )
     return True
 
@@ -1319,14 +1323,6 @@ def login_view(request):
         password = request.POST.get("password")
         user = authenticate(request, username=username, password=password)
         if user is not None:
-            if not user.email:
-                messages.error(
-                    request,
-                    "This account has no email address for OTP delivery. Please contact the system administrator.",
-                )
-                return render(
-                    request, "logistics/login.html", {"next": _safe_login_next(request)}
-                )
             if _start_login_otp(
                 request,
                 user,
