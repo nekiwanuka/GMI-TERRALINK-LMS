@@ -1,0 +1,46 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block content %}
+<div class="gmi-admin-home">
+    <section class="gmi-admin-hero" aria-label="Application overview">
+        <div>
+            <span class="gmi-admin-eyebrow">{% translate 'Application' %}</span>
+            <h1>{{ app_label|capfirst }}</h1>
+            <p>{% translate 'Choose a model to view, edit, or create records.' %}</p>
+        </div>
+        <div class="gmi-admin-hero-actions">
+            <a href="{% url 'admin:index' %}" class="button">{% translate 'Back to Control Center' %}</a>
+        </div>
+    </section>
+
+    <section class="gmi-admin-apps" aria-label="Application models">
+        <header>
+            <h2>{% translate 'Models' %}</h2>
+            <span>{{ app_list|length }} {% translate 'available' %}</span>
+        </header>
+        <div class="gmi-admin-app-grid">
+            {% for app in app_list %}
+                {% for model in app.models %}
+                <article class="gmi-admin-app-card">
+                    <h3>{{ model.name }}</h3>
+                    <ul>
+                        <li>
+                            <span class="gmi-admin-model-name">{% translate 'Manage records' %}</span>
+                            <span class="gmi-admin-model-actions">
+                                {% if model.admin_url %}
+                                <a href="{{ model.admin_url }}">{% translate 'View' %}</a>
+                                {% endif %}
+                                {% if model.add_url %}
+                                <a href="{{ model.add_url }}">{% translate 'Add' %}</a>
+                                {% endif %}
+                            </span>
+                        </li>
+                    </ul>
+                </article>
+                {% endfor %}
+            {% endfor %}
+        </div>
+    </section>
+</div>
+{% endblock %}

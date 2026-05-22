@@ -526,3 +526,228 @@ p.help,
     display: none;
   }
 }
+
+.gmi-admin-home {
+  display: grid;
+  gap: 1.2rem;
+}
+
+.gmi-admin-hero {
+  align-items: center;
+  background: linear-gradient(140deg, rgba(15, 76, 92, 0.94), rgba(19, 111, 130, 0.93));
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 18px;
+  box-shadow: 0 16px 38px rgba(8, 53, 64, 0.22);
+  color: #f5fbfc;
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: 1fr auto;
+  padding: 1.35rem 1.5rem;
+}
+
+.gmi-admin-eyebrow {
+  color: rgba(255, 255, 255, 0.8);
+  display: block;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  margin-bottom: 0.4rem;
+  text-transform: uppercase;
+}
+
+.gmi-admin-hero h1 {
+  color: #ffffff;
+  font-size: 1.8rem;
+  margin: 0;
+}
+
+.gmi-admin-hero p {
+  color: rgba(242, 250, 252, 0.86);
+  margin: 0.45rem 0 0;
+}
+
+.gmi-admin-hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  justify-content: flex-end;
+}
+
+.gmi-admin-hero-actions .button {
+  border: 0;
+  border-radius: 10px;
+  font-weight: 800;
+  min-height: 36px;
+}
+
+.gmi-admin-home-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 320px);
+}
+
+.gmi-admin-apps,
+.gmi-admin-activity {
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid rgba(19, 111, 130, 0.18);
+  border-radius: 16px;
+  box-shadow: 0 12px 30px rgba(11, 62, 74, 0.1);
+  padding: 1rem;
+}
+
+.gmi-admin-apps > header,
+.gmi-admin-activity > h2 {
+  align-items: baseline;
+  border-bottom: 1px solid rgba(19, 111, 130, 0.16);
+  display: flex;
+  justify-content: space-between;
+  margin: 0 0 0.85rem;
+  padding-bottom: 0.7rem;
+}
+
+.gmi-admin-apps > header h2,
+.gmi-admin-activity > h2 {
+  font-size: 1.05rem;
+  margin: 0;
+}
+
+.gmi-admin-apps > header span {
+  color: #53757d;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.gmi-admin-app-grid {
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+.gmi-admin-app-card {
+  background: linear-gradient(165deg, rgba(248, 253, 254, 0.96), rgba(236, 247, 250, 0.98));
+  border: 1px solid rgba(19, 111, 130, 0.16);
+  border-radius: 14px;
+  padding: 0.85rem;
+}
+
+.gmi-admin-app-card h3 {
+  font-size: 0.96rem;
+  margin: 0 0 0.55rem;
+}
+
+.gmi-admin-app-card h3 a {
+  color: #0f4c5c;
+  text-decoration: none;
+}
+
+.gmi-admin-app-card h3 a:hover {
+  color: #e58e21;
+}
+
+.gmi-admin-app-card ul,
+.gmi-admin-activity-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.gmi-admin-app-card li {
+  align-items: center;
+  border-top: 1px dashed rgba(19, 111, 130, 0.2);
+  display: flex;
+  justify-content: space-between;
+  padding: 0.5rem 0;
+}
+
+.gmi-admin-app-card li:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.gmi-admin-model-name {
+  color: #254952;
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.gmi-admin-model-actions {
+  display: inline-flex;
+  gap: 0.45rem;
+}
+
+.gmi-admin-model-actions a {
+  background: rgba(19, 111, 130, 0.1);
+  border: 1px solid rgba(19, 111, 130, 0.2);
+  border-radius: 999px;
+  color: #0f4c5c;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  padding: 0.22rem 0.52rem;
+  text-decoration: none;
+  text-transform: uppercase;
+}
+
+.gmi-admin-model-actions a:hover {
+  background: rgba(242, 165, 65, 0.2);
+  border-color: rgba(242, 165, 65, 0.5);
+  color: #8c5712;
+}
+
+.gmi-admin-activity-list li {
+  border-left: 4px solid rgba(19, 111, 130, 0.3);
+  border-radius: 8px;
+  margin-bottom: 0.55rem;
+  padding: 0.58rem 0.65rem;
+}
+
+.gmi-admin-activity-list li.is-add {
+  background: rgba(26, 165, 115, 0.12);
+  border-left-color: rgba(26, 165, 115, 0.6);
+}
+
+.gmi-admin-activity-list li.is-change {
+  background: rgba(19, 111, 130, 0.1);
+  border-left-color: rgba(19, 111, 130, 0.55);
+}
+
+.gmi-admin-activity-list li.is-delete {
+  background: rgba(191, 63, 54, 0.12);
+  border-left-color: rgba(191, 63, 54, 0.62);
+}
+
+.gmi-admin-activity-action {
+  color: #1f4149;
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.gmi-admin-activity-meta {
+  color: #5a7b83;
+  display: block;
+  font-size: 0.75rem;
+  margin-top: 0.24rem;
+}
+
+.gmi-admin-empty {
+  color: #5d7e86;
+  font-style: italic;
+}
+
+@media (max-width: 1024px) {
+  .gmi-admin-home-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .gmi-admin-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .gmi-admin-hero-actions {
+    justify-content: flex-start;
+  }
+}

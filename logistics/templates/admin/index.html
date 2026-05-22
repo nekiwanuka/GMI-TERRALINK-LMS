@@ -1,0 +1,76 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static log %}
+
+{% block content %}
+<div class="gmi-admin-home">
+    <section class="gmi-admin-hero" aria-label="Operations overview">
+        <div>
+            <span class="gmi-admin-eyebrow">Administrator Workspace</span>
+            <h1>Control Center</h1>
+            <p>Manage users, workflows, invoices, and logistics records from one command surface.</p>
+        </div>
+        <div class="gmi-admin-hero-actions">
+            <a href="{% url 'dashboard' %}" class="button default">Open Operations Portal</a>
+            <a href="{% url 'admin:logistics_customuser_changelist' %}" class="button">Manage Users</a>
+        </div>
+    </section>
+
+    <div class="gmi-admin-home-grid">
+        <section class="gmi-admin-apps" aria-label="Application modules">
+            <header>
+                <h2>{% translate 'Modules' %}</h2>
+                <span>{{ app_list|length }} {% translate 'areas' %}</span>
+            </header>
+            <div class="gmi-admin-app-grid">
+                {% for app in app_list %}
+                <article class="gmi-admin-app-card">
+                    <h3>
+                        {% if app.app_url %}
+                        <a href="{{ app.app_url }}">{{ app.name }}</a>
+                        {% else %}
+                        {{ app.name }}
+                        {% endif %}
+                    </h3>
+                    <ul>
+                        {% for model in app.models %}
+                        <li>
+                            <span class="gmi-admin-model-name">{{ model.name }}</span>
+                            <span class="gmi-admin-model-actions">
+                                {% if model.admin_url %}
+                                <a href="{{ model.admin_url }}">{% translate 'View' %}</a>
+                                {% endif %}
+                                {% if model.add_url %}
+                                <a href="{{ model.add_url }}">{% translate 'Add' %}</a>
+                                {% endif %}
+                            </span>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </article>
+                {% empty %}
+                <p class="gmi-admin-empty">{% translate "You don't have permission to view or edit anything." %}</p>
+                {% endfor %}
+            </div>
+        </section>
+
+        <aside class="gmi-admin-activity" aria-label="Recent activity">
+            <h2>{% translate 'Recent Activity' %}</h2>
+            {% get_admin_log 12 as admin_log for_user user %}
+            {% if not admin_log %}
+            <p class="gmi-admin-empty">{% translate 'No recent actions recorded.' %}</p>
+            {% else %}
+            <ol class="gmi-admin-activity-list">
+                {% for entry in admin_log %}
+                <li class="{% if entry.is_addition %}is-add{% elif entry.is_change %}is-change{% elif entry.is_deletion %}is-delete{% endif %}">
+                    <span class="gmi-admin-activity-action">{{ entry.get_change_message|default:entry.object_repr }}</span>
+                    <span class="gmi-admin-activity-meta">
+                        {% if entry.content_type %}{{ entry.content_type.name|capfirst }}{% else %}{% translate 'Record' %}{% endif %}
+                    </span>
+                </li>
+                {% endfor %}
+            </ol>
+            {% endif %}
+        </aside>
+    </div>
+</div>
+{% endblock %}
