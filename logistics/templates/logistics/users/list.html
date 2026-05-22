@@ -1,0 +1,88 @@
+{% extends "logistics/base.html" %}
+
+{% block title %}{% if settings_mode %}Settings{% else %}Users{% endif %} - GMI TERRALINK Logistics Portal{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap mb-4">
+        <div>
+            <h1 class="mb-1"><i class="bi bi-shield-lock"></i> {% if settings_mode %}Settings{% else %}User Management{% endif %}</h1>
+            <p class="text-muted mb-0">Only the system owner or System Admin can switch staff roles. Accounts cannot be promoted to System Admin here.</p>
+        </div>
+        <a href="{% url 'register' %}" class="btn btn-primary">
+            <i class="bi bi-plus-circle"></i> Add New User
+        </a>
+    </div>
+
+    <div class="card">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Username</th>
+                        <th>Email</th>
+                        <th>Name</th>
+                        <th>Role</th>
+                        <th>Switch Role</th>
+                        <th>Phone</th>
+                        <th>Status</th>
+                        <th>Joined</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for user in users %}
+                    <tr>
+                        <td><strong>{{ user.username }}</strong></td>
+                        <td style="min-width: 280px;">
+                            <div class="small text-muted mb-1">OTP recipient</div>
+                            <form method="post" class="d-flex gap-2 align-items-center">
+                                {% csrf_token %}
+                                <input type="hidden" name="action" value="update_email">
+                                <input type="hidden" name="user_id" value="{{ user.pk }}">
+                                <input type="email" name="email" value="{{ user.email }}" class="form-control form-control-sm" aria-label="Update {{ user.username }} email" placeholder="user@example.com" required>
+                                <button type="submit" class="btn btn-sm btn-outline-primary">Save</button>
+                            </form>
+                        </td>
+                        <td>{{ user.get_full_name }}</td>
+                        <td>
+                            <span class="badge bg-info">{{ user.get_role_display }}</span>
+                        </td>
+                        <td style="min-width: 230px;">
+                            {% if user.is_superuser or user.role == 'ADMIN' %}
+                            <span class="badge bg-dark">Protected System Admin</span>
+                            {% else %}
+                            <form method="post" class="d-flex gap-2 align-items-center">
+                                {% csrf_token %}
+                                <input type="hidden" name="action" value="update_role">
+                                <input type="hidden" name="user_id" value="{{ user.pk }}">
+                                <select name="role" class="form-select form-select-sm" aria-label="Switch {{ user.username }} role">
+                                    {% for value, label in role_choices %}
+                                    <option value="{{ value }}" {% if user.role == value %}selected{% endif %}>{{ label }}</option>
+                                    {% endfor %}
+                                </select>
+                                <button type="submit" class="btn btn-sm btn-outline-dark">Save</button>
+                            </form>
+                            {% endif %}
+                        </td>
+                        <td>{{ user.phone }}</td>
+                        <td>
+                            {% if user.is_active %}
+                            <span class="badge bg-success">Active</span>
+                            {% else %}
+                            <span class="badge bg-danger">Inactive</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ user.created_at|date:"Y-m-d" }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="8" class="text-center text-muted py-4">No users found</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% include "logistics/components/pagination.html" %}
+    </div>
+</div>
+{% endblock %}

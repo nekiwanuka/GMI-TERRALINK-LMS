@@ -1,0 +1,10101 @@
+"""Views for the logistics management system."""
+
+import csv
+import json
+import mimetypes
+import os
+import secrets
+from datetime import date, datetime, timedelta
+from decimal import Decimal
+from html import escape
+from io import BytesIO
+from urllib.parse import quote
+
+from django.contrib import messages
+from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth.decorators import login_required
+from django.conf import settings
+from django.contrib.contenttypes.models import ContentType
+from django.core.exceptions import ValidationError
+from django.core.mail import send_mail
+from django.core.paginator import Paginator
+from django.core.validators import validate_email
+from django.db import transaction
+from django.db.models import Q, Sum, ProtectedError, Count
+from django.http import FileResponse, Http404, HttpResponse, JsonResponse
+from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
+from django.utils import timezone
+from django.utils.crypto import constant_time_compare, salted_hmac
+from django.utils.http import url_has_allowed_host_and_scheme
+from django.utils._os import safe_join
+from django.views.decorators.clickjacking import xframe_options_sameorigin
+
+from .pi_parser import (
+    parse_purchase_inquiry,
+    items_to_sourcing_lines,
+    build_sourcing_notes,
+)
+
+
+def _extract_text_from_file(file_obj):
+    """
+    Best-effort text extraction from an uploaded file.
+    Supports PDF (via pypdf), Word .docx (via python-docx), and plain text.
+    Returns extracted text string (may be empty if extraction fails or libs missing).
+    """
+    filename = file_obj.name.lower()
+    extracted = ""
+    try:
+        if filename.endswith(".pdf"):
+            try:
+                from pypdf import PdfReader
+
+                file_obj.seek(0)
+                reader = PdfReader(file_obj)
+                parts = []
+                for page in reader.pages:
+                    text = page.extract_text()
+                    if text:
+                        parts.append(text)
+                extracted = "\n".join(parts)
+            except ImportError:
+                extracted = "[PDF extraction requires pypdf. Run: pip install pypdf]"
+        elif filename.endswith(".docx"):
+            try:
+                import docx
+
+                file_obj.seek(0)
+                document = docx.Document(file_obj)
+                extracted = "\n".join(
+                    p.text for p in document.paragraphs if p.text.strip()
+                )
+            except ImportError:
+                extracted = "[Word extraction requires python-docx. Run: pip install python-docx]"
+        elif filename.endswith(".txt"):
+            file_obj.seek(0)
+            extracted = file_obj.read().decode("utf-8", errors="replace")
+        else:
+            extracted = f"[File type not supported for automatic extraction: {os.path.splitext(filename)[1]}]"
+    except Exception as exc:  # noqa: BLE001
+        extracted = f"[Extraction failed: {exc}]"
+    finally:
+        try:
+            file_obj.seek(0)
+        except Exception:
+            pass
+    return extracted.strip()
+
+
+def _has_extractable_document_text(text):
+    if not text:
+        return False
+    status_prefixes = (
+        "[PDF extraction requires",
+        "[Word extraction requires",
+        "[File type not supported",
+        "[Extraction failed:",
+    )
+    return not text.strip().startswith(status_prefixes)
+
+
+def _structured_data_for_transaction_document(text, transaction, document_type=""):
+    structured_data = parse_purchase_inquiry(text)
+    customer = transaction.customer
+    structured_data.update(
+        {
+            "client_name": customer.name,
+            "contact_person": customer.contact_person,
+            "phone": customer.phone,
+            "email": customer.email,
+            "address": customer.address,
+            "customer_source": "transaction",
+            "source_document_type": document_type,
+        }
+    )
+    return structured_data
+
+
+def _unit_prices_from_structured_data(structured_data):
+    prices = {}
+    for item in (structured_data or {}).get("items", []):
+        if not isinstance(item, dict):
+            continue
+        name = (item.get("name") or item.get("description") or "").strip()
+        if not name:
+            continue
+        unit_price = item.get("unit_price", item.get("amount", ""))
+        total = item.get("total", "")
+        if unit_price in (None, "") and total not in (None, ""):
+            try:
+                quantity_decimal = Decimal(str(item.get("quantity") or "1"))
+                if quantity_decimal:
+                    unit_price = Decimal(str(total)) / quantity_decimal
+            except Exception:
+                unit_price = total
+        if unit_price not in (None, ""):
+            try:
+                prices[name] = float(Decimal(str(unit_price)))
+            except Exception:
+                continue
+    return prices
+
+
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import A4, landscape
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.pdfgen import canvas
+from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+
+from .forms import (
+    ClientForm,
+    ContainerReturnForm,
+    DocumentForm,
+    FinalInvoiceForm,
+    FulfillmentLineForm,
+    FulfillmentOrderForm,
+    InventoryItemForm,
+    LoadingForm,
+    NoticeboardTaskForm,
+    PaymentForm,
+    PaymentTransactionForm,
+    ProformaInvoiceForm,
+    ProofOfDeliveryForm,
+    ShipmentLegForm,
+    SignatureProfileForm,
+    SourcingForm,
+    SupplierForm,
+    SupplierPaymentForm,
+    SupplierProductForm,
+    TransactionForm,
+    TransitForm,
+    TransactionPaymentRecordForm,
+    UserRegistrationForm,
+    normalize_text_entry,
+)
+from .decorators import (
+    director_required,
+    finance_required,
+    procurement_required,
+    role_required,
+)
+from .role_permissions import (
+    PROCUREMENT_PERMISSION_ROLES,
+    PROCUREMENT_STAFF_ROLES,
+    expand_allowed_roles,
+    normalized_role,
+    role_has_procurement_permissions,
+)
+from .document_numbers import (
+    display_document_number,
+    display_document_slug,
+    document_department_code,
+)
+from .models import (
+    _draw_international_terms_footer,
+    _draw_standard_doc_header,
+    AuditLog,
+    Client,
+    ContainerReturn,
+    CustomUser,
+    Document,
+    DocumentArchive,
+    DocumentSignature,
+    FinalInvoice,
+    FulfillmentLine,
+    FulfillmentOrder,
+    InventoryItem,
+    Loading,
+    Notification,
+    NoticeboardTask,
+    Payment,
+    PaymentTransaction,
+    ProformaInvoice,
+    ProofOfDelivery,
+    PurchaseOrder,
+    Receipt,
+    Sourcing,
+    Supplier,
+    SupplierPayment,
+    SupplierProduct,
+    ShipmentLeg,
+    SignatureProfile,
+    Transaction,
+    TransactionPaymentRecord,
+    Transit,
+)
+from .services import (
+    WorkflowTransitionError,
+    transition_cargo_item,
+    transition_shipment,
+)
+from .services.reporting import DirectorReportingService
+
+DEFAULT_PAGE_SIZE = 20
+AUDIT_PAGE_SIZE = 40
+MIN_CONTAINS_SEARCH_LENGTH = 3
+
+
+def _prevent_stale_pdf_cache(response):
+    response["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    response["Pragma"] = "no-cache"
+    response["Expires"] = "0"
+    return response
+
+
+def csrf_failure(request, reason=""):
+    target = request.POST.get("next") or request.META.get("HTTP_REFERER") or "/"
+    if not url_has_allowed_host_and_scheme(
+        target,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ) and not (target.startswith("/") and not target.startswith("//")):
+        target = "/"
+    messages.error(
+        request,
+        "Your security token expired or changed. Please refresh the page and try again.",
+        fail_silently=True,
+    )
+    return redirect(target)
+
+
+PDF_BRAND_BLACK = colors.HexColor("#1A1A1A")
+PDF_BRAND_GOLD = colors.HexColor("#D4AF37")
+PDF_BRAND_GREY = colors.HexColor("#666666")
+PDF_SOFT_GREY = colors.HexColor("#F6F6F6")
+PDF_SOFT_GOLD = colors.HexColor("#F7F4EA")
+PDF_BORDER = colors.HexColor("#D8D8D8")
+
+
+def _pdf_value_present(value):
+    return value not in (None, "", "-", "N/A")
+
+
+def _draw_pdf_card(pdf, x, top, width, height, title, fill=None):
+    fill = fill or PDF_SOFT_GREY
+    pdf.setFillColor(fill)
+    pdf.setStrokeColor(PDF_BORDER)
+    pdf.setLineWidth(0.7)
+    pdf.roundRect(x, top - height, width, height, 8, fill=1, stroke=1)
+    pdf.setFillColor(PDF_BRAND_GOLD)
+    pdf.roundRect(x + 8, top - 14, 34, 4, 2, fill=1, stroke=0)
+    pdf.setFillColor(PDF_BRAND_BLACK)
+    pdf.setFont("Helvetica-Bold", 10)
+    pdf.drawString(x + 12, top - 28, title)
+    return top - 45
+
+
+def _draw_pdf_key_values(pdf, x, y, rows, label_width=86, line_height=14, max_chars=58):
+    pdf.setFont("Helvetica", 9)
+    cursor = y
+    for label, value in rows:
+        if not _pdf_value_present(value):
+            continue
+        text = str(value)
+        pdf.setFillColor(PDF_BRAND_GREY)
+        pdf.setFont("Helvetica-Bold", 8.5)
+        pdf.drawString(x, cursor, f"{label}:")
+        pdf.setFillColor(PDF_BRAND_BLACK)
+        pdf.setFont("Helvetica", 9)
+        pdf.drawString(x + label_width, cursor, text[:max_chars])
+        cursor -= line_height
+    return cursor
+
+
+def _text_search_q(field_name, value):
+    lookup = "icontains" if len(value) >= MIN_CONTAINS_SEARCH_LENGTH else "istartswith"
+    return Q(**{f"{field_name}__{lookup}": value})
+
+
+def _notify_roles(*, title, message, link="", category="system", roles=None):
+    roles = expand_allowed_roles(
+        roles or ["ADMIN", "DIRECTOR", "FINANCE", "PROCUREMENT"]
+    )
+    recipients = CustomUser.objects.filter(is_active=True).filter(
+        Q(is_superuser=True) | Q(role__in=roles)
+    )
+    Notification.objects.bulk_create(
+        [
+            Notification(
+                recipient=recipient,
+                title=title,
+                message=message,
+                link=link,
+                category=category,
+            )
+            for recipient in recipients.distinct()
+        ]
+    )
+
+
+def _can_record_payment_entry(user):
+    return bool(
+        user.is_authenticated
+        and (user.is_superuser or getattr(user, "role", "") in {"ADMIN", "FINANCE"})
+    )
+
+
+def _can_record_supplier_payment_entry(user):
+    return bool(
+        user.is_authenticated
+        and (user.is_superuser or getattr(user, "role", "") == "FINANCE")
+    )
+
+
+def _request_finance_payment_permission(request, *, payment_label, link=""):
+    _notify_roles(
+        title="Payment recording permission requested",
+        message=(
+            f"{request.user.get_full_name() or request.user.username} needs Finance approval "
+            f"to record {payment_label}."
+        ),
+        link=link or request.META.get("HTTP_REFERER", ""),
+        category="finance",
+        roles=["ADMIN", "FINANCE"],
+    )
+    messages.info(
+        request,
+        "Payment recording requires Finance Officer approval. A permission request has been sent to Finance.",
+    )
+
+
+def _request_director_edit_permission(request, *, edit_label, link=""):
+    _notify_roles(
+        title="Edit permission requested",
+        message=(
+            f"{request.user.get_full_name() or request.user.username} needs Director approval "
+            f"to edit {edit_label}."
+        ),
+        link=link or request.META.get("HTTP_REFERER", ""),
+        category="system",
+        roles=["ADMIN", "DIRECTOR"],
+    )
+    messages.info(
+        request,
+        "Editing this record requires Director approval. A permission request has been sent to the Director.",
+    )
+
+
+def _redirect_back(request, default="dashboard"):
+    """Redirect to the referring page when possible, else use a safe fallback."""
+    target = request.META.get("HTTP_REFERER")
+    if target:
+        return redirect(target)
+    return redirect(default)
+
+
+def _safe_next_url(request):
+    target = request.POST.get("next") or request.GET.get("next") or ""
+    if target and url_has_allowed_host_and_scheme(
+        target,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        return target
+    if target.startswith("/") and not target.startswith("//"):
+        return target
+    return ""
+
+
+def _document_signature_for(document):
+    content_type = ContentType.objects.get_for_model(document, for_concrete_model=False)
+    return (
+        DocumentSignature.objects.select_related("signed_by", "signature_profile")
+        .filter(content_type=content_type, object_id=document.pk)
+        .first()
+    )
+
+
+def _sign_business_document(request, *, document, detail_route, document_label):
+    next_url = reverse(detail_route, kwargs={"pk": document.pk})
+    profile = SignatureProfile.objects.filter(user=request.user).first()
+
+    if not profile or not profile.can_sign:
+        messages.warning(
+            request,
+            "Upload and activate your signature before signing this document.",
+        )
+        return redirect(
+            f"{reverse('signature_profile')}?next={quote(next_url, safe='')}"
+        )
+
+    if request.method == "POST":
+        content_type = ContentType.objects.get_for_model(
+            document, for_concrete_model=False
+        )
+        note = (request.POST.get("note") or "").strip()[:255]
+        signature, _created = DocumentSignature.objects.update_or_create(
+            content_type=content_type,
+            object_id=document.pk,
+            defaults={
+                "signed_by": request.user,
+                "signature_profile": profile,
+                "signer_name": profile.display_name,
+                "signer_title": profile.title,
+                "signer_role": request.user.get_role_display(),
+                "note": note,
+                "signed_at": timezone.now(),
+            },
+        )
+        messages.success(
+            request,
+            f"{document_label} signed by {signature.signer_name}.",
+        )
+        return redirect(detail_route, pk=document.pk)
+
+    return render(
+        request,
+        "logistics/signatures/sign_document.html",
+        {
+            "document": document,
+            "document_label": document_label,
+            "detail_url": next_url,
+            "profile": profile,
+            "existing_signature": _document_signature_for(document),
+        },
+    )
+
+
+def _user_default_lane(user):
+    role = getattr(user, "role", "")
+    if getattr(user, "is_superuser", False) or role in {
+        "ADMIN",
+        "DIRECTOR",
+        "FINANCE",
+        "OFFICE_ADMIN",
+    }:
+        return "all"
+    if role in PROCUREMENT_STAFF_ROLES:
+        return "sourcing"
+    return "logistics"
+
+
+def _resolve_lane(request):
+    # Honour an explicit ?lane= override and persist it to the session
+    requested_lane = (request.GET.get("lane") or "").strip().lower()
+    default_lane = _user_default_lane(request.user)
+    privileged = _can_switch_lane(request.user)
+    if requested_lane in {"all", "logistics", "sourcing"}:
+        if privileged or requested_lane == default_lane:
+            request.session["active_lane"] = requested_lane
+            return requested_lane
+    # Fall back to session, then role default
+    session_lane = (request.session.get("active_lane") or "").lower()
+    if session_lane in {"all", "logistics", "sourcing"}:
+        if privileged or session_lane == default_lane:
+            return session_lane
+    return default_lane
+
+
+def _path_lane(request):
+    path = (request.path or "").lower()
+    if path.startswith("/logistics/") or path.startswith("/loadings/"):
+        return "logistics"
+    if path.startswith("/sourcing/"):
+        return "sourcing"
+    return None
+
+
+def _resolve_lane_with_path(request):
+    forced_lane = _path_lane(request)
+    if forced_lane in {"logistics", "sourcing"}:
+        default_lane = _user_default_lane(request.user)
+        if _can_switch_lane(request.user) or forced_lane == default_lane:
+            request.session["active_lane"] = forced_lane
+            return forced_lane
+    return _resolve_lane(request)
+
+
+def _invoice_lane_from_loading_id(loading_id):
+    return "logistics" if loading_id else "sourcing"
+
+
+def _proforma_route_name(proforma, action):
+    lane = _invoice_lane_from_loading_id(proforma.loading_id)
+    return f"{lane}_proforma_{action}"
+
+
+def _final_invoice_route_name(invoice, action):
+    lane = _invoice_lane_from_loading_id(invoice.loading_id)
+    return f"{lane}_final_invoice_{action}"
+
+
+def _canonical_route_redirect(request, route_name, **kwargs):
+    current_route = request.resolver_match.url_name if request.resolver_match else ""
+    if current_route != route_name:
+        return redirect(route_name, **kwargs)
+    return None
+
+
+def _lane_label(lane):
+    labels = {
+        "all": "All operations",
+        "logistics": "Logistics",
+        "sourcing": "Sourcing / Trade",
+    }
+    return labels.get(lane, "All operations")
+
+
+def _can_switch_lane(user):
+    return user.is_superuser or getattr(user, "role", "") in {
+        "ADMIN",
+        "DIRECTOR",
+        "FINANCE",
+        "OFFICE_ADMIN",
+    }
+
+
+def _can_edit_closed_trade_documents(user):
+    return user.is_superuser or getattr(user, "role", "") in {"ADMIN", "DIRECTOR"}
+
+
+def _can_directly_edit_business_documents(user):
+    return user.is_superuser or getattr(user, "role", "") in {
+        "ADMIN",
+        "DIRECTOR",
+        "FINANCE",
+        "PROCUREMENT",
+        "OFFICE_ADMIN",
+    }
+
+
+def _can_directly_edit_purchase_orders(user):
+    return user.is_superuser or getattr(user, "role", "") in {
+        "ADMIN",
+        "DIRECTOR",
+        "FINANCE",
+        "OFFICE_ADMIN",
+    }
+
+
+def _can_manage_business_documents(user):
+    return (
+        role_has_procurement_permissions(user) or getattr(user, "role", "") == "FINANCE"
+    )
+
+
+def _guard_purchase_order_edit_permission(request, purchase_order):
+    if _can_directly_edit_purchase_orders(request.user):
+        return None
+    _request_director_edit_permission(
+        request,
+        edit_label=f"purchase order {purchase_order.po_number}",
+        link=reverse("purchase_order_update", kwargs={"pk": purchase_order.pk}),
+    )
+    return redirect("purchase_order_detail", pk=purchase_order.pk)
+
+
+def _guard_business_document_edit_permission(
+    request, *, edit_label, link="", redirect_url=None
+):
+    if _can_directly_edit_business_documents(request.user):
+        return None
+    _request_director_edit_permission(request, edit_label=edit_label, link=link)
+    if redirect_url:
+        return redirect(redirect_url)
+    return _redirect_back(request)
+
+
+def _closed_trade_edit_reason(request):
+    return (
+        request.POST.get("closed_edit_reason")
+        or request.POST.get("reopen_reason")
+        or request.POST.get("edit_reason")
+        or ""
+    ).strip()
+
+
+def _append_trade_note(existing_notes, heading, reason, actor):
+    timestamp = timezone.now().strftime("%Y-%m-%d %H:%M")
+    actor_name = actor.get_full_name() or actor.username
+    note = f"{heading} by {actor_name} on {timestamp}: {reason}"
+    if existing_notes:
+        return f"{existing_notes}\n\n{note}"
+    return note
+
+
+def _closed_trade_filter_q():
+    return Q(status__in=["CLOSED", "DELIVERED"]) | Q(closed_at__isnull=False)
+
+
+def _trade_documents_locked(transaction):
+    return (
+        transaction.status in {"CLOSED", "DELIVERED"}
+        or transaction.closed_at is not None
+    )
+
+
+def _transactions_with_lock_status(queryset):
+    transactions = list(queryset)
+    for transaction in transactions:
+        transaction.documents_locked = _trade_documents_locked(transaction)
+    return transactions
+
+
+def _locked_trade_document_response(request, transaction):
+    if not _trade_documents_locked(transaction):
+        return None
+    if not _can_edit_closed_trade_documents(request.user):
+        messages.error(
+            request,
+            "This trade is closed. Only the Director or System Admin can edit it. Request permission before making changes.",
+        )
+        return redirect("transaction_detail", pk=transaction.pk)
+    if request.method == "POST":
+        reason = _closed_trade_edit_reason(request)
+        if not reason:
+            messages.error(
+                request,
+                "Add a reason before editing a closed trade.",
+            )
+            return redirect("transaction_detail", pk=transaction.pk)
+        log_audit(
+            "transaction",
+            "update",
+            transaction.pk,
+            transaction.transaction_id,
+            request.user,
+            changes={"closed_trade_edit_reason": reason},
+        )
+    return None
+
+
+def _apply_transaction_lane(queryset, lane):
+    if lane == "logistics":
+        return queryset.filter(source_loading__isnull=False)
+    if lane == "sourcing":
+        return queryset.filter(source_loading__isnull=True)
+    return queryset
+
+
+def _apply_loading_lane(queryset, lane):
+    if lane == "sourcing":
+        return queryset.none()
+    return queryset
+
+
+def _apply_client_lane(queryset, lane):
+    return queryset
+
+
+def _apply_payment_lane(queryset, lane):
+    if lane == "sourcing":
+        return queryset.none()
+    return queryset
+
+
+def _apply_sourcing_lane(queryset, lane):
+    if lane == "logistics":
+        return queryset.none()
+    return queryset
+
+
+def _apply_inventory_lane(queryset, lane):
+    if lane == "logistics":
+        return queryset.none()
+    return queryset
+
+
+def _apply_proforma_lane(queryset, lane):
+    if lane == "logistics":
+        return queryset.filter(loading__isnull=False)
+    if lane == "sourcing":
+        return queryset.filter(loading__isnull=True)
+    return queryset
+
+
+def _apply_final_invoice_lane(queryset, lane):
+    if lane == "logistics":
+        return queryset.filter(loading__isnull=False)
+    if lane == "sourcing":
+        return queryset.filter(loading__isnull=True)
+    return queryset
+
+
+def _apply_fulfillment_lane(queryset, lane):
+    if lane == "logistics":
+        return queryset.filter(transaction__source_loading__isnull=False)
+    if lane == "sourcing":
+        return queryset.filter(transaction__source_loading__isnull=True)
+    return queryset
+
+
+def _latest_final_invoice_for_client(client):
+    return (
+        FinalInvoice.objects.filter(transaction__customer=client)
+        .order_by("-is_confirmed", "-created_at")
+        .first()
+    )
+
+
+def _final_invoice_total_paid(invoice):
+    """Return paid total for a final invoice across current and legacy ledgers."""
+    if not invoice:
+        return Decimal("0.00")
+
+    invoice_record_total = invoice.payment_records.aggregate(total=Sum("amount"))[
+        "total"
+    ] or Decimal("0.00")
+    transaction_record_total = Decimal("0.00")
+    if invoice_record_total <= 0 and invoice.transaction.final_invoices.count() <= 1:
+        transaction_record_total = invoice.transaction.payment_records.aggregate(
+            total=Sum("amount")
+        )["total"] or Decimal("0.00")
+
+    legacy_filter = Q(final_invoice=invoice)
+    if invoice.loading_id:
+        legacy_filter |= Q(loading=invoice.loading)
+    legacy_total = Payment.objects.filter(legacy_filter).aggregate(
+        total=Sum("amount_paid")
+    )["total"] or Decimal("0.00")
+
+    return max(invoice_record_total, transaction_record_total, legacy_total)
+
+
+def _final_invoice_payment_snapshot(invoice, total_paid=None):
+    """Summarize client payment coverage for PO/fulfillment decisions."""
+    total_paid = (
+        total_paid if total_paid is not None else _final_invoice_total_paid(invoice)
+    )
+    total_paid = Decimal(str(total_paid or "0.00"))
+    item_total = Decimal(str(invoice.subtotal or "0.00"))
+    fee_total = (
+        Decimal(str(invoice.sourcing_fee or "0.00"))
+        + Decimal(str(invoice.shipping_cost or "0.00"))
+        + Decimal(str(invoice.service_fee or "0.00"))
+    )
+    invoice_total = Decimal(str(invoice.total_amount or "0.00"))
+    invoice_balance = max(invoice_total - total_paid, Decimal("0.00"))
+    item_balance = max(item_total - total_paid, Decimal("0.00"))
+    fee_paid = min(max(total_paid - item_total, Decimal("0.00")), fee_total)
+    fee_balance = max(fee_total - fee_paid, Decimal("0.00"))
+
+    item_funds_ready = item_total <= 0 or total_paid >= item_total
+    fully_paid = invoice_balance <= 0 and total_paid > 0
+    procurement_ready = fully_paid or (item_funds_ready and total_paid > 0)
+
+    if fully_paid:
+        invoice_label = "Paid"
+        invoice_class = "bg-success"
+    elif procurement_ready:
+        invoice_label = "Post Pay"
+        invoice_class = "bg-info text-dark"
+    elif total_paid > 0:
+        invoice_label = "Partial Payment"
+        invoice_class = "bg-warning text-dark"
+    else:
+        invoice_label = "Unpaid"
+        invoice_class = "bg-secondary"
+
+    if item_total > 0 and total_paid >= item_total:
+        item_label = "Item Funds Paid"
+        item_class = "bg-dark"
+    elif total_paid > 0:
+        item_label = "Item Funds Partial"
+        item_class = "bg-warning text-dark"
+    else:
+        item_label = "Item Funds Unpaid"
+        item_class = "bg-secondary"
+
+    if fee_total <= 0:
+        fee_label = "No Fees Due"
+        fee_class = "bg-secondary"
+    elif fee_balance <= 0:
+        fee_label = "Fees Paid"
+        fee_class = "bg-dark"
+    elif fee_paid > 0:
+        fee_label = "Fees Partially Paid"
+        fee_class = "bg-warning text-dark"
+    else:
+        fee_label = "Fees Not Paid"
+        fee_class = "bg-secondary"
+
+    return {
+        "total_paid": total_paid,
+        "invoice_total": invoice_total,
+        "invoice_balance": invoice_balance,
+        "invoice_label": invoice_label,
+        "invoice_class": invoice_class,
+        "item_total": item_total,
+        "item_balance": item_balance,
+        "item_label": item_label,
+        "item_class": item_class,
+        "fee_total": fee_total,
+        "fee_paid": fee_paid,
+        "fee_balance": fee_balance,
+        "fee_label": fee_label,
+        "fee_class": fee_class,
+        "item_funds_ready": item_funds_ready,
+        "fully_paid": fully_paid,
+        "procurement_ready": procurement_ready,
+        "can_record_payment": invoice_balance > 0,
+    }
+
+
+def _decorate_purchase_order_invoice_payment(purchase_order):
+    if not purchase_order.final_invoice_id:
+        purchase_order.invoice_payment_snapshot = None
+        return purchase_order
+
+    snapshot = _final_invoice_payment_snapshot(purchase_order.final_invoice)
+    purchase_order.invoice_payment_snapshot = snapshot
+    purchase_order.invoice_payment_status_label = snapshot["invoice_label"]
+    purchase_order.invoice_payment_status_class = snapshot["invoice_class"]
+    purchase_order.item_funds_status_label = snapshot["item_label"]
+    purchase_order.item_funds_status_class = snapshot["item_class"]
+    purchase_order.fee_payment_status_label = snapshot["fee_label"]
+    purchase_order.fee_payment_status_class = snapshot["fee_class"]
+    purchase_order.client_total_paid = snapshot["total_paid"]
+    purchase_order.client_invoice_balance = snapshot["invoice_balance"]
+    purchase_order.client_item_balance = snapshot["item_balance"]
+    purchase_order.client_fee_balance = snapshot["fee_balance"]
+    purchase_order.can_start_invoice_fulfillment = snapshot["procurement_ready"]
+    return purchase_order
+
+
+def _build_loading_proforma_items(loading):
+    if loading.entry_type == "GROUPAGE":
+        cbm = float(loading.cbm) if loading.cbm else 0.0
+        return [
+            {
+                "description": "Sea Freight – Groupage (LCL)",
+                "quantity": str(cbm) if cbm else "0",
+                "unit": "CBM",
+                "unit_price": 0.0,
+                "sales_price": 0.0,
+                "total": 0.0,
+            }
+        ]
+    else:
+        container_label = (
+            loading.get_container_size_display() if loading.container_size else "FCL"
+        )
+        return [
+            {
+                "description": f"Sea Freight – Full Container ({container_label})",
+                "quantity": "1",
+                "unit": "Container",
+                "unit_price": 0.0,
+                "sales_price": 0.0,
+                "total": 0.0,
+            }
+        ]
+
+
+def _ensure_transaction_for_loading(loading, *, created_by):
+    existing_transaction = getattr(loading, "source_transaction", None)
+    if existing_transaction:
+        return existing_transaction, False
+
+    transaction_record = Transaction.objects.create(
+        customer=loading.client,
+        source_loading=loading,
+        status="RECEIVED",
+        description=(loading.item_description or f"Cargo {loading.loading_id}").strip(),
+        notes=(
+            f"Auto-generated from cargo {loading.loading_id} | "
+            f"Route: {loading.origin} -> {loading.destination}"
+        ),
+        created_by=created_by,
+    )
+    return transaction_record, True
+
+
+def _ensure_proforma_for_loading(loading, *, created_by):
+    transaction_record, transaction_created = _ensure_transaction_for_loading(
+        loading, created_by=created_by
+    )
+    existing_proforma = transaction_record.proforma_invoices.order_by(
+        "-created_at"
+    ).first()
+    if existing_proforma:
+        return transaction_record, existing_proforma, transaction_created, False
+
+    proforma = ProformaInvoice.objects.create(
+        transaction=transaction_record,
+        loading=loading,
+        items=_build_loading_proforma_items(loading),
+        subtotal=Decimal("0.00"),
+        sourcing_fee=Decimal("0.00"),
+        handling_fee=Decimal("0.00"),
+        shipping_fee=Decimal("0.00"),
+        validity_date=timezone.localdate() + timedelta(days=30),
+        status="DRAFT",
+        created_by=created_by,
+    )
+    Transaction.objects.filter(
+        pk=transaction_record.pk,
+        status__in=["RECEIVED", "CLEANED", "SENT_TO_SOURCING", "QUOTED"],
+    ).update(status="PROFORMA_CREATED")
+    transaction_record.status = "PROFORMA_CREATED"
+    return transaction_record, proforma, transaction_created, True
+
+
+def _ensure_freight_invoice_for_loading(loading, *, created_by):
+    existing_payment = Payment.objects.filter(loading=loading).first()
+    if existing_payment:
+        return existing_payment, False
+
+    final_invoice = _latest_final_invoice_for_client(loading.client)
+    payment = Payment.objects.create(
+        loading=loading,
+        final_invoice=final_invoice,
+        billing_basis="manual",
+        billing_rate=None,
+        amount_charged=Decimal("0.00"),
+        amount_paid=Decimal("0.00"),
+        balance=Decimal("0.00"),
+        created_by=created_by,
+    )
+    return payment, True
+
+
+def _apply_transaction_status_badge(transaction, *, sourcing_entry_count=0):
+    transaction.list_status_display = transaction.get_status_display()
+    transaction.list_status_class = "bg-dark"
+    if transaction.status == "SENT_TO_SOURCING":
+        if sourcing_entry_count:
+            transaction.list_status_display = "In Sourcing Review"
+            transaction.list_status_class = "bg-info text-dark"
+        else:
+            transaction.list_status_display = "Awaiting Sourcing Intake"
+            transaction.list_status_class = "bg-warning text-dark"
+    return transaction
+
+
+def _transaction_next_step(transaction):
+    status = transaction.status
+    has_documents = getattr(transaction, "document_count", 0) > 0
+    has_sourcing = getattr(transaction, "sourcing_entry_count", 0) > 0
+    has_proforma = getattr(transaction, "proforma_count", 0) > 0
+    has_final_invoice = getattr(transaction, "final_invoice_count", 0) > 0
+    has_payments = getattr(transaction, "payment_record_count", 0) > 0
+    has_fulfillment = getattr(transaction, "fulfillment_count", 0) > 0
+
+    if transaction.is_closed:
+        return (
+            "Closed",
+            "Review history or reopen if further action is needed.",
+            "transaction_detail",
+        )
+    if status in {"RECEIVED", "CLEANED"}:
+        if has_documents:
+            return (
+                "Review extracted PI",
+                "Confirm extracted details, then send the entry to sourcing.",
+                "transaction_detail",
+            )
+        return (
+            "Upload or create worksheet",
+            "Upload and extract a client PI, or start a Q-Worksheet if there is no document.",
+            "transaction_detail",
+        )
+    if status == "SENT_TO_SOURCING":
+        if has_sourcing:
+            return (
+                "Complete Q-Worksheet",
+                "Compare supplier quotes and create the customer proforma.",
+                "sourcing_list",
+            )
+        return (
+            "Start sourcing intake",
+            "Create a Q-Worksheet for supplier quote comparison.",
+            "sourcing_create",
+        )
+    if status == "QUOTED":
+        return (
+            "Create proforma",
+            "Turn the approved sourcing quote into a customer proforma.",
+            "sourcing_proforma_create",
+        )
+    if status in {"PROFORMA_CREATED", "PROFORMA_SENT"}:
+        if has_proforma:
+            return (
+                "Confirm order",
+                "Follow up with the customer and confirm the proforma.",
+                "sourcing_proforma_list",
+            )
+        return (
+            "Prepare proforma",
+            "Create and send the proforma for customer approval.",
+            "sourcing_proforma_create",
+        )
+    if status == "CONFIRMED":
+        return (
+            "Create final invoice",
+            "Issue the final invoice and prepare payment follow-up.",
+            "sourcing_final_invoice_create",
+        )
+    if status == "FINAL_INVOICE_CREATED":
+        if has_payments:
+            return (
+                "Review payment",
+                "Confirm payment allocation and move the entry toward shipment.",
+                "sourcing_payment_create",
+            )
+        return (
+            "Record payment",
+            "Post customer payment against the final invoice.",
+            "sourcing_payment_create",
+        )
+    if status == "PAID":
+        if has_fulfillment:
+            return (
+                "Track fulfillment",
+                "Follow warehouse and delivery movement until shipment is delivered.",
+                "fulfillment_list",
+            )
+        return (
+            "Start fulfillment",
+            "Create the fulfillment/shipping record for delivery tracking.",
+            "fulfillment_order_create",
+        )
+    if status == "SHIPPED":
+        return (
+            "Track delivery",
+            "Monitor shipment movement and proof of delivery.",
+            "fulfillment_list",
+        )
+    if status == "DELIVERED":
+        return (
+            "Close entry",
+            "Confirm delivery evidence and close the transaction.",
+            "transaction_detail",
+        )
+    return (
+        "Review entry",
+        "Open the transaction and confirm the current workflow position.",
+        "transaction_detail",
+    )
+
+
+def _apply_transaction_next_step(transaction):
+    label, description, route_name = _transaction_next_step(transaction)
+    transaction.next_step_label = label
+    transaction.next_step_description = description
+    transaction.next_step_route_name = route_name
+    if route_name == "transaction_detail":
+        transaction.next_step_url = reverse(
+            "transaction_detail", kwargs={"pk": transaction.pk}
+        )
+    elif route_name == "sourcing_create":
+        transaction.next_step_url = (
+            f"{reverse('sourcing_create')}?transaction={transaction.pk}"
+        )
+    elif route_name == "fulfillment_order_create":
+        transaction.next_step_url = reverse(
+            "fulfillment_order_create", kwargs={"transaction_pk": transaction.pk}
+        )
+    else:
+        transaction.next_step_url = reverse(route_name)
+    return transaction
+
+
+def _resolve_sourcing_owner(preferred_user=None):
+    if (
+        preferred_user
+        and preferred_user.is_active
+        and (
+            preferred_user.is_superuser
+            or preferred_user.role in PROCUREMENT_PERMISSION_ROLES
+        )
+    ):
+        return preferred_user
+    return (
+        CustomUser.objects.filter(is_active=True)
+        .filter(Q(is_superuser=True) | Q(role__in=PROCUREMENT_PERMISSION_ROLES))
+        .order_by("is_superuser", "id")
+        .first()
+    )
+
+
+def _ensure_sourcing_entry_for_transaction(
+    transaction, *, preferred_user=None, pi_document=None
+):
+    existing_sourcing = (
+        Sourcing.objects.filter(transaction=transaction)
+        .order_by("-updated_at", "-created_at")
+        .first()
+    )
+    if existing_sourcing:
+        return existing_sourcing, False
+
+    sourcing_owner = _resolve_sourcing_owner(preferred_user)
+    if not sourcing_owner:
+        return None, False
+
+    structured_data = (pi_document.structured_data or {}) if pi_document else {}
+    sourcing_record = Sourcing.objects.create(
+        transaction=transaction,
+        supplier_name="Pending supplier assignment",
+        supplier_contact="",
+        item_details=(
+            items_to_sourcing_lines(structured_data) if structured_data else []
+        ),
+        unit_prices=_unit_prices_from_structured_data(structured_data),
+        notes=(
+            build_sourcing_notes(structured_data)
+            if structured_data
+            else "Initial sourcing intake created from client PI."
+        ),
+        created_by=sourcing_owner,
+    )
+    return sourcing_record, True
+
+
+# ===== AUTHENTICATION =====
+
+LOGIN_OTP_SESSION_KEY = "login_otp"
+
+
+def _safe_login_next(request):
+    target = request.POST.get("next") or request.GET.get("next") or reverse("dashboard")
+    if url_has_allowed_host_and_scheme(
+        target,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ) or (target.startswith("/") and not target.startswith("//")):
+        return target
+    return reverse("dashboard")
+
+
+def _mask_email_address(email):
+    local, separator, domain = (email or "").partition("@")
+    if not separator:
+        return "your registered email"
+    if len(local) <= 2:
+        masked_local = f"{local[:1]}***"
+    else:
+        masked_local = f"{local[:2]}***{local[-1:]}"
+    return f"{masked_local}@{domain}"
+
+
+def _hash_login_otp(code):
+    return salted_hmac("logistics.login_otp", code).hexdigest()
+
+
+def _generate_login_otp():
+    return f"{secrets.randbelow(1000000):06d}"
+
+
+def _store_login_otp(request, user, code, next_url, remember):
+    expires_at = timezone.now() + timedelta(
+        minutes=getattr(settings, "LOGIN_OTP_EXPIRY_MINUTES", 10)
+    )
+    request.session[LOGIN_OTP_SESSION_KEY] = {
+        "user_id": user.pk,
+        "code_hash": _hash_login_otp(code),
+        "expires_at": expires_at.timestamp(),
+        "attempts": 0,
+        "next": next_url,
+        "remember": bool(remember),
+        "email": user.email,
+    }
+    request.session.modified = True
+
+
+def _clear_login_otp(request):
+    request.session.pop(LOGIN_OTP_SESSION_KEY, None)
+    request.session.modified = True
+
+
+def _send_login_otp(user, code):
+    subject = "Your GMI Terralink sign-in OTP"
+    message = (
+        f"Hello {user.get_full_name() or user.username},\n\n"
+        f"Your GMI Terralink sign-in OTP is {code}. "
+        f"It expires in {getattr(settings, 'LOGIN_OTP_EXPIRY_MINUTES', 10)} minutes.\n\n"
+        "If you did not request this code, contact the system administrator immediately."
+    )
+    return send_mail(
+        subject,
+        message,
+        getattr(settings, "OTP_EMAIL_FROM", settings.DEFAULT_FROM_EMAIL),
+        [user.email],
+        fail_silently=False,
+    )
+
+
+def _start_login_otp(request, user, next_url, remember):
+    code = _generate_login_otp()
+    _store_login_otp(request, user, code, next_url, remember)
+    try:
+        _send_login_otp(user, code)
+    except Exception:  # noqa: BLE001
+        _clear_login_otp(request)
+        messages.error(
+            request,
+            "We could not send the OTP email. Please contact the system administrator to check email settings.",
+        )
+        return False
+    messages.success(
+        request,
+        f"We sent a sign-in OTP to {_mask_email_address(user.email)}.",
+    )
+    return True
+
+
+def _login_otp_context(request, **extra):
+    pending = request.session.get(LOGIN_OTP_SESSION_KEY) or {}
+    context = {
+        "otp_pending": bool(pending),
+        "otp_email": _mask_email_address(pending.get("email", "")),
+        "next": pending.get("next") or _safe_login_next(request),
+    }
+    context.update(extra)
+    return context
+
+
+def login_view(request):
+    """Authenticate user credentials, verify OTP, then start a session."""
+    if request.user.is_authenticated:
+        return redirect("dashboard")
+
+    pending_otp = request.session.get(LOGIN_OTP_SESSION_KEY)
+    if request.method == "POST":
+        if request.POST.get("action") == "restart_login":
+            _clear_login_otp(request)
+            return redirect("login")
+
+        if pending_otp:
+            user = CustomUser.objects.filter(
+                pk=pending_otp.get("user_id"), is_active=True
+            ).first()
+            if not user:
+                _clear_login_otp(request)
+                messages.error(
+                    request, "Your OTP session expired. Please sign in again."
+                )
+                return redirect("login")
+
+            if request.POST.get("action") == "resend_otp":
+                if _start_login_otp(
+                    request,
+                    user,
+                    pending_otp.get("next") or reverse("dashboard"),
+                    pending_otp.get("remember", False),
+                ):
+                    return redirect("login")
+                return render(
+                    request, "logistics/login.html", _login_otp_context(request)
+                )
+
+            if timezone.now().timestamp() > float(pending_otp.get("expires_at", 0)):
+                _clear_login_otp(request)
+                messages.error(request, "Your OTP expired. Please sign in again.")
+                return redirect("login")
+
+            attempts = int(pending_otp.get("attempts", 0)) + 1
+            pending_otp["attempts"] = attempts
+            request.session[LOGIN_OTP_SESSION_KEY] = pending_otp
+            request.session.modified = True
+
+            submitted_code = (
+                (request.POST.get("otp_code") or "").strip().replace(" ", "")
+            )
+            if constant_time_compare(
+                _hash_login_otp(submitted_code), pending_otp.get("code_hash", "")
+            ):
+                next_url = pending_otp.get("next") or reverse("dashboard")
+                remember = bool(pending_otp.get("remember"))
+                _clear_login_otp(request)
+                login(
+                    request, user, backend="django.contrib.auth.backends.ModelBackend"
+                )
+                if not remember:
+                    request.session.set_expiry(0)
+                return redirect(next_url)
+
+            if attempts >= getattr(settings, "LOGIN_OTP_MAX_ATTEMPTS", 5):
+                _clear_login_otp(request)
+                messages.error(
+                    request, "Too many incorrect OTP attempts. Please sign in again."
+                )
+                return redirect("login")
+            messages.error(request, "Invalid OTP. Please check the code and try again.")
+            return render(request, "logistics/login.html", _login_otp_context(request))
+
+        username = request.POST.get("username")
+        password = request.POST.get("password")
+        user = authenticate(request, username=username, password=password)
+        if user is not None:
+            if not user.email:
+                messages.error(
+                    request,
+                    "This account has no email address for OTP delivery. Please contact the system administrator.",
+                )
+                return render(
+                    request, "logistics/login.html", {"next": _safe_login_next(request)}
+                )
+            if _start_login_otp(
+                request,
+                user,
+                _safe_login_next(request),
+                request.POST.get("remember") == "on",
+            ):
+                return redirect("login")
+            return render(
+                request, "logistics/login.html", {"next": _safe_login_next(request)}
+            )
+        messages.error(request, "Invalid username or password")
+    return render(request, "logistics/login.html", _login_otp_context(request))
+
+
+def logout_view(request):
+    """Terminate an authenticated session."""
+    logout(request)
+    messages.success(request, "Logged out successfully")
+    return redirect("login")
+
+
+@login_required
+def set_lane(request):
+    """Persist the user's chosen department lane to the session."""
+    lane = (request.POST.get("lane") or request.GET.get("lane") or "").strip().lower()
+    if lane in {"all", "logistics", "sourcing"}:
+        privileged = _can_switch_lane(request.user)
+        default = _user_default_lane(request.user)
+        if privileged or lane == default:
+            request.session["active_lane"] = lane
+    next_url = (
+        request.POST.get("next")
+        or request.GET.get("next")
+        or request.META.get("HTTP_REFERER")
+        or "/"
+    )
+    # Security: only allow relative redirects
+    from urllib.parse import urlparse
+
+    parsed = urlparse(next_url)
+    if parsed.netloc and parsed.netloc != request.get_host():
+        next_url = "/"
+    return redirect(next_url)
+
+
+def register_view(request):
+    """Create new user accounts (superusers only)."""
+    if not request.user.is_authenticated:
+        return redirect("login")
+    if not request.user.is_superuser and request.user.role not in {
+        "ADMIN",
+        "superuser",
+    }:
+        messages.error(request, "Only superusers can create new users")
+        return redirect("dashboard")
+    if request.method == "POST":
+        form = UserRegistrationForm(request.POST)
+        if form.is_valid():
+            user = form.save()
+            messages.success(request, f"User {user.username} created successfully")
+            log_audit("user", "create", user.id, str(user), request.user)
+            return redirect("user_list")
+    else:
+        form = UserRegistrationForm()
+    return render(request, "logistics/register.html", {"form": form})
+
+
+@login_required
+def signature_profile(request):
+    """Allow a logged-in staff user to upload their official signature image."""
+    profile, _created = SignatureProfile.objects.get_or_create(
+        user=request.user,
+        defaults={
+            "title": getattr(
+                request.user, "get_role_display", lambda: "Authorized Signatory"
+            )(),
+        },
+    )
+    next_url = _safe_next_url(request)
+    if request.method == "POST":
+        form = SignatureProfileForm(request.POST, request.FILES, instance=profile)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Your signature profile has been updated.")
+            if next_url:
+                return redirect(next_url)
+            return redirect("signature_profile")
+    else:
+        form = SignatureProfileForm(instance=profile)
+    return render(
+        request,
+        "logistics/signatures/profile.html",
+        {"form": form, "profile": profile, "next_url": next_url},
+    )
+
+
+@login_required
+def protected_media(request, path):
+    """Serve uploaded files only after Django authentication has succeeded."""
+    normalized_path = os.path.normpath(path).replace("\\", "/").lstrip("/")
+    if normalized_path.startswith("../"):
+        raise Http404("File not found")
+
+    file_path = safe_join(settings.MEDIA_ROOT, normalized_path)
+    if not os.path.isfile(file_path):
+        raise Http404("File not found")
+
+    content_type, _ = mimetypes.guess_type(file_path)
+    filename = os.path.basename(file_path)
+    response = FileResponse(open(file_path, "rb"), content_type=content_type)
+    response["Content-Disposition"] = (
+        f"inline; filename=\"{filename}\"; filename*=UTF-8''{quote(filename)}"
+    )
+    return response
+
+
+# ===== DASHBOARD & USERS =====
+
+
+@login_required
+def user_list(request):
+    """List users and allow controlled role changes for owner/admin accounts."""
+    if not request.user.is_superuser and request.user.role not in {
+        "ADMIN",
+        "superuser",
+    }:
+        messages.error(request, "Permission denied")
+        return redirect("dashboard")
+
+    role_choices = [
+        (value, label) for value, label in CustomUser.ROLE_CHOICES if value != "ADMIN"
+    ]
+    if request.method == "POST":
+        user_id = request.POST.get("user_id")
+        target = CustomUser.objects.filter(pk=user_id).first()
+        if not target:
+            messages.error(request, "User account not found.")
+        else:
+            action = request.POST.get("action") or "update_role"
+            if action == "update_email":
+                new_email = (request.POST.get("email") or "").strip().lower()
+                if not new_email:
+                    messages.error(request, "Email address is required for OTP delivery.")
+                elif target.email == new_email:
+                    messages.info(request, "No email change was needed.")
+                else:
+                    try:
+                        validate_email(new_email)
+                    except ValidationError:
+                        messages.error(request, "Enter a valid email address.")
+                    else:
+                        old_email = target.email
+                        target.email = new_email
+                        target.save(update_fields=["email"])
+                        log_audit(
+                            "user",
+                            "update",
+                            target.id,
+                            str(target),
+                            request.user,
+                            changes={"email": {"from": old_email, "to": new_email}},
+                        )
+                        messages.success(
+                            request,
+                            f"Updated {target.username}'s OTP email to {new_email}.",
+                        )
+            else:
+                new_role = request.POST.get("role")
+                allowed_roles = {value for value, _label in role_choices}
+                if new_role not in allowed_roles:
+                    messages.error(
+                        request, "Accounts cannot be promoted to System Admin here."
+                    )
+                elif target.is_superuser or target.role == "ADMIN":
+                    messages.error(
+                        request,
+                        "System Admin accounts are protected from role changes here.",
+                    )
+                elif target.role == new_role:
+                    messages.info(request, "No role change was needed.")
+                else:
+                    old_role = target.role
+                    target.role = new_role
+                    target.save(update_fields=["role"])
+                    log_audit(
+                        "user",
+                        "update",
+                        target.id,
+                        str(target),
+                        request.user,
+                        changes={"role": {"from": old_role, "to": new_role}},
+                    )
+                    messages.success(request, f"Updated {target.username}'s role.")
+        return redirect(request.resolver_match.url_name or "user_list")
+
+    users = CustomUser.objects.all()
+    page_obj, query_string, page_range = paginate_queryset(request, users)
+    return render(
+        request,
+        "logistics/users/list.html",
+        {
+            "users": page_obj,
+            "page_obj": page_obj,
+            "query_string": query_string,
+            "page_range": page_range,
+            "role_choices": role_choices,
+            "settings_mode": request.resolver_match.url_name == "settings",
+        },
+    )
+
+
+# ===== CLIENT MANAGEMENT =====
+
+
+@login_required
+def client_list(request):
+    lane = _resolve_lane(request)
+    clients = _apply_client_lane(Client.objects.all(), lane)
+    search = request.GET.get("search", "").strip()
+    if search:
+        clients = clients.filter(
+            _text_search_q("client_id", search)
+            | _text_search_q("name", search)
+            | _text_search_q("contact_person", search)
+        )
+    page_obj, query_string, page_range = paginate_queryset(request, clients)
+    return render(
+        request,
+        "logistics/clients/list.html",
+        {
+            "clients": page_obj,
+            "search": search,
+            "page_obj": page_obj,
+            "query_string": query_string,
+            "page_range": page_range,
+            "active_lane": lane,
+            "active_lane_label": _lane_label(lane),
+            "can_switch_lane": _can_switch_lane(request.user),
+        },
+    )
+
+
+@login_required
+def client_create(request):
+    if request.method == "POST":
+        form = ClientForm(request.POST)
+        if form.is_valid():
+            client = form.save(commit=False)
+            client.created_by = request.user
+            client.save()
+            messages.success(request, f"Client {client.name} created successfully")
+            log_audit("client", "create", client.id, str(client), request.user)
+            return redirect("client_detail", pk=client.id)
+    else:
+        form = ClientForm()
+    return render(
+        request,
+        "logistics/clients/form.html",
+        {"form": form, "title": "Create Client"},
+    )
+
+
+@login_required
+def client_detail(request, pk):
+    client = get_object_or_404(Client, pk=pk)
+    return render(
+        request,
+        "logistics/clients/detail.html",
+        {"client": client, "loadings": client.loadings.all()},
+    )
+
+
+@login_required
+def client_update(request, pk):
+    if not (
+        request.user.is_superuser
+        or request.user.role in {"DIRECTOR", "ADMIN", "superuser"}
+    ):
+        messages.error(
+            request,
+            "Only the Director or System Administrator can edit clients. Please request permission from an authorised user.",
+        )
+        return redirect("client_detail", pk=pk)
+    client = get_object_or_404(Client, pk=pk)
+    if request.method == "POST":
+        form = ClientForm(request.POST, instance=client)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Client updated successfully")
+            log_audit("client", "update", client.id, str(client), request.user)
+            return redirect("client_detail", pk=client.id)
+    else:
+        form = ClientForm(instance=client)
+    return render(
+        request,
+        "logistics/clients/form.html",
+        {"form": form, "title": "Update Client", "client": client},
+    )
+
+
+@login_required
+def client_delete(request, pk):
+    if not (
+        request.user.is_superuser
+        or request.user.role in {"DIRECTOR", "ADMIN", "superuser"}
+    ):
+        messages.error(
+            request,
+            "Only the Director or System Administrator can delete clients. Please request permission from an authorised user.",
+        )
+        return redirect("client_detail", pk=pk)
+    client = get_object_or_404(Client, pk=pk)
+    client_str = str(client)
+    client_id = client.id
+    try:
+        client.delete()
+    except ProtectedError:
+        messages.error(
+            request,
+            "This client cannot be deleted while there are cargo/loadings linked to them. Remove or reassign those records first.",
+        )
+        return redirect("client_detail", pk=client_id)
+    messages.success(request, "Client deleted successfully")
+    log_audit("client", "delete", client_id, client_str, request.user)
+    return redirect("client_list")
+
+
+# ===== LOADING MANAGEMENT =====
+
+
+@login_required
+def loading_list(request):
+    lane = _resolve_lane_with_path(request)
+    loadings = _apply_loading_lane(Loading.objects.select_related("client"), lane)
+    search = request.GET.get("search", "").strip()
+    if search:
+        loadings = loadings.filter(
+            _text_search_q("loading_id", search)
+            | _text_search_q("client__name", search)
+            | _text_search_q("origin", search)
+        )
+    closed_filter = request.GET.get("closed")
+    if closed_filter == "1":
+        loadings = loadings.filter(closed_at__isnull=False)
+    elif closed_filter == "0":
+        loadings = loadings.filter(closed_at__isnull=True)
+    page_obj, query_string, page_range = paginate_queryset(request, loadings)
+    return render(
+        request,
+        "logistics/loadings/list.html",
+        {
+            "loadings": page_obj,
+            "search": search,
+            "page_obj": page_obj,
+            "query_string": query_string,
+            "page_range": page_range,
+            "active_lane": lane,
+            "active_lane_label": _lane_label(lane),
+            "can_switch_lane": _can_switch_lane(request.user),
+        },
+    )
+
+
+@login_required
+def loading_create(request):
+    preset_type = (request.GET.get("type") or "").strip().lower()
+    preset_map = {
+        "full": "FULL_CONTAINER",
+        "full_container": "FULL_CONTAINER",
+        "groupage": "GROUPAGE",
+        "group": "GROUPAGE",
+    }
+    preset_entry_type = preset_map.get(preset_type)
+
+    if request.method == "POST":
+        form = LoadingForm(request.POST)
+        if form.is_valid():
+            loading = form.save(commit=False)
+            loading.created_by = request.user
+            loading.save()
+            flow_transaction, proforma, transaction_created, proforma_created = (
+                _ensure_proforma_for_loading(loading, created_by=request.user)
+            )
+            messages.success(
+                request, f"Loading {loading.loading_id} created successfully"
+            )
+            if transaction_created:
+                messages.success(
+                    request,
+                    f"Commercial flow {flow_transaction.transaction_id} was opened automatically for this cargo.",
+                )
+            if proforma_created:
+                messages.success(
+                    request,
+                    f"Quotation / Proforma draft {display_document_number(proforma, 'PI')} was generated automatically.",
+                )
+            log_audit("loading", "create", loading.id, str(loading), request.user)
+            _notify_roles(
+                title="New loading registered",
+                message=f"Loading {loading.loading_id} ({loading.client.name}) created.",
+                link=f"/loadings/{loading.id}/",
+                category="logistics",
+                roles=["ADMIN", "DIRECTOR", "FINANCE", "OFFICE_ADMIN"],
+            )
+            can_manage_commercial_flow = (
+                request.user.is_superuser
+                or request.user.role == "FINANCE"
+                or role_has_procurement_permissions(request.user)
+            )
+            if can_manage_commercial_flow:
+                return redirect("proforma_update", pk=proforma.id)
+            messages.warning(
+                request,
+                "Cargo was saved and the quotation draft was created. Ask Finance or Procurement to complete the invoicing step.",
+            )
+            return redirect("loading_detail", pk=loading.id)
+    else:
+        initial = {"entry_type": preset_entry_type} if preset_entry_type else None
+        form = LoadingForm(initial=initial)
+    return render(
+        request,
+        "logistics/loadings/form.html",
+        {"form": form, "title": "Create Loading"},
+    )
+
+
+@login_required
+def loading_detail(request, pk):
+    loading = get_object_or_404(Loading, pk=pk)
+    chargeable_wm = loading.chargeable_wm
+    flow_transaction = getattr(loading, "source_transaction", None)
+    proforma = None
+    final_invoice = None
+    total_paid = Decimal("0.00")
+    balance_due = None
+
+    # Final invoice for the cargo can come from the (optional) source
+    # transaction, or directly from FinalInvoices linked to the loading.
+    if flow_transaction:
+        proforma = flow_transaction.proforma_invoices.order_by("-created_at").first()
+        final_invoice = flow_transaction.final_invoices.order_by("-created_at").first()
+    if final_invoice is None:
+        final_invoice = (
+            FinalInvoice.objects.filter(loading=loading).order_by("-created_at").first()
+        )
+
+    # Aggregate every channel a freight payment can flow through:
+    #  * legacy Payment.transactions tied to the loading
+    #  * TransactionPaymentRecord posted against the FinalInvoice (the
+    #    "Record Invoice Payment" flow)
+    invoice_payment_records = []
+    invoice_records_total = Decimal("0.00")
+    if final_invoice is not None:
+        invoice_payment_records = list(
+            final_invoice.payment_records.order_by("-payment_date")
+        )
+        invoice_records_total = final_invoice.payment_records.aggregate(
+            total=Sum("amount")
+        )["total"] or Decimal("0.00")
+
+    if flow_transaction:
+        total_paid = flow_transaction.payment_records.aggregate(total=Sum("amount"))[
+            "total"
+        ] or Decimal("0.00")
+    else:
+        total_paid = invoice_records_total
+
+    if final_invoice:
+        balance_due = max(
+            (final_invoice.total_amount or Decimal("0.00")) - total_paid,
+            Decimal("0.00"),
+        )
+
+    freight_payment = getattr(loading, "payment", None)
+    freight_transactions = []
+    legacy_freight_paid = Decimal("0.00")
+    if freight_payment:
+        freight_transactions = list(
+            freight_payment.transactions.order_by("-payment_date")
+        )
+        legacy_freight_paid = freight_payment.amount_paid or Decimal("0.00")
+
+    # Combined view: invoice payments + legacy freight transactions both count
+    # as freight settlement on this loading. Avoid double counting by taking the
+    # max of invoice-scoped vs. transaction-scoped payment_records.
+    if flow_transaction is not None:
+        txn_records_total = flow_transaction.payment_records.aggregate(
+            total=Sum("amount")
+        )["total"] or Decimal("0")
+    else:
+        txn_records_total = Decimal("0")
+    invoice_route_paid = max(invoice_records_total, txn_records_total)
+    freight_total_paid = (legacy_freight_paid or Decimal("0.00")) + invoice_route_paid
+    if freight_payment and freight_payment.amount_charged:
+        freight_charged = freight_payment.amount_charged
+    elif final_invoice:
+        freight_charged = final_invoice.total_amount or Decimal("0.00")
+    else:
+        freight_charged = Decimal("0.00")
+    freight_balance = max(
+        (freight_charged or Decimal("0.00")) - freight_total_paid, Decimal("0.00")
+    )
+
+    context = {
+        "loading": loading,
+        "has_transit": hasattr(loading, "transit"),
+        "has_payment": freight_payment is not None or bool(invoice_payment_records),
+        "chargeable_wm": chargeable_wm,
+        "flow_transaction": flow_transaction,
+        "proforma": proforma,
+        "final_invoice": final_invoice,
+        "total_paid": total_paid,
+        "balance_due": balance_due,
+        "freight_payment": freight_payment,
+        "freight_transactions": freight_transactions,
+        "invoice_payment_records": invoice_payment_records,
+        "freight_total_paid": freight_total_paid,
+        "freight_charged": freight_charged,
+        "freight_balance": freight_balance,
+    }
+    closure_items, closure_ready = evaluate_loading_closure(loading)
+    context["closure_items"] = closure_items
+    context["closure_ready"] = closure_ready
+    return render(request, "logistics/loadings/detail.html", context)
+
+
+@login_required
+def loading_start_flow(request, pk):
+    loading = get_object_or_404(Loading, pk=pk)
+    _, proforma, _, created = _ensure_proforma_for_loading(
+        loading, created_by=request.user
+    )
+    if created:
+        messages.success(
+            request,
+            f"Quotation / Proforma draft {display_document_number(proforma, 'PI')} was generated for cargo {loading.loading_id}.",
+        )
+    can_manage_commercial_flow = (
+        request.user.is_superuser
+        or request.user.role == "FINANCE"
+        or role_has_procurement_permissions(request.user)
+    )
+    if not can_manage_commercial_flow:
+        messages.warning(
+            request,
+            "The quotation draft is ready, but only Finance or Procurement can complete invoicing.",
+        )
+        return redirect("loading_detail", pk=loading.pk)
+    return redirect("proforma_update", pk=proforma.pk)
+
+
+@login_required
+def loading_document(request, pk):
+    loading = get_object_or_404(Loading.objects.select_related("client"), pk=pk)
+    buffer = BytesIO()
+    pdf = canvas.Canvas(buffer, pagesize=A4)
+    width, height = A4
+    margin = 40
+
+    if loading.entry_type == "GROUPAGE":
+        title = "GROUPAGE CARGO NOTE"
+        reference = loading.groupage_note_number or loading.loading_id
+        filename = f"logistics_{loading.loading_id}_groupage_note.pdf"
+    else:
+        title = "BILL OF LADING"
+        reference = loading.bill_of_lading_number or loading.loading_id
+        filename = f"logistics_{loading.loading_id}_bill_of_lading.pdf"
+
+    _draw_standard_doc_header(pdf, width, height, title, reference)
+
+    top = height - 120
+    card_gap = 12
+    card_width = ((width - (2 * margin)) - card_gap) / 2
+    info_y = _draw_pdf_card(
+        pdf, margin, top, card_width, 94, "Shipment Reference", PDF_SOFT_GOLD
+    )
+    _draw_pdf_key_values(
+        pdf,
+        margin + 12,
+        info_y,
+        [
+            ("Entry Number", loading.loading_id),
+            ("Client", loading.client.name),
+            ("Entry Type", loading.get_entry_type_display()),
+            ("Warehouse", loading.warehouse_location),
+        ],
+        label_width=78,
+        max_chars=35,
+    )
+
+    route_x = margin + card_width + card_gap
+    route_y = _draw_pdf_card(
+        pdf, route_x, top, card_width, 150, "Route & Cargo", colors.white
+    )
+    chargeable_wm = loading.chargeable_wm if loading.entry_type == "GROUPAGE" else None
+    _draw_pdf_key_values(
+        pdf,
+        route_x + 12,
+        route_y,
+        [
+            ("Origin", loading.origin),
+            ("Destination", loading.destination),
+            ("Loading Date", loading.loading_date.strftime("%Y-%m-%d %H:%M")),
+            ("Weight", f"{loading.weight} KG" if loading.weight else None),
+            ("CBM", loading.cbm),
+            ("Packages", loading.packages),
+            (
+                "Chargeable W/M",
+                f"{chargeable_wm:.3f}" if chargeable_wm is not None else None,
+            ),
+            ("Container", loading.container_number),
+            (
+                "Size",
+                (
+                    loading.get_container_size_display()
+                    if loading.container_size
+                    else None
+                ),
+            ),
+        ],
+        label_width=82,
+        max_chars=34,
+    )
+
+    notes_top = top - 170
+    text_y = _draw_pdf_card(
+        pdf, margin, notes_top, width - (2 * margin), 125, "Description", colors.white
+    )
+    pdf.setFillColor(PDF_BRAND_BLACK)
+    pdf.setFont("Helvetica", 9)
+    text_obj = pdf.beginText(margin + 12, text_y)
+    for line in (loading.item_description or "-").splitlines()[:10]:
+        text_obj.textLine(line)
+    pdf.drawText(text_obj)
+
+    _draw_international_terms_footer(pdf, margin, 68)
+    pdf.showPage()
+    pdf.save()
+    buffer.seek(0)
+    response = HttpResponse(buffer.read(), content_type="application/pdf")
+    response["Content-Disposition"] = f'inline; filename="{filename}"'
+    return response
+
+
+@login_required
+def loading_packing_list_document(request, pk):
+    loading = get_object_or_404(Loading.objects.select_related("client"), pk=pk)
+    buffer = BytesIO()
+    pdf = canvas.Canvas(buffer, pagesize=A4)
+    width, height = A4
+    margin = 40
+
+    reference = loading.loading_id
+    _draw_standard_doc_header(pdf, width, height, "PACKING LIST", reference)
+
+    top = height - 126
+    pdf.setFillColor(PDF_BRAND_BLACK)
+    pdf.setFont("Helvetica-Bold", 12)
+    info_y = _draw_pdf_card(
+        pdf,
+        margin,
+        top,
+        width - (2 * margin),
+        88,
+        "Shipment Information",
+        PDF_SOFT_GOLD,
+    )
+
+    if loading.entry_type == "FULL_CONTAINER":
+        reference_number = loading.bill_of_lading_number or "-"
+        reference_label = "Bill of Lading"
+    else:
+        reference_number = loading.groupage_note_number or "-"
+        reference_label = "Groupage Note"
+    _draw_pdf_key_values(
+        pdf,
+        margin + 12,
+        info_y,
+        [
+            ("Cargo Reference", loading.loading_id),
+            ("Client", loading.client.name),
+            ("Entry Type", loading.get_entry_type_display()),
+            ("Loading Date", loading.loading_date.strftime("%Y-%m-%d %H:%M")),
+            (reference_label, reference_number),
+        ],
+        label_width=92,
+    )
+
+    table_top = top - 115
+    row_height = 21
+    col_widths = [32, 200, 60, 70, 153]
+    headers = ["No", "Item Description", "Packages", "Weight (KG)", "CBM / Container"]
+    row_data = [
+        "1",
+        loading.item_description or "-",
+        str(loading.packages or "-"),
+        f"{loading.weight}" if loading.weight is not None else "-",
+        (
+            f"{loading.cbm}"
+            if loading.cbm is not None
+            else (loading.container_number or "-")
+        ),
+    ]
+
+    x = margin
+    pdf.setStrokeColor(PDF_BORDER)
+    pdf.setFillColor(PDF_SOFT_GOLD)
+    for idx, header in enumerate(headers):
+        w = col_widths[idx]
+        pdf.rect(x, table_top, w, row_height, fill=1, stroke=1)
+        pdf.setFillColor(PDF_BRAND_BLACK)
+        pdf.setFont("Helvetica-Bold", 9)
+        pdf.drawString(x + 4, table_top + 7, header)
+        x += w
+
+    x = margin
+    y = table_top - row_height
+    for idx, value in enumerate(row_data):
+        w = col_widths[idx]
+        pdf.setFillColor(colors.white)
+        pdf.rect(x, y, w, row_height, fill=1, stroke=1)
+        pdf.setFillColor(PDF_BRAND_BLACK)
+        pdf.setFont("Helvetica", 9)
+        pdf.drawString(x + 4, y + 7, str(value)[:45])
+        x += w
+
+    route_top = y - 24
+    route_y = _draw_pdf_card(
+        pdf, margin, route_top, width - (2 * margin), 82, "Route", colors.white
+    )
+    _draw_pdf_key_values(
+        pdf,
+        margin + 12,
+        route_y,
+        [
+            ("Origin", loading.origin),
+            ("Destination", loading.destination),
+            ("Container Number", loading.container_number),
+            (
+                "Container Size",
+                (
+                    loading.get_container_size_display()
+                    if loading.container_size
+                    else None
+                ),
+            ),
+        ],
+        label_width=98,
+    )
+
+    _draw_international_terms_footer(pdf, margin, 68)
+    pdf.showPage()
+    pdf.save()
+    buffer.seek(0)
+
+    filename = f"logistics_{loading.loading_id}_packing_list.pdf"
+    response = HttpResponse(buffer.read(), content_type="application/pdf")
+    response["Content-Disposition"] = f'inline; filename="{filename}"'
+    return response
+
+
+@login_required
+def loading_update(request, pk):
+    if request.user.role == "OFFICE_ADMIN":
+        messages.error(request, "You cannot edit loadings")
+        return redirect("loading_list")
+    loading = get_object_or_404(Loading, pk=pk)
+    if loading.is_closed:
+        messages.error(request, "This loading is closed and cannot be edited.")
+        return redirect("loading_detail", pk=loading.id)
+    if request.method == "POST":
+        form = LoadingForm(request.POST, instance=loading)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Loading updated successfully")
+            log_audit("loading", "update", loading.id, str(loading), request.user)
+            return redirect("loading_detail", pk=loading.id)
+    else:
+        form = LoadingForm(instance=loading)
+    return render(
+        request,
+        "logistics/loadings/form.html",
+        {"form": form, "title": "Update Loading", "loading": loading},
+    )
+
+
+@login_required
+def loading_delete(request, pk):
+    if not request.user.is_superuser and request.user.role not in {
+        "ADMIN",
+        "superuser",
+        "DIRECTOR",
+    }:
+        messages.error(request, "Only superusers can delete loadings")
+        return redirect("loading_list")
+    loading = get_object_or_404(Loading, pk=pk)
+    loading_str = str(loading)
+    loading_id = loading.id
+    loading.delete()
+    messages.success(request, "Loading deleted successfully")
+    log_audit("loading", "delete", loading_id, loading_str, request.user)
+    return redirect("loading_list")
+
+
+# ===== TRANSIT MANAGEMENT =====
+
+
+@login_required
+def transit_list(request):
+    transits = Transit.objects.select_related("loading", "loading__client")
+    group_filter = request.GET.get("group", "").strip()
+    status = request.GET.get("status", "")
+    if group_filter == "ongoing":
+        transits = transits.filter(status__in=["awaiting", "in_transit"])
+    elif group_filter == "completed":
+        transits = transits.filter(status="arrived")
+    if status:
+        transits = transits.filter(status=status)
+    page_obj, query_string, page_range = paginate_queryset(request, transits)
+    return render(
+        request,
+        "logistics/transits/list.html",
+        {
+            "transits": page_obj,
+            "group_filter": group_filter,
+            "status_filter": status,
+            "status_choices": Transit.STATUS_CHOICES,
+            "page_obj": page_obj,
+            "query_string": query_string,
+            "page_range": page_range,
+        },
+    )
+
+
+@login_required
+def transit_create(request, loading_id=None):
+    transit_to_workflow_status = {
+        "awaiting": "LOADED",
+        "in_transit": "IN_TRANSIT",
+        "arrived": "ARRIVED",
+    }
+
+    workflow_sequence = [
+        "RECEIVED",
+        "VERIFIED",
+        "ALLOCATED",
+        "LOADED",
+        "IN_TRANSIT",
+        "ARRIVED",
+        "DELIVERED",
+    ]
+
+    def _move_stepwise_shipment(shipment, target_status, actor):
+        current = shipment.status
+        if current not in workflow_sequence or target_status not in workflow_sequence:
+            return
+        current_index = workflow_sequence.index(current)
+        target_index = workflow_sequence.index(target_status)
+        if target_index <= current_index:
+            return
+        for next_status in workflow_sequence[current_index + 1 : target_index + 1]:
+            transition_shipment(
+                shipment=shipment,
+                to_status=next_status,
+                actor=actor,
+                notes=f"Transit synchronization to {next_status}",
+            )
+
+    def _move_stepwise_cargo(cargo_item, target_status, actor):
+        current = cargo_item.status
+        if current not in workflow_sequence or target_status not in workflow_sequence:
+            return
+        current_index = workflow_sequence.index(current)
+        target_index = workflow_sequence.index(target_status)
+        if target_index <= current_index:
+            return
+        for next_status in workflow_sequence[current_index + 1 : target_index + 1]:
+            transition_cargo_item(
+                cargo_item=cargo_item,
+                to_status=next_status,
+                actor=actor,
+                notes=f"Transit synchronization to {next_status}",
+            )
+
+    def _sync_transit_to_workflow(transit, actor):
+        shipment = getattr(transit.loading, "workflow_shipment", None)
+        if not shipment:
+            return
+        target_status = transit_to_workflow_status.get(transit.status)
+        if not target_status:
+            return
+        _move_stepwise_shipment(shipment, target_status, actor)
+        for cargo_item in shipment.cargo_items.all():
+            _move_stepwise_cargo(cargo_item, target_status, actor)
+
+    if request.method == "POST":
+        form = TransitForm(request.POST)
+        if form.is_valid():
+            transit = form.save(commit=False)
+            transit.created_by = request.user
+            try:
+                with transaction.atomic():
+                    transit.save()
+                    _sync_transit_to_workflow(transit, request.user)
+            except WorkflowTransitionError as exc:
+                form.add_error(None, str(exc))
+                return render(
+                    request,
+                    "logistics/transits/form.html",
+                    {"form": form, "title": "Create Transit"},
+                )
+            messages.success(request, "Transit created successfully")
+            log_audit("transit", "create", transit.id, str(transit), request.user)
+            _notify_roles(
+                title="Transit started",
+                message=f"Loading {transit.loading.loading_id} entered transit ({transit.get_status_display() if hasattr(transit,'get_status_display') else transit.status}).",
+                link=f"/transits/{transit.id}/",
+                category="logistics",
+                roles=["ADMIN", "DIRECTOR", "FINANCE", "OFFICE_ADMIN"],
+            )
+            return redirect("loading_detail", pk=transit.loading.id)
+    else:
+        form = TransitForm()
+        if loading_id:
+            form.fields["loading"].initial = loading_id
+    return render(
+        request,
+        "logistics/transits/form.html",
+        {"form": form, "title": "Create Transit"},
+    )
+
+
+@login_required
+def transit_update(request, pk):
+    if request.user.role == "OFFICE_ADMIN":
+        messages.error(request, "You cannot edit transits")
+        return redirect("transit_list")
+    transit = get_object_or_404(Transit, pk=pk)
+    transit_to_workflow_status = {
+        "awaiting": "LOADED",
+        "in_transit": "IN_TRANSIT",
+        "arrived": "ARRIVED",
+    }
+
+    workflow_sequence = [
+        "RECEIVED",
+        "VERIFIED",
+        "ALLOCATED",
+        "LOADED",
+        "IN_TRANSIT",
+        "ARRIVED",
+        "DELIVERED",
+    ]
+
+    def _move_stepwise_shipment(shipment, target_status, actor):
+        current = shipment.status
+        if current not in workflow_sequence or target_status not in workflow_sequence:
+            return
+        current_index = workflow_sequence.index(current)
+        target_index = workflow_sequence.index(target_status)
+        if target_index <= current_index:
+            return
+        for next_status in workflow_sequence[current_index + 1 : target_index + 1]:
+            transition_shipment(
+                shipment=shipment,
+                to_status=next_status,
+                actor=actor,
+                notes=f"Transit synchronization to {next_status}",
+            )
+
+    def _move_stepwise_cargo(cargo_item, target_status, actor):
+        current = cargo_item.status
+        if current not in workflow_sequence or target_status not in workflow_sequence:
+            return
+        current_index = workflow_sequence.index(current)
+        target_index = workflow_sequence.index(target_status)
+        if target_index <= current_index:
+            return
+        for next_status in workflow_sequence[current_index + 1 : target_index + 1]:
+            transition_cargo_item(
+                cargo_item=cargo_item,
+                to_status=next_status,
+                actor=actor,
+                notes=f"Transit synchronization to {next_status}",
+            )
+
+    def _sync_transit_to_workflow(updated_transit, actor):
+        shipment = getattr(updated_transit.loading, "workflow_shipment", None)
+        if not shipment:
+            return
+        target_status = transit_to_workflow_status.get(updated_transit.status)
+        if not target_status:
+            return
+        _move_stepwise_shipment(shipment, target_status, actor)
+        for cargo_item in shipment.cargo_items.all():
+            _move_stepwise_cargo(cargo_item, target_status, actor)
+
+    if request.method == "POST":
+        form = TransitForm(request.POST, instance=transit)
+        if form.is_valid():
+            try:
+                with transaction.atomic():
+                    updated_transit = form.save()
+                    _sync_transit_to_workflow(updated_transit, request.user)
+            except WorkflowTransitionError as exc:
+                form.add_error(None, str(exc))
+                return render(
+                    request,
+                    "logistics/transits/form.html",
+                    {"form": form, "title": "Update Transit"},
+                )
+            messages.success(request, "Transit updated successfully")
+            log_audit("transit", "update", transit.id, str(transit), request.user)
+            if transit.status == "arrived":
+                _notify_roles(
+                    title="Cargo arrived",
+                    message=f"Loading {transit.loading.loading_id} marked as arrived.",
+                    link=f"/transits/{transit.id}/",
+                    category="logistics",
+                    roles=["ADMIN", "DIRECTOR", "FINANCE", "OFFICE_ADMIN"],
+                )
+            return redirect("loading_detail", pk=transit.loading.id)
+    else:
+        form = TransitForm(instance=transit)
+    return render(
+        request,
+        "logistics/transits/form.html",
+        {"form": form, "title": "Update Transit"},
+    )
+
+
+# ===== PAYMENT MANAGEMENT =====
+
+
+@login_required
+def payment_list(request):
+    lane = _resolve_lane(request)
+    payments = _apply_payment_lane(
+        Payment.objects.select_related("loading__client", "final_invoice"), lane
+    )
+    filter_type = request.GET.get("filter", "")
+    if filter_type == "outstanding":
+        payments = payments.filter(balance__gt=0)
+    elif filter_type == "paid":
+        payments = payments.filter(balance=0)
+    ledger_rows = []
+    for payment in payments:
+        ledger_rows.append(
+            {
+                "source": "logistics",
+                "invoice": payment.final_invoice,
+                "reference": payment.invoice_number,
+                "entry_number": payment.loading.loading_id,
+                "client": payment.loading.client.name,
+                "entry_type": "Logistics",
+                "amount_charged": payment.amount_charged,
+                "amount_paid": payment.amount_paid,
+                "balance": payment.balance,
+                "currency": "USD",
+                "payment_date": payment.payment_date,
+                "method": payment.get_payment_method_display() or "-",
+                "created_by": payment.created_by.username,
+                "detail_url": reverse("payment_detail", kwargs={"pk": payment.pk}),
+                "document_url": reverse("payment_invoice", kwargs={"pk": payment.pk}),
+                "created_at": payment.created_at,
+            }
+        )
+
+    trade_payments = TransactionPaymentRecord.objects.select_related(
+        "transaction__customer", "final_invoice__loading", "created_by", "receipt"
+    )
+    if lane == "logistics":
+        trade_payments = trade_payments.filter(final_invoice__loading__isnull=False)
+    elif lane == "sourcing":
+        trade_payments = trade_payments.filter(final_invoice__loading__isnull=True)
+    if filter_type == "outstanding":
+        trade_payments = trade_payments.filter(balance_after__gt=0)
+    elif filter_type == "paid":
+        trade_payments = trade_payments.filter(balance_after=0)
+    for record in trade_payments:
+        receipt = getattr(record, "receipt", None)
+        is_cargo_invoice = bool(
+            record.final_invoice_id and record.final_invoice.loading_id
+        )
+        ledger_rows.append(
+            {
+                "source": "trade",
+                "invoice": record.final_invoice,
+                "reference": getattr(receipt, "receipt_number", "")
+                or record.reference
+                or "-",
+                "entry_number": record.transaction.transaction_id,
+                "client": record.transaction.customer.name,
+                "entry_type": "Cargo" if is_cargo_invoice else "Sourcing",
+                "amount_charged": record.amount_due_snapshot,
+                "amount_paid": record.amount,
+                "balance": record.balance_after,
+                "currency": record.currency,
+                "payment_date": record.payment_date,
+                "method": record.get_payment_method_display(),
+                "created_by": record.created_by.username,
+                "detail_url": reverse(
+                    "sourcing_payment_list",
+                    kwargs={"transaction_pk": record.transaction.pk},
+                ),
+                "document_url": (
+                    reverse("receipt_detail", kwargs={"pk": receipt.pk})
+                    if receipt
+                    else ""
+                ),
+                "created_at": record.created_at,
+            }
+        )
+    ledger_rows.sort(
+        key=lambda row: row["payment_date"] or row["created_at"], reverse=True
+    )
+    page_obj, query_string, page_range = paginate_queryset(request, ledger_rows)
+    totals = {
+        "total_charged": sum((row["amount_charged"] or 0) for row in ledger_rows),
+        "total_paid": sum((row["amount_paid"] or 0) for row in ledger_rows),
+        "total_outstanding": sum((row["balance"] or 0) for row in ledger_rows),
+    }
+    can_view_financial_totals = request.user.role != "OFFICE_ADMIN"
+    if not can_view_financial_totals:
+        totals = {key: None for key in totals}
+    context = {
+        "payments": page_obj,
+        "filter_type": filter_type,
+        **totals,
+        "can_view_financial_totals": can_view_financial_totals,
+        "can_record_payment_entry": _can_record_payment_entry(request.user),
+        "page_obj": page_obj,
+        "query_string": query_string,
+        "page_range": page_range,
+        "active_lane": lane,
+        "active_lane_label": _lane_label(lane),
+        "can_switch_lane": _can_switch_lane(request.user),
+    }
+    return render(request, "logistics/payments/list.html", context)
+
+
+@login_required
+def payment_create(request, loading_id=None):
+    if not _can_record_payment_entry(request.user):
+        link = reverse("payment_list")
+        if loading_id:
+            link = reverse(
+                "payment_create_with_loading", kwargs={"loading_id": loading_id}
+            )
+        _request_finance_payment_permission(
+            request,
+            payment_label="a freight payment",
+            link=link,
+        )
+        return redirect("payment_list")
+
+    target_invoice = None
+    if loading_id:
+        loading = get_object_or_404(Loading, pk=loading_id)
+        target_invoice = (
+            FinalInvoice.objects.filter(transaction__customer=loading.client)
+            .order_by("-is_confirmed", "-created_at")
+            .first()
+        )
+
+    messages.info(
+        request,
+        "Freight payments are now recorded directly from the final invoice. Use the invoice Record Payment action to generate receipts.",
+    )
+    if target_invoice:
+        return redirect(
+            _final_invoice_route_name(target_invoice, "detail"), pk=target_invoice.pk
+        )
+    return redirect(f"{reverse('final_invoice_list')}?lane=logistics")
+
+
+@login_required
+def dashboard(request):
+    """Serve a branded landing page for guests and the KPI dashboard for staff."""
+    landing_preview = (request.GET.get("landing_preview") or "").strip() == "1"
+    user_role = getattr(request.user, "role", None)
+    can_view_financials = request.user.is_authenticated and (
+        request.user.is_superuser
+        or user_role
+        in {
+            "ADMIN",
+            "DIRECTOR",
+        }
+    )
+    active_lane = _resolve_lane(request) if request.user.is_authenticated else "all"
+    scoped_clients = Client.objects.all()
+    scoped_loadings = _apply_loading_lane(Loading.objects.all(), active_lane)
+    scoped_transits = _apply_loading_lane(Transit.objects.all(), active_lane)
+    scoped_transactions = _apply_transaction_lane(
+        Transaction.objects.all(), active_lane
+    )
+    context = {
+        "active_lane": active_lane,
+        "active_lane_label": _lane_label(active_lane),
+        "can_switch_lane": request.user.is_authenticated
+        and (
+            request.user.is_superuser or user_role in {"ADMIN", "DIRECTOR", "FINANCE"}
+        ),
+        # Logistics
+        "total_clients": scoped_clients.count(),
+        "total_loadings": scoped_loadings.count(),
+        "total_transits": scoped_transits.count(),
+        "pending_containers": _apply_loading_lane(
+            ContainerReturn.objects.filter(status="pending"), active_lane
+        ).count(),
+        "pending_verifications": _apply_payment_lane(
+            PaymentTransaction.objects.filter(verification_status="pending"),
+            active_lane,
+        ).count(),
+        # Sourcing / Trade
+        "total_transactions": scoped_transactions.count(),
+        "active_transactions": scoped_transactions.exclude(
+            status__in=["PAID", "SHIPPED", "DELIVERED"]
+        ).count(),
+        "recent_transactions": scoped_transactions.select_related("customer")[:5],
+        # Shared recent data
+        "recent_clients": scoped_clients[:5],
+        "recent_loadings": scoped_loadings[:5],
+        "can_view_financials": can_view_financials,
+    }
+    if request.user.is_authenticated and can_view_financials:
+        context.update(
+            {
+                "total_revenue": DirectorReportingService.total_revenue(),
+                "outstanding_balance": DirectorReportingService.outstanding_balances(),
+                "active_shipments": DirectorReportingService.active_shipments_count(),
+                "conversion": DirectorReportingService.conversion_rate(),
+                "top_clients": DirectorReportingService.top_clients(5),
+                "profit_estimate": DirectorReportingService.profit_estimate(),
+                "pending_payments_freight": Payment.objects.filter(
+                    balance__gt=0
+                ).count(),
+            }
+        )
+    if not request.user.is_authenticated or landing_preview:
+        return render(request, "logistics/landing.html", context)
+    return render(request, "logistics/dashboard.html", context)
+
+
+@role_required("FINANCE", "DIRECTOR", "ADMIN")
+@login_required
+def payment_update(request, pk):
+    payment = get_object_or_404(
+        Payment.objects.select_related("loading__client"), pk=pk
+    )
+    messages.error(
+        request,
+        "Payments are locked after creation. Record client payments from the final invoice instead of editing this record.",
+    )
+    return redirect("payment_detail", pk=payment.pk)
+
+
+@role_required("FINANCE", "DIRECTOR", "ADMIN")
+@login_required
+def payment_detail(request, pk):
+    payment = get_object_or_404(
+        Payment.objects.select_related("loading__client"), pk=pk
+    )
+    transactions = payment.transactions.select_related(
+        "created_by", "verified_by"
+    ).all()
+    if request.method == "POST":
+        action = request.POST.get("action", "create_transaction")
+        if action == "verify_transaction":
+            if not request.user.is_superuser and request.user.role not in {
+                "ADMIN",
+                "superuser",
+            }:
+                messages.error(request, "Only superusers can verify payments.")
+                return redirect("payment_detail", pk=pk)
+            transaction = get_object_or_404(
+                payment.transactions.select_related("payment"),
+                pk=request.POST.get("transaction_id"),
+            )
+            new_status = request.POST.get("verification_status", "pending")
+            valid_statuses = {
+                choice for choice, _ in PaymentTransaction.VERIFICATION_CHOICES
+            }
+            if new_status not in valid_statuses:
+                messages.error(request, "Invalid verification status selected.")
+                return redirect("payment_detail", pk=pk)
+            notes = request.POST.get("verification_notes", "").strip()
+            transaction.verification_status = new_status
+            transaction.verification_notes = notes
+            if new_status == "pending":
+                transaction.verified_by = None
+                transaction.verified_at = None
+            else:
+                transaction.verified_by = request.user
+                transaction.verified_at = timezone.now()
+            transaction.save()
+            messages.success(
+                request,
+                f"Marked transaction {transaction.receipt_number} as {transaction.get_verification_status_display().lower()}.",
+            )
+            return redirect("payment_detail", pk=pk)
+        else:
+            messages.error(
+                request,
+                "Direct payment entry is disabled. Open the linked final invoice and record payment there to generate receipts.",
+            )
+            if payment.final_invoice_id:
+                return redirect(
+                    _final_invoice_route_name(payment.final_invoice, "detail"),
+                    pk=payment.final_invoice_id,
+                )
+            return redirect(f"{reverse('final_invoice_list')}?lane=logistics")
+    else:
+        form = PaymentTransactionForm(
+            initial={
+                "payment_method": payment.payment_method or "cash",
+                "payment_date": timezone.now(),
+            }
+        )
+    context = {
+        "payment": payment,
+        "transactions": transactions,
+        "transaction_form": form,
+        "verification_choices": PaymentTransaction.VERIFICATION_CHOICES,
+        "can_verify": request.user.role in {"ADMIN", "superuser"},
+    }
+    return render(request, "logistics/payments/detail.html", context)
+
+
+@login_required
+def payment_invoice(request, pk):
+    payment = get_object_or_404(
+        Payment.objects.select_related("loading__client"), pk=pk
+    )
+    buffer = BytesIO()
+    pdf = canvas.Canvas(buffer, pagesize=A4)
+    width, height = A4
+    margin = 40
+
+    _draw_standard_doc_header(
+        pdf, width, height, "FREIGHT INVOICE", payment.invoice_number
+    )
+
+    info_top = height - 115
+    invoice_ref = (
+        display_document_number(payment.final_invoice, "FI")
+        if payment.final_invoice_id
+        else "-"
+    )
+    details_y = _draw_pdf_card(
+        pdf,
+        margin,
+        info_top,
+        width - (2 * margin),
+        82,
+        "Invoice Details",
+        PDF_SOFT_GOLD,
+    )
+    _draw_pdf_key_values(
+        pdf,
+        margin + 12,
+        details_y,
+        [
+            ("Issue Date", timezone.now().strftime("%Y-%m-%d")),
+            ("Prepared By", payment.created_by.username),
+            ("Loading ID", payment.loading.loading_id),
+            ("Attached Invoice", invoice_ref),
+        ],
+        label_width=94,
+    )
+
+    bill_top = info_top - 96
+    box_width = (width / 2) - margin
+    bill_y = _draw_pdf_card(
+        pdf, margin, bill_top, box_width - 10, 110, "Bill To", colors.white
+    )
+    _draw_pdf_key_values(
+        pdf,
+        margin + 12,
+        bill_y,
+        [
+            ("Client", payment.loading.client.name),
+            ("Client ID", payment.loading.client.client_id),
+            ("Contact", payment.loading.client.phone),
+            ("Address", payment.loading.client.address[:60]),
+        ],
+        label_width=62,
+        max_chars=30,
+    )
+
+    ship_left = margin + box_width + 5
+    container_size_label = (
+        payment.loading.get_container_size_display()
+        if payment.loading.container_size
+        else None
+    )
+    weight_label = f"{payment.loading.weight} KG" if payment.loading.weight else "N/A"
+    shipment_rows = [
+        ("Route", f"{payment.loading.origin} -> {payment.loading.destination}"),
+        ("Container", payment.loading.container_number),
+        ("Size", container_size_label),
+        ("Weight", weight_label),
+    ]
+    if payment.loading.entry_type == "GROUPAGE":
+        cbm_label = payment.loading.cbm if payment.loading.cbm is not None else "N/A"
+        basis_label = payment.get_billing_basis_display()
+        rate_label = (
+            f"${payment.billing_rate:,.2f}"
+            if payment.billing_rate is not None
+            else "N/A"
+        )
+        shipment_rows.extend(
+            [
+                ("CBM", cbm_label),
+                ("Billing Basis", basis_label),
+                ("Billing Rate", rate_label),
+            ]
+        )
+    shipment_rows.append(
+        ("Loading Date", payment.loading.loading_date.strftime("%Y-%m-%d"))
+    )
+    ship_y = _draw_pdf_card(
+        pdf,
+        ship_left,
+        bill_top,
+        box_width - 10,
+        146 if payment.loading.entry_type == "GROUPAGE" else 110,
+        "Shipment",
+        colors.white,
+    )
+    _draw_pdf_key_values(
+        pdf, ship_left + 12, ship_y, shipment_rows, label_width=76, max_chars=28
+    )
+
+    summary_top = (
+        bill_top - 170 if payment.loading.entry_type == "GROUPAGE" else bill_top - 120
+    )
+    pdf.setFillColor(PDF_SOFT_GOLD)
+    pdf.setStrokeColor(PDF_BRAND_GOLD)
+    pdf.roundRect(
+        margin, summary_top - 80, width - (2 * margin), 80, 9, fill=1, stroke=1
+    )
+    pdf.setFillColor(PDF_BRAND_BLACK)
+    pdf.setFont("Helvetica-Bold", 12)
+    pdf.drawString(margin + 15, summary_top - 25, "Amount Due")
+    pdf.drawString(margin + 190, summary_top - 25, "Amount Paid")
+    pdf.drawString(margin + 365, summary_top - 25, "Balance")
+    pdf.setFont("Helvetica-Bold", 20)
+    pdf.drawString(margin + 15, summary_top - 55, f"${payment.amount_charged:,.2f}")
+    pdf.drawString(margin + 190, summary_top - 55, f"${payment.amount_paid:,.2f}")
+    pdf.drawString(margin + 365, summary_top - 55, f"${payment.balance:,.2f}")
+
+    pdf.setFillColor(PDF_BRAND_BLACK)
+    notes_top = summary_top - 110
+    pdf.setFont("Helvetica-Bold", 12)
+    pdf.drawString(margin, notes_top, "Notes")
+    pdf.setFont("Helvetica", 10)
+    pdf.drawString(
+        margin,
+        notes_top - 16,
+        "1. Invoice valid for 7 days from date of issue.",
+    )
+    pdf.drawString(
+        margin,
+        notes_top - 30,
+        "2. Partial payments are recorded; outstanding balance must be cleared before release.",
+    )
+    pdf.drawString(
+        margin,
+        notes_top - 44,
+        "3. Thank you for choosing GMI TERRALINK Logistics Portal.",
+    )
+
+    _draw_international_terms_footer(pdf, margin, 60)
+
+    pdf.showPage()
+    pdf.save()
+    buffer.seek(0)
+    response = HttpResponse(buffer.read(), content_type="application/pdf")
+    response["Content-Disposition"] = (
+        f'attachment; filename="invoice_{payment.invoice_number}.pdf"'
+    )
+    return response
+
+
+@login_required
+def payment_receipt(request, transaction_id):
+    transaction = get_object_or_404(
+        PaymentTransaction.objects.select_related(
+            "payment__loading__client", "created_by", "verified_by"
+        ),
+        pk=transaction_id,
+    )
+    payment = transaction.payment
+    if transaction.verification_status != "approved":
+        messages.error(request, "This payment has not been verified yet.")
+        return redirect("payment_detail", pk=payment.pk)
+    paid_up_to = (
+        payment.transactions.filter(pk__lte=transaction.pk).aggregate(
+            total=Sum("amount")
+        )["total"]
+        or transaction.amount
+    )
+    balance_after = payment.amount_charged - paid_up_to
+
+    buffer = BytesIO()
+    pdf = canvas.Canvas(buffer, pagesize=A4)
+    width, height = A4
+    margin = 40
+    _draw_standard_doc_header(
+        pdf, width, height, "FREIGHT PAYMENT RECEIPT", transaction.receipt_number
+    )
+
+    info_top = height - 105
+    from_y = _draw_pdf_card(
+        pdf, margin, info_top, width - (2 * margin), 80, "Received From", PDF_SOFT_GOLD
+    )
+    _draw_pdf_key_values(
+        pdf,
+        margin + 12,
+        from_y,
+        [
+            ("Client", payment.loading.client.name),
+            ("Invoice", payment.invoice_number),
+            ("Route", f"{payment.loading.origin} -> {payment.loading.destination}"),
+        ],
+        label_width=70,
+    )
+
+    details_top = info_top - 100
+    amount_y = _draw_pdf_card(
+        pdf,
+        margin,
+        details_top,
+        width - (2 * margin),
+        130,
+        "Amount Details",
+        colors.white,
+    )
+    _draw_pdf_key_values(
+        pdf,
+        margin + 12,
+        amount_y,
+        [
+            ("Amount Paid", f"${transaction.amount:,.2f}"),
+            ("Payment Date", transaction.payment_date.strftime("%Y-%m-%d")),
+            ("Method", transaction.get_payment_method_display()),
+            ("Reference", transaction.reference),
+            ("Outstanding", f"${balance_after:,.2f}"),
+        ],
+        label_width=96,
+    )
+
+    pdf.setFont("Helvetica", 10)
+    pdf.setFillColor(PDF_BRAND_GREY)
+    pdf.drawString(
+        margin,
+        details_top - 158,
+        f"Recorded By: {transaction.created_by.username} on {transaction.created_at.strftime('%Y-%m-%d %H:%M')}",
+    )
+    _draw_international_terms_footer(pdf, margin, 60)
+
+    pdf.showPage()
+    pdf.save()
+    buffer.seek(0)
+    response = HttpResponse(buffer.read(), content_type="application/pdf")
+    response["Content-Disposition"] = (
+        f'attachment; filename="receipt_{transaction.receipt_number}.pdf"'
+    )
+    return response
+
+
+# ===== CONTAINER RETURNS =====
+
+
+@login_required
+def container_return_list(request):
+    containers = ContainerReturn.objects.select_related("loading")
+    status = request.GET.get("status", "")
+    if status:
+        containers = containers.filter(status=status)
+    page_obj, query_string, page_range = paginate_queryset(request, containers)
+    return render(
+        request,
+        "logistics/containers/list.html",
+        {
+            "containers": page_obj,
+            "status_filter": status,
+            "status_choices": ContainerReturn.STATUS_CHOICES,
+            "page_obj": page_obj,
+            "query_string": query_string,
+            "page_range": page_range,
+        },
+    )
+
+
+@login_required
+def container_return_create(request):
+    if request.method == "POST":
+        form = ContainerReturnForm(request.POST)
+        if form.is_valid():
+            container = form.save(commit=False)
+            container.created_by = request.user
+            container.save()
+            messages.success(request, "Container return recorded")
+            log_audit(
+                "container_return", "create", container.id, str(container), request.user
+            )
+            _notify_roles(
+                title="Container return recorded",
+                message=f"Container {container.container_number or container.id} return logged.",
+                link="/containers/",
+                category="logistics",
+                roles=["ADMIN", "DIRECTOR", "FINANCE", "OFFICE_ADMIN"],
+            )
+            return redirect("container_return_list")
+    else:
+        form = ContainerReturnForm()
+    return render(
+        request,
+        "logistics/containers/form.html",
+        {"form": form, "title": "Record Container Return"},
+    )
+
+
+@login_required
+def container_return_update(request, pk):
+    if request.user.role == "OFFICE_ADMIN":
+        messages.error(request, "You cannot edit container returns")
+        return redirect("container_return_list")
+    container = get_object_or_404(ContainerReturn, pk=pk)
+    if request.method == "POST":
+        form = ContainerReturnForm(request.POST, instance=container)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Container return updated successfully")
+            log_audit(
+                "container_return", "update", container.id, str(container), request.user
+            )
+            return redirect("container_return_list")
+    else:
+        form = ContainerReturnForm(instance=container)
+    return render(
+        request,
+        "logistics/containers/form.html",
+        {"form": form, "title": "Update Container Return"},
+    )
+
+
+# ===== TRANSACTION MANAGEMENT =====
+
+
+@login_required
+def transaction_status_list(request):
+    lane = _resolve_lane(request)
+    transactions = _apply_transaction_lane(
+        Transaction.objects.select_related("customer", "created_by")
+        .annotate(
+            document_count=Count("documents", distinct=True),
+            sourcing_entry_count=Count("sourcing_entries", distinct=True),
+            proforma_count=Count("proforma_invoices", distinct=True),
+            final_invoice_count=Count("final_invoices", distinct=True),
+            payment_record_count=Count("payment_records", distinct=True),
+            fulfillment_count=Count("fulfillment_order", distinct=True),
+        )
+        .order_by("-updated_at", "-created_at"),
+        lane,
+    )
+    search = request.GET.get("search", "").strip()
+    status = request.GET.get("status", "").strip()
+    if search:
+        transactions = transactions.filter(
+            _text_search_q("transaction_id", search)
+            | _text_search_q("customer__name", search)
+            | _text_search_q("customer__client_id", search)
+        )
+    if status:
+        transactions = transactions.filter(status=status)
+    page_obj, query_string, page_range = paginate_queryset(request, transactions)
+    for transaction in page_obj:
+        _apply_transaction_status_badge(
+            transaction, sourcing_entry_count=transaction.sourcing_entry_count
+        )
+        _apply_transaction_next_step(transaction)
+    return render(
+        request,
+        "logistics/transactions/status_list.html",
+        {
+            "transactions": page_obj,
+            "search": search,
+            "status_filter": status,
+            "status_choices": Transaction.STATUS_CHOICES,
+            "page_obj": page_obj,
+            "query_string": query_string,
+            "page_range": page_range,
+            "active_lane": lane,
+            "active_lane_label": _lane_label(lane),
+            "can_switch_lane": _can_switch_lane(request.user),
+        },
+    )
+
+
+@login_required
+def transaction_list(request):
+    closed_filter = request.GET.get("closed", "").strip()
+    lane = "sourcing" if closed_filter == "1" else _resolve_lane(request)
+    transactions = _apply_transaction_lane(
+        Transaction.objects.select_related("customer", "created_by").annotate(
+            sourcing_entry_count=Count("sourcing_entries", distinct=True)
+        ),
+        lane,
+    )
+    search = request.GET.get("search", "").strip()
+    status = request.GET.get("status", "").strip()
+    if search:
+        transactions = transactions.filter(
+            _text_search_q("transaction_id", search)
+            | _text_search_q("customer__name", search)
+            | _text_search_q("customer__client_id", search)
+        )
+    if closed_filter == "1":
+        transactions = transactions.filter(_closed_trade_filter_q())
+    elif closed_filter == "0":
+        transactions = transactions.exclude(_closed_trade_filter_q())
+    elif status:
+        transactions = transactions.filter(status=status)
+    transactions = transactions.order_by("-created_at")
+    page_obj, query_string, page_range = paginate_queryset(request, transactions)
+    for transaction in page_obj:
+        _apply_transaction_status_badge(
+            transaction, sourcing_entry_count=transaction.sourcing_entry_count
+        )
+    return render(
+        request,
+        "logistics/transactions/list.html",
+        {
+            "transactions": page_obj,
+            "search": search,
+            "status_filter": status,
+            "closed_filter": closed_filter,
+            "status_choices": Transaction.STATUS_CHOICES,
+            "page_obj": page_obj,
+            "query_string": query_string,
+            "page_range": page_range,
+            "active_lane": lane,
+            "active_lane_label": _lane_label(lane),
+            "can_switch_lane": _can_switch_lane(request.user),
+        },
+    )
+
+
+@login_required
+def transaction_create(request):
+    if request.method == "POST":
+        form = TransactionForm(request.POST)
+        if form.is_valid():
+            transaction = form.save(commit=False)
+            transaction.created_by = request.user
+            transaction.save()
+            submit_action = request.POST.get("submit_action")
+            messages.success(
+                request, f"Transaction {transaction.transaction_id} created"
+            )
+            _notify_roles(
+                title="New trade transaction",
+                message=f"Transaction {transaction.transaction_id} opened for {transaction.customer.name}.",
+                link=f"/transactions/{transaction.pk}/",
+                category="trading",
+                roles=["ADMIN", "DIRECTOR", "FINANCE", "PROCUREMENT"],
+            )
+            if submit_action == "worksheet":
+                return redirect(
+                    f"{reverse('sourcing_create')}?transaction={transaction.pk}"
+                )
+            return redirect("transaction_detail", pk=transaction.pk)
+    else:
+        form = TransactionForm()
+    return render(
+        request,
+        "logistics/transactions/form.html",
+        {"form": form, "title": "Open New Entry", "transaction": None},
+    )
+
+
+@login_required
+def transaction_detail(request, pk):
+    transaction = get_object_or_404(
+        Transaction.objects.select_related("customer", "created_by"), pk=pk
+    )
+    sourcing_entry_count = transaction.sourcing_entries.count()
+    _apply_transaction_status_badge(
+        transaction, sourcing_entry_count=sourcing_entry_count
+    )
+    fulfillment_order = (
+        FulfillmentOrder.objects.select_related(
+            "transaction", "created_by", "final_invoice"
+        )
+        .filter(transaction=transaction)
+        .first()
+    )
+    documents = transaction.documents.select_related("uploaded_by").order_by(
+        "-timestamp"
+    )
+    pi_documents = documents.exclude(structured_data={})
+    latest_invoice = transaction.final_invoices.order_by("-created_at").first()
+    total_paid = (
+        transaction.payment_records.aggregate(total=Sum("amount"))["total"] or 0
+    )
+    invoice_balance = 0
+    shipping_charge_included = False
+    latest_payment_snapshot = None
+    if latest_invoice:
+        total_paid = _final_invoice_total_paid(latest_invoice)
+        latest_payment_snapshot = _final_invoice_payment_snapshot(
+            latest_invoice, total_paid
+        )
+        invoice_balance = latest_payment_snapshot["invoice_balance"]
+        shipping_charge_included = (
+            (latest_invoice.sourcing_fee or 0)
+            + (latest_invoice.shipping_cost or 0)
+            + (latest_invoice.service_fee or 0)
+        ) > 0
+    final_invoices = list(transaction.final_invoices.select_related("created_by")[:10])
+    for fi in final_invoices:
+        paid_total = _final_invoice_total_paid(fi)
+        payment_snapshot = _final_invoice_payment_snapshot(fi, paid_total)
+        fi.total_paid_for_display = payment_snapshot["total_paid"]
+        fi.balance_for_display = payment_snapshot["invoice_balance"]
+        fi.payment_status_label = payment_snapshot["invoice_label"]
+        fi.payment_status_class = payment_snapshot["invoice_class"]
+        fi.can_record_payment = payment_snapshot["can_record_payment"]
+        fi.procurement_ready = payment_snapshot["procurement_ready"]
+        fi.can_edit_invoice = paid_total <= 0
+    fulfillment_lines = []
+    shipment_legs = []
+    if fulfillment_order:
+        fulfillment_lines = fulfillment_order.lines.select_related(
+            "inventory_item", "inventory_item__supplier"
+        )
+        shipment_legs = fulfillment_order.legs.all()
+    fulfillment_receipt_numbers_display = "No Receipt"
+    if fulfillment_order:
+        payment_qs = transaction.payment_records.select_related("receipt")
+        scoped_payments = []
+        if fulfillment_order.final_invoice_id:
+            scoped_payments = list(
+                payment_qs.filter(final_invoice=fulfillment_order.final_invoice)
+            )
+        payments = scoped_payments or list(payment_qs)
+        receipt_numbers = sorted(
+            {
+                payment.receipt.receipt_number
+                for payment in payments
+                if getattr(payment, "receipt", None) and payment.receipt.receipt_number
+            }
+        )
+        if receipt_numbers:
+            fulfillment_receipt_numbers_display = ", ".join(receipt_numbers)
+    final_invoice_purchase_orders = []
+    if fulfillment_order and fulfillment_order.final_invoice_id:
+        final_invoice_purchase_orders = (
+            fulfillment_order.final_invoice.purchase_orders.select_related("created_by")
+        )
+        fulfillment_order.payment_snapshot = _final_invoice_payment_snapshot(
+            fulfillment_order.final_invoice
+        )
+    elif fulfillment_order and latest_payment_snapshot:
+        fulfillment_order.payment_snapshot = latest_payment_snapshot
+    context = {
+        "transaction": transaction,
+        "documents": documents[:20],
+        "document_archives": transaction.document_archives.select_related(
+            "archived_by", "document"
+        )[:20],
+        "pi_documents": pi_documents,
+        "doc_form": DocumentForm(),
+        "proformas": transaction.proforma_invoices.select_related("created_by")[:10],
+        "final_invoices": final_invoices,
+        "latest_invoice": latest_invoice,
+        "trade_total_paid": total_paid,
+        "trade_balance": invoice_balance,
+        "latest_payment_snapshot": latest_payment_snapshot,
+        "can_record_payment_entry": _can_record_payment_entry(request.user),
+        "shipping_charge_included": shipping_charge_included,
+        "purchase_orders": transaction.purchase_orders.select_related("created_by")[:5],
+        "trade_payments": transaction.payment_records.select_related("created_by")[:10],
+        "fulfillment_order": fulfillment_order,
+        "fulfillment_receipt_numbers_display": fulfillment_receipt_numbers_display,
+        "fulfillment_lines": fulfillment_lines,
+        "shipment_legs": shipment_legs,
+        "final_invoice_purchase_orders": final_invoice_purchase_orders,
+        "transaction_inventory_items": transaction.inventory_items.select_related(
+            "supplier"
+        ),
+        "sourcing_entry_count": sourcing_entry_count,
+        "can_edit_closed_trade_documents": _can_edit_closed_trade_documents(
+            request.user
+        ),
+        "trade_documents_locked": _trade_documents_locked(transaction),
+    }
+    closure_items, closure_ready = evaluate_transaction_closure(transaction)
+    context["closure_items"] = closure_items
+    context["closure_ready"] = closure_ready
+    return render(request, "logistics/transactions/detail.html", context)
+
+
+@login_required
+def document_archive_list(request):
+    archives = DocumentArchive.objects.select_related(
+        "transaction__customer", "document", "archived_by"
+    ).order_by("-created_at")
+    if not request.user.is_superuser and normalized_role(request.user) != "DIRECTOR":
+        archives = archives.filter(archived_by__role=normalized_role(request.user))
+    page_obj, query_string, page_range = paginate_queryset(request, archives)
+    return render(
+        request,
+        "logistics/documents/archive_list.html",
+        {
+            "archives": page_obj,
+            "page_obj": page_obj,
+            "query_string": query_string,
+            "page_range": page_range,
+        },
+    )
+
+
+@login_required
+def transaction_update(request, pk):
+    transaction = get_object_or_404(Transaction, pk=pk)
+    closed_trade_edit = transaction.is_closed
+    if closed_trade_edit and not _can_edit_closed_trade_documents(request.user):
+        messages.error(
+            request,
+            "This trade is closed. Only the Director or System Admin can edit it. Request permission before making changes.",
+        )
+        return redirect("transaction_detail", pk=transaction.pk)
+    if request.method == "POST":
+        if closed_trade_edit:
+            reason = _closed_trade_edit_reason(request)
+            if not reason:
+                messages.error(request, "Add a reason before editing a closed trade.")
+                return redirect("transaction_update", pk=transaction.pk)
+        form = TransactionForm(request.POST, instance=transaction)
+        if form.is_valid():
+            form.save()
+            if closed_trade_edit:
+                log_audit(
+                    "transaction",
+                    "update",
+                    transaction.pk,
+                    transaction.transaction_id,
+                    request.user,
+                    changes={"closed_trade_edit_reason": reason},
+                )
+            messages.success(request, "Transaction updated")
+            return redirect("transaction_detail", pk=transaction.pk)
+    else:
+        form = TransactionForm(instance=transaction)
+    return render(
+        request,
+        "logistics/transactions/form.html",
+        {
+            "form": form,
+            "title": "Update Transaction",
+            "transaction": transaction,
+            "closed_trade_edit": closed_trade_edit,
+        },
+    )
+
+
+@login_required
+@login_required
+def transaction_document_upload(request, pk):
+    transaction = get_object_or_404(Transaction, pk=pk)
+    locked_response = _locked_trade_document_response(request, transaction)
+    if locked_response:
+        return locked_response
+    if request.method != "POST":
+        return redirect("transaction_detail", pk=pk)
+    form = DocumentForm(request.POST, request.FILES)
+    if form.is_valid():
+        document = form.save(commit=False)
+        document.transaction = transaction
+        document.uploaded_by = request.user
+        # Extract text from the uploaded file
+        uploaded_file = request.FILES.get("original_file")
+        if uploaded_file:
+            document.extracted_text = _extract_text_from_file(uploaded_file)
+        if _has_extractable_document_text(document.extracted_text):
+            document.structured_data = _structured_data_for_transaction_document(
+                document.extracted_text,
+                transaction,
+                form.cleaned_data.get("document_type") or "",
+            )
+        document.save()
+        DocumentArchive.create_from_document(document, archived_by=request.user)
+        if document.document_type == "CLIENT_PI":
+            _notify_roles(
+                title="Client PI uploaded",
+                message=(
+                    f"A client PI document was uploaded for transaction "
+                    f"{transaction.transaction_id}. Review the extracted PI to open a proforma invoice or optional Q-Worksheet."
+                ),
+                link=reverse("transaction_detail", kwargs={"pk": transaction.pk}),
+                category="document",
+            )
+            if _has_extractable_document_text(document.extracted_text):
+                messages.success(
+                    request,
+                    "Client PI uploaded and text extracted. Review the extracted PI below, then create a proforma or open the optional Q-Worksheet.",
+                )
+            else:
+                messages.warning(
+                    request,
+                    "Client PI uploaded, but no readable text could be extracted. If this is a scanned image PDF, enter the PI details manually or upload a text-based PDF/Word file.",
+                )
+        else:
+            _notify_roles(
+                title="Document uploaded",
+                message=(
+                    f"A {document.get_document_type_display()} document was uploaded "
+                    f"for transaction {transaction.transaction_id}."
+                ),
+                link=reverse("transaction_detail", kwargs={"pk": transaction.pk}),
+                category="document",
+            )
+            messages.success(request, "Document uploaded successfully.")
+    else:
+        messages.error(request, "Please provide a valid document upload")
+    return redirect("transaction_detail", pk=pk)
+
+
+@login_required
+def document_edit_pi(request, pk):
+    """Allow editing the structured PI data extracted from a CLIENT_PI document."""
+    document = get_object_or_404(
+        Document.objects.select_related("transaction__customer"), pk=pk
+    )
+    locked_response = _locked_trade_document_response(request, document.transaction)
+    if locked_response:
+        return locked_response
+    if request.method == "POST":
+        sd = document.structured_data or {}
+        customer = document.transaction.customer
+        sd["client_name"] = customer.name
+        sd["contact_person"] = customer.contact_person
+        sd["phone"] = customer.phone
+        sd["email"] = customer.email
+        sd["address"] = customer.address
+        sd["customer_source"] = "transaction"
+        sd["subject"] = normalize_text_entry("subject", request.POST.get("subject", ""))
+        sd["deadline"] = normalize_text_entry(
+            "deadline", request.POST.get("deadline", "")
+        )
+        # Items: name|quantity|unit|unit_price|total|notes, with name-only lines also accepted.
+        items_text = request.POST.get("items_text", "")
+        items = []
+        for line in items_text.splitlines():
+            if not line.strip():
+                continue
+            parts = [part.strip() for part in line.split("|")]
+            name = normalize_text_entry("name", parts[0])
+            if not name:
+                continue
+            item = {"name": name, "description": name}
+            if len(parts) >= 2 and parts[1]:
+                item["quantity"] = parts[1]
+            if len(parts) >= 3 and parts[2]:
+                item["unit"] = normalize_text_entry("unit", parts[2])
+            if len(parts) >= 4 and parts[3]:
+                item["unit_price"] = parts[3]
+                item["amount"] = parts[3]
+            if len(parts) >= 5 and parts[4]:
+                item["total"] = parts[4]
+            if len(parts) >= 6 and parts[5]:
+                item["notes"] = normalize_text_entry("notes", parts[5])
+            items.append(item)
+        sd["items"] = items
+        document.structured_data = sd
+        document.save(update_fields=["structured_data"])
+        next_step = (request.POST.get("next_step") or "").strip()
+        if next_step == "sourcing":
+            existing_sourcing, _ = _ensure_sourcing_entry_for_transaction(
+                document.transaction,
+                preferred_user=request.user,
+                pi_document=document,
+            )
+            if document.transaction.status == "RECEIVED":
+                Transaction.objects.filter(pk=document.transaction.pk).update(
+                    status="SENT_TO_SOURCING"
+                )
+            _notify_roles(
+                title="Q-Worksheet opened",
+                message=(
+                    f"An optional Q-Worksheet was opened for transaction "
+                    f"{document.transaction.transaction_id}."
+                ),
+                link=reverse(
+                    "transaction_detail", kwargs={"pk": document.transaction.pk}
+                ),
+                category="document",
+            )
+            messages.success(
+                request,
+                "Extracted data updated. Optional Q-Worksheet is ready for online capture or printing.",
+            )
+            if existing_sourcing:
+                return redirect("sourcing_update", pk=existing_sourcing.pk)
+            return redirect(f"{reverse('sourcing_create')}?from_doc={document.pk}")
+        if next_step == "proforma":
+            messages.success(request, "Extracted data updated. Opening proforma form.")
+            return redirect(f"{reverse('proforma_create')}?from_doc={document.pk}")
+
+        messages.success(request, "Extracted data updated.")
+        return redirect("transaction_detail", pk=document.transaction.pk)
+    # GET — not used (form is inline on transaction_detail), redirect back
+    return redirect("transaction_detail", pk=document.transaction.pk)
+
+
+def _build_sourcing_initial_from_document(pi_document):
+    """Build sourcing form initial values from an extracted document."""
+    sd = pi_document.structured_data or {}
+    initial = {
+        "transaction": pi_document.transaction,
+        "item_details": items_to_sourcing_lines(sd),
+        "unit_prices": _unit_prices_from_structured_data(sd),
+        "notes": build_sourcing_notes(sd) if sd else "",
+    }
+    return initial
+
+
+def _prefill_proforma_items_from_sourcing(sourcing):
+    """Convert sourcing findings into prefilled proforma line items."""
+    prefill_items = []
+    prices = sourcing.unit_prices or {}
+    for item in sourcing.item_details or []:
+        if not isinstance(item, dict):
+            continue
+        name = (item.get("name") or item.get("description") or "").strip()
+        if not name:
+            continue
+        quantity = item.get("quantity") or "1"
+        unit_price = (
+            prices.get(name, item.get("unit_price", ""))
+            if isinstance(prices, dict)
+            else item.get("unit_price", "")
+        )
+        total = item.get("total", "")
+        if unit_price in (None, "") and total not in (None, ""):
+            try:
+                quantity_decimal = Decimal(str(quantity or "1"))
+                if quantity_decimal:
+                    unit_price = Decimal(str(total)) / quantity_decimal
+            except Exception:
+                unit_price = total
+        prefill_items.append(
+            {
+                "description": name,
+                "quantity": str(quantity),
+                "unit_price": unit_price if unit_price not in (None, "") else "0",
+                "sales_price": unit_price if unit_price not in (None, "") else "0",
+            }
+        )
+    return prefill_items
+
+
+def _generated_proforma_for_sourcing(sourcing):
+    """Return the proforma already generated from a Q-Worksheet, if any."""
+    try:
+        return sourcing.generated_proforma
+    except ProformaInvoice.DoesNotExist:
+        return None
+
+
+def _parse_quote_fees(
+    post_data, *, shipping_key="shipping_fee", handling_key="handling_fee"
+):
+    """Parse common quote fee fields from a POST payload."""
+    from decimal import Decimal, InvalidOperation
+
+    errors = []
+    fee_values = {}
+    labels = {
+        "sourcing_fee": "Additional charge",
+        handling_key: "Handling fee",
+        shipping_key: "Shipping fee",
+    }
+
+    for field_name, label in labels.items():
+        raw_value = (post_data.get(field_name) or "0").strip()
+        try:
+            fee_value = Decimal(raw_value or "0")
+        except InvalidOperation:
+            errors.append(f"{label} must be a valid non-negative number.")
+            fee_value = Decimal("0")
+        if fee_value < 0:
+            errors.append(f"{label} must be a valid non-negative number.")
+            fee_value = Decimal("0")
+        fee_values[field_name] = fee_value
+
+    return fee_values, errors
+
+
+def _build_proforma_form_values(*, post_data=None, proforma=None):
+    if post_data is not None:
+        return {
+            "sourcing_fee": post_data.get("sourcing_fee", "0"),
+            "handling_fee": post_data.get("handling_fee", "0"),
+            "shipping_fee": post_data.get("shipping_fee", "0"),
+            "notes": post_data.get("notes", ""),
+        }
+    if proforma is not None:
+        return {
+            "sourcing_fee": proforma.sourcing_fee,
+            "handling_fee": proforma.handling_fee,
+            "shipping_fee": proforma.shipping_fee,
+            "notes": "",
+        }
+    return {
+        "sourcing_fee": "0",
+        "handling_fee": "0",
+        "shipping_fee": "0",
+        "notes": "",
+    }
+
+
+# ===== SOURCING MODULE =====
+
+
+@login_required
+@procurement_required
+def sourcing_list(request):
+    lane = _resolve_lane(request)
+    sourcing_records = _apply_sourcing_lane(
+        Sourcing.objects.select_related(
+            "transaction__customer", "created_by", "generated_proforma"
+        ),
+        lane,
+    )
+    page_obj, query_string, page_range = paginate_queryset(request, sourcing_records)
+    return render(
+        request,
+        "logistics/sourcing/list.html",
+        {
+            "records": page_obj,
+            "page_obj": page_obj,
+            "query_string": query_string,
+            "page_range": page_range,
+            "active_lane": lane,
+            "active_lane_label": _lane_label(lane),
+            "can_switch_lane": _can_switch_lane(request.user),
+        },
+    )
+
+
+@login_required
+@procurement_required
+def inventory_list(request):
+    lane = _resolve_lane(request)
+    items = _apply_inventory_lane(
+        InventoryItem.objects.select_related(
+            "supplier", "updated_by", "transaction__customer"
+        ).prefetch_related("fulfillment_lines"),
+        lane,
+    )
+    page_obj, query_string, page_range = paginate_queryset(request, items)
+    return render(
+        request,
+        "logistics/inventory/list.html",
+        {
+            "items": page_obj,
+            "supplier_form": SupplierForm(),
+            "page_obj": page_obj,
+            "query_string": query_string,
+            "page_range": page_range,
+            "active_lane": lane,
+            "active_lane_label": _lane_label(lane),
+            "can_switch_lane": _can_switch_lane(request.user),
+        },
+    )
+
+
+@login_required
+@procurement_required
+def inventory_create(request):
+    if request.method == "POST":
+        form = InventoryItemForm(request.POST)
+        if form.is_valid():
+            item = form.save(commit=False)
+            item.updated_by = request.user
+            item.save()
+            messages.success(request, "Warehouse item created")
+            return redirect("inventory_list")
+    else:
+        form = InventoryItemForm()
+    return render(
+        request,
+        "logistics/inventory/form.html",
+        {"form": form, "title": "Add Warehouse Item"},
+    )
+
+
+@login_required
+@procurement_required
+def inventory_update(request, pk):
+    item = get_object_or_404(InventoryItem, pk=pk)
+    if request.method == "POST":
+        form = InventoryItemForm(request.POST, instance=item)
+        if form.is_valid():
+            updated = form.save(commit=False)
+            updated.updated_by = request.user
+            updated.save()
+            messages.success(request, "Warehouse item updated")
+            return redirect("inventory_list")
+    else:
+        form = InventoryItemForm(instance=item)
+    return render(
+        request,
+        "logistics/inventory/form.html",
+        {"form": form, "title": "Update Warehouse Item", "item": item},
+    )
+
+
+@login_required
+@procurement_required
+def fulfillment_order_create(request, transaction_pk):
+    transaction = get_object_or_404(
+        Transaction.objects.select_related("customer"), pk=transaction_pk
+    )
+    existing_order = FulfillmentOrder.objects.filter(transaction=transaction).first()
+    if existing_order:
+        return redirect("fulfillment_order_update", pk=existing_order.pk)
+
+    initial = {}
+    final_invoice_id = (request.GET.get("final_invoice") or "").strip()
+    if final_invoice_id:
+        linked_invoice = get_object_or_404(
+            FinalInvoice.objects.select_related("transaction"),
+            pk=final_invoice_id,
+            transaction=transaction,
+        )
+        linked_invoice_total_paid = _final_invoice_total_paid(linked_invoice)
+        linked_invoice_snapshot = _final_invoice_payment_snapshot(
+            linked_invoice, linked_invoice_total_paid
+        )
+        if not linked_invoice_snapshot["procurement_ready"]:
+            messages.error(
+                request,
+                "Fulfillment can only start from a Paid or Post Pay final invoice.",
+            )
+            return redirect(
+                _final_invoice_route_name(linked_invoice, "detail"),
+                pk=linked_invoice.pk,
+            )
+        initial = {
+            "final_invoice": linked_invoice,
+        }
+
+    form_instance = FulfillmentOrder(transaction=transaction)
+
+    if request.method == "POST":
+        post_data = request.POST.copy()
+        if not post_data.get("final_invoice") and final_invoice_id:
+            post_data["final_invoice"] = final_invoice_id
+        form = FulfillmentOrderForm(
+            post_data, transaction=transaction, instance=form_instance
+        )
+        if form.is_valid():
+            order = form.save(commit=False)
+            order.transaction = transaction
+            order.created_by = request.user
+            order.save()
+            messages.success(request, "Fulfillment workflow created.")
+            _notify_roles(
+                title="Fulfillment started",
+                message=f"Fulfillment workflow opened for {transaction.transaction_id}.",
+                link=f"/transactions/{transaction.pk}/",
+                category="trading",
+                roles=["ADMIN", "DIRECTOR", "FINANCE", "PROCUREMENT"],
+            )
+            return redirect("transaction_detail", pk=transaction.pk)
+        messages.error(
+            request,
+            "Fulfillment workflow was not saved. Please review the highlighted fields.",
+        )
+    else:
+        form = FulfillmentOrderForm(
+            transaction=transaction,
+            initial=initial,
+            instance=form_instance,
+        )
+    return render(
+        request,
+        "logistics/fulfillment/order_form.html",
+        {
+            "form": form,
+            "title": "Create Fulfillment Workflow",
+            "transaction": transaction,
+        },
+    )
+
+
+@login_required
+@role_required("PROCUREMENT", "OFFICE_ADMIN", "DIRECTOR", "FINANCE", "ADMIN")
+def fulfillment_list(request):
+    lane = _resolve_lane(request)
+    orders = _apply_fulfillment_lane(
+        FulfillmentOrder.objects.select_related(
+            "transaction__customer", "created_by", "final_invoice"
+        ).prefetch_related(
+            "lines",
+            "legs",
+            "final_invoice__payment_records__receipt",
+            "transaction__payment_records__receipt",
+        ),
+        lane,
+    )
+    status = (request.GET.get("status") or "").strip()
+    invoice_filter = (request.GET.get("invoice") or "").strip()
+    if status:
+        orders = orders.filter(status=status)
+    if invoice_filter.isdigit():
+        orders = orders.filter(final_invoice_id=invoice_filter)
+    page_obj, query_string, page_range = paginate_queryset(request, orders)
+    for order in page_obj:
+        receipt_numbers = []
+        if order.final_invoice_id:
+            order.payment_snapshot = _final_invoice_payment_snapshot(
+                order.final_invoice
+            )
+            invoice_payments = list(order.final_invoice.payment_records.all())
+            if not invoice_payments:
+                invoice_payments = list(order.transaction.payment_records.all())
+            receipt_numbers = sorted(
+                {
+                    payment.receipt.receipt_number
+                    for payment in invoice_payments
+                    if getattr(payment, "receipt", None)
+                    and payment.receipt.receipt_number
+                }
+            )
+        else:
+            order.payment_snapshot = None
+        order.receipt_numbers_display = (
+            ", ".join(receipt_numbers) if receipt_numbers else "No Receipt"
+        )
+    return render(
+        request,
+        "logistics/fulfillment/list.html",
+        {
+            "orders": page_obj,
+            "status": status,
+            "status_choices": FulfillmentOrder.STATUS_CHOICES,
+            "invoice_filter": invoice_filter,
+            "page_obj": page_obj,
+            "query_string": query_string,
+            "page_range": page_range,
+            "active_lane": lane,
+            "active_lane_label": _lane_label(lane),
+            "can_switch_lane": _can_switch_lane(request.user),
+        },
+    )
+
+
+@login_required
+@procurement_required
+def fulfillment_order_update(request, pk):
+    order = get_object_or_404(
+        FulfillmentOrder.objects.select_related("transaction__customer"), pk=pk
+    )
+    if order.transaction.is_closed:
+        messages.error(
+            request, "This transaction is closed; fulfillment cannot be edited."
+        )
+        return redirect("transaction_detail", pk=order.transaction.pk)
+    if request.method == "POST":
+        form = FulfillmentOrderForm(
+            request.POST, instance=order, transaction=order.transaction
+        )
+        if form.is_valid():
+            previous_status = order.status
+            form.save()
+            messages.success(request, "Fulfillment workflow updated.")
+            new_status = order.status
+            if new_status != previous_status and new_status in {
+                "IN_TRANSIT",
+                "DISPATCHED",
+                "DELIVERED",
+            }:
+                _notify_roles(
+                    title=f"Fulfillment {order.get_status_display() if hasattr(order,'get_status_display') else new_status}",
+                    message=f"{order.transaction.transaction_id} fulfillment is now {new_status}.",
+                    link=f"/transactions/{order.transaction.pk}/",
+                    category="trading",
+                    roles=["ADMIN", "DIRECTOR", "FINANCE", "PROCUREMENT"],
+                )
+            return redirect("transaction_detail", pk=order.transaction.pk)
+    else:
+        form = FulfillmentOrderForm(instance=order, transaction=order.transaction)
+    return render(
+        request,
+        "logistics/fulfillment/order_form.html",
+        {
+            "form": form,
+            "title": "Update Fulfillment Workflow",
+            "transaction": order.transaction,
+            "order": order,
+        },
+    )
+
+
+@login_required
+@procurement_required
+def fulfillment_line_create(request, order_pk):
+    order = get_object_or_404(
+        FulfillmentOrder.objects.select_related("transaction__customer"), pk=order_pk
+    )
+    if request.method == "POST":
+        form = FulfillmentLineForm(request.POST, order=order)
+        if form.is_valid():
+            line = form.save(commit=False)
+            line.order = order
+            line.save()
+            messages.success(request, "Warehouse stock allocated to fulfillment.")
+            return redirect("transaction_detail", pk=order.transaction.pk)
+    else:
+        form = FulfillmentLineForm(order=order)
+    return render(
+        request,
+        "logistics/fulfillment/line_form.html",
+        {
+            "form": form,
+            "title": "Allocate Warehouse Stock",
+            "order": order,
+            "transaction": order.transaction,
+        },
+    )
+
+
+@login_required
+@procurement_required
+def fulfillment_line_update(request, pk):
+    line = get_object_or_404(
+        FulfillmentLine.objects.select_related(
+            "order__transaction__customer", "inventory_item"
+        ),
+        pk=pk,
+    )
+    if request.method == "POST":
+        form = FulfillmentLineForm(request.POST, instance=line, order=line.order)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Fulfillment allocation updated.")
+            return redirect("transaction_detail", pk=line.order.transaction.pk)
+    else:
+        form = FulfillmentLineForm(instance=line, order=line.order)
+    return render(
+        request,
+        "logistics/fulfillment/line_form.html",
+        {
+            "form": form,
+            "title": "Update Warehouse Allocation",
+            "order": line.order,
+            "transaction": line.order.transaction,
+            "line": line,
+        },
+    )
+
+
+@login_required
+@procurement_required
+def shipment_leg_create(request, order_pk):
+    order = get_object_or_404(
+        FulfillmentOrder.objects.select_related("transaction__customer"), pk=order_pk
+    )
+    if request.method == "POST":
+        form = ShipmentLegForm(request.POST)
+        if form.is_valid():
+            leg = form.save(commit=False)
+            leg.order = order
+            leg.created_by = request.user
+            leg.save()
+            messages.success(request, "Shipment leg added.")
+            return redirect("transaction_detail", pk=order.transaction.pk)
+    else:
+        initial = {"sequence": order.legs.count() + 1}
+        form = ShipmentLegForm(initial=initial)
+    return render(
+        request,
+        "logistics/fulfillment/leg_form.html",
+        {
+            "form": form,
+            "title": "Add Shipment Leg",
+            "order": order,
+            "transaction": order.transaction,
+        },
+    )
+
+
+@login_required
+@procurement_required
+def shipment_leg_update(request, pk):
+    leg = get_object_or_404(
+        ShipmentLeg.objects.select_related("order__transaction__customer"), pk=pk
+    )
+    if request.method == "POST":
+        form = ShipmentLegForm(request.POST, instance=leg)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Shipment leg updated.")
+            return redirect("transaction_detail", pk=leg.order.transaction.pk)
+    else:
+        form = ShipmentLegForm(instance=leg)
+    return render(
+        request,
+        "logistics/fulfillment/leg_form.html",
+        {
+            "form": form,
+            "title": "Update Shipment Leg",
+            "order": leg.order,
+            "transaction": leg.order.transaction,
+            "leg": leg,
+        },
+    )
+
+
+@login_required
+@procurement_required
+def supplier_create(request):
+    if request.method != "POST":
+        return redirect("supplier_list")
+    form = SupplierForm(request.POST)
+    if form.is_valid():
+        supplier = form.save(commit=False)
+        supplier.created_by = request.user
+        supplier.save()
+        messages.success(request, f"Supplier {supplier.name} added")
+    else:
+        messages.error(request, "Could not add supplier. Check the supplier details.")
+    next_url = request.POST.get("next")
+    if next_url == "inventory_list":
+        return redirect("inventory_list")
+    return redirect("supplier_list")
+
+
+@login_required
+@procurement_required
+def supplier_list(request):
+    suppliers = Supplier.objects.select_related("created_by").prefetch_related(
+        "products"
+    )
+    search = request.GET.get("search", "").strip()
+    if search:
+        suppliers = suppliers.filter(
+            Q(name__icontains=search)
+            | Q(contact_person__icontains=search)
+            | Q(phone__icontains=search)
+            | Q(email__icontains=search)
+            | Q(supplies__icontains=search)
+            | Q(products__product_name__icontains=search)
+        )
+    suppliers = suppliers.distinct()
+    page_obj, query_string, page_range = paginate_queryset(request, suppliers)
+    return render(
+        request,
+        "logistics/suppliers/list.html",
+        {
+            "suppliers": page_obj,
+            "supplier_form": SupplierForm(),
+            "search": search,
+            "page_obj": page_obj,
+            "query_string": query_string,
+            "page_range": page_range,
+        },
+    )
+
+
+@login_required
+@procurement_required
+def supplier_update(request, pk):
+    supplier = get_object_or_404(Supplier.objects.prefetch_related("products"), pk=pk)
+    if request.method == "POST":
+        form = SupplierForm(request.POST, instance=supplier)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Supplier updated")
+            return redirect("supplier_list")
+    else:
+        form = SupplierForm(instance=supplier)
+    return render(
+        request,
+        "logistics/suppliers/form.html",
+        {
+            "form": form,
+            "title": "Update Supplier",
+            "supplier": supplier,
+            "product_form": SupplierProductForm(),
+            "products": supplier.products.all(),
+        },
+    )
+
+
+@login_required
+@procurement_required
+def supplier_product_create(request, supplier_pk):
+    supplier = get_object_or_404(Supplier, pk=supplier_pk)
+    if request.method != "POST":
+        return redirect("supplier_update", pk=supplier.pk)
+
+    # Support both single-row (old form) and multi-row array submission
+    names = request.POST.getlist("product_name[]")
+    if names:
+        # Multi-row path: iterate parallel arrays
+        specs = request.POST.getlist("specifications[]")
+        moqs = request.POST.getlist("min_order_quantity[]")
+        uprices = request.POST.getlist("unit_price[]")
+        rprices = request.POST.getlist("resale_price[]")
+        notes_l = request.POST.getlist("notes[]")
+        saved = 0
+        for i, name in enumerate(names):
+            name = normalize_text_entry("product_name", name)
+            if not name:
+                continue
+
+            def _dec(lst, idx):
+                try:
+                    v = lst[idx].strip()
+                    return v if v else None
+                except IndexError:
+                    return None
+
+            SupplierProduct.objects.create(
+                supplier=supplier,
+                created_by=request.user,
+                product_name=name,
+                specifications=(
+                    normalize_text_entry("specifications", specs[i])
+                    if i < len(specs)
+                    else ""
+                ),
+                min_order_quantity=_dec(moqs, i),
+                unit_price=_dec(uprices, i),
+                resale_price=_dec(rprices, i),
+                notes=(
+                    normalize_text_entry("notes", notes_l[i])
+                    if i < len(notes_l)
+                    else ""
+                ),
+            )
+            saved += 1
+        if saved:
+            messages.success(request, f"{saved} product(s) added.")
+        else:
+            messages.warning(request, "No products saved — product name is required.")
+    else:
+        # Single-row legacy path
+        form = SupplierProductForm(request.POST)
+        if form.is_valid():
+            product = form.save(commit=False)
+            product.supplier = supplier
+            product.created_by = request.user
+            product.save()
+            messages.success(request, "Supplier product added")
+        else:
+            messages.error(request, "Could not add product. Check the product details.")
+    return redirect("supplier_update", pk=supplier.pk)
+
+
+@login_required
+@procurement_required
+def supplier_product_delete(request, supplier_pk, product_pk):
+    supplier = get_object_or_404(Supplier, pk=supplier_pk)
+    if getattr(request.user, "role", "") == "OFFICE_ADMIN":
+        messages.error(request, "Uganda Intake cannot delete supplier products.")
+        return redirect("supplier_update", pk=supplier.pk)
+    product = get_object_or_404(SupplierProduct, pk=product_pk, supplier=supplier)
+    if request.method == "POST":
+        product.delete()
+        messages.success(request, "Supplier product removed")
+    return redirect("supplier_update", pk=supplier.pk)
+
+
+@login_required
+@procurement_required
+def sourcing_update(request, pk):
+    sourcing = get_object_or_404(
+        Sourcing.objects.select_related("transaction__customer", "generated_proforma"),
+        pk=pk,
+    )
+    generated_proforma = _generated_proforma_for_sourcing(sourcing)
+    pi_document = (
+        sourcing.transaction.documents.exclude(structured_data={})
+        .order_by("-timestamp")
+        .first()
+    )
+    if request.method == "POST":
+        form = SourcingForm(request.POST, instance=sourcing)
+        if form.is_valid():
+            updated = form.save(commit=False)
+            updated.created_by = request.user
+            updated.save()
+            action = request.POST.get("submit_action")
+            if action == "open_proforma":
+                generated_proforma = _generated_proforma_for_sourcing(sourcing)
+                if generated_proforma:
+                    messages.info(
+                        request,
+                        "This Q-Worksheet has already been converted to a proforma.",
+                    )
+                    return redirect(
+                        _proforma_route_name(generated_proforma, "detail"),
+                        pk=generated_proforma.pk,
+                    )
+                if not updated.item_details:
+                    messages.error(
+                        request,
+                        "Add at least one item before creating a proforma.",
+                    )
+                    return redirect("sourcing_update", pk=sourcing.pk)
+                validity_date = (request.POST.get("validity_date") or "").strip()
+                messages.success(request, "Q-Worksheet updated. Opening proforma form.")
+                target = f"{reverse('proforma_create')}?from_sourcing={sourcing.pk}"
+                if validity_date:
+                    target += f"&validity_date={validity_date}"
+                return redirect(target)
+            messages.success(request, "Q-Worksheet updated")
+            return redirect("sourcing_update", pk=sourcing.pk)
+    else:
+        form = SourcingForm(instance=sourcing)
+    return render(
+        request,
+        "logistics/sourcing/form.html",
+        {
+            "form": form,
+            "title": "Update Q-Worksheet",
+            "record": sourcing,
+            "generated_proforma": generated_proforma,
+            "pi_document": pi_document,
+            "transaction": sourcing.transaction,
+        },
+    )
+
+
+@login_required
+@procurement_required
+def sourcing_pdf(request, pk):
+    sourcing = get_object_or_404(
+        Sourcing.objects.select_related("transaction__customer", "created_by"), pk=pk
+    )
+    form = SourcingForm(instance=sourcing)
+    response = HttpResponse(content_type="application/pdf")
+    response["Content-Disposition"] = (
+        f'attachment; filename="q_worksheet_{sourcing.transaction.transaction_id}.pdf"'
+    )
+
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=landscape(A4),
+        leftMargin=24,
+        rightMargin=24,
+        topMargin=28,
+        bottomMargin=24,
+    )
+    styles = getSampleStyleSheet()
+    story = []
+
+    story.append(
+        Paragraph(
+            f"<b>GMI TERRALINK Q-Worksheet</b> - {sourcing.transaction.transaction_id}",
+            styles["Title"],
+        )
+    )
+    story.append(
+        Paragraph(
+            (
+                f"Client: <b>{sourcing.transaction.customer.name}</b><br/>"
+                f"Prepared by: {sourcing.created_by.get_full_name() or sourcing.created_by.username}"
+            ),
+            styles["BodyText"],
+        )
+    )
+    story.append(Spacer(1, 12))
+
+    table_data = [
+        [
+            "#",
+            "Item",
+            "Qty",
+            "Unit",
+            "Quote A",
+            "Quote B",
+            "Quote C",
+            "Preferred",
+            "Notes",
+        ]
+    ]
+    body_style = styles["BodyText"]
+    body_style.fontSize = 7
+    body_style.leading = 9
+
+    for row in form.item_rows:
+        preferred_quote = str(row.get("preferred_quote") or "").strip()
+        cheapest_quote = str(row.get("cheapest_quote") or "").strip()
+
+        def _cost_with_marker(quote_key):
+            value = row.get(f"quote_{quote_key}_unit_price") or ""
+            marker = ""
+            if str(quote_key) == cheapest_quote and value:
+                marker += "*"
+            if str(quote_key) == preferred_quote and value:
+                marker += "P"
+            return f"{value} {marker}".strip()
+
+        def _quote_cell(quote_key):
+            supplier = row.get(f"quote_{quote_key}_supplier_name") or ""
+            contact = row.get(f"quote_{quote_key}_supplier_contact") or ""
+            cost = _cost_with_marker(quote_key)
+            parts = []
+            if supplier:
+                parts.append(f"<b>{supplier}</b>")
+            if contact:
+                parts.append(contact)
+            if cost:
+                parts.append(f"Cost: {cost}")
+            return Paragraph("<br/>".join(parts) or "", body_style)
+
+        table_data.append(
+            [
+                str(row.get("index") or ""),
+                Paragraph(row.get("name") or "", body_style),
+                row.get("quantity") or "",
+                row.get("unit") or "",
+                _quote_cell("1"),
+                _quote_cell("2"),
+                _quote_cell("3"),
+                (
+                    "A"
+                    if preferred_quote == "1"
+                    else (
+                        "B"
+                        if preferred_quote == "2"
+                        else "C" if preferred_quote == "3" else ""
+                    )
+                ),
+                Paragraph(row.get("notes") or "", body_style),
+            ]
+        )
+
+    quote_table = Table(
+        table_data,
+        repeatRows=1,
+        colWidths=[22, 120, 34, 34, 120, 120, 120, 46, 96],
+    )
+    quote_table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#f1efe9")),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor("#3f3a3a")),
+                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("FONTSIZE", (0, 0), (-1, -1), 7),
+                ("LEADING", (0, 0), (-1, -1), 9),
+                ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#d7d3c7")),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                (
+                    "ROWBACKGROUNDS",
+                    (0, 1),
+                    (-1, -1),
+                    [colors.white, colors.HexColor("#fbfaf7")],
+                ),
+                ("LEFTPADDING", (0, 0), (-1, -1), 4),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+                ("TOPPADDING", (0, 0), (-1, -1), 5),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+            ]
+        )
+    )
+    story.append(quote_table)
+    story.append(
+        Paragraph(
+            "<i>* = cheapest captured quote in row, P = preferred quote selected for proforma handoff.</i>",
+            styles["BodyText"],
+        )
+    )
+
+    if sourcing.notes:
+        story.append(Spacer(1, 12))
+        story.append(Paragraph("<b>Notes / Terms / Conditions</b>", styles["Heading4"]))
+        story.append(
+            Paragraph((sourcing.notes or "").replace("\n", "<br/>"), styles["BodyText"])
+        )
+
+    doc.build(story)
+    response.write(buffer.getvalue())
+    buffer.close()
+    return response
+
+
+@login_required
+@procurement_required
+def sourcing_create(request):
+    pi_document = None
+    initial = {}
+
+    from_doc_pk = request.GET.get("from_doc")
+    transaction_pk = request.GET.get("transaction")
+
+    if from_doc_pk:
+        pi_document = (
+            Document.objects.filter(pk=from_doc_pk)
+            .select_related("transaction__customer")
+            .first()
+        )
+        if pi_document:
+            initial = _build_sourcing_initial_from_document(pi_document)
+    elif transaction_pk:
+        initial["transaction"] = Transaction.objects.filter(pk=transaction_pk).first()
+
+    if request.method == "POST":
+        form = SourcingForm(request.POST)
+        if form.is_valid():
+            sourcing = form.save(commit=False)
+            sourcing.created_by = request.user
+            sourcing.save()
+            action = request.POST.get("submit_action")
+            if action == "open_proforma":
+                if not sourcing.item_details:
+                    messages.error(
+                        request,
+                        "Add at least one item before creating a proforma.",
+                    )
+                    return redirect("sourcing_update", pk=sourcing.pk)
+                validity_date = (request.POST.get("validity_date") or "").strip()
+                messages.success(request, "Q-Worksheet saved. Opening proforma form.")
+                target = f"{reverse('proforma_create')}?from_sourcing={sourcing.pk}"
+                if validity_date:
+                    target += f"&validity_date={validity_date}"
+                return redirect(target)
+            messages.success(request, "Q-Worksheet created")
+            return redirect("sourcing_update", pk=sourcing.pk)
+    else:
+        form = SourcingForm(initial=initial)
+
+    transaction = None
+    if pi_document:
+        transaction = pi_document.transaction
+    elif initial.get("transaction"):
+        transaction = initial["transaction"]
+
+    return render(
+        request,
+        "logistics/sourcing/form.html",
+        {
+            "form": form,
+            "title": "Create Q-Worksheet",
+            "pi_document": pi_document,
+            "transaction": transaction,
+            "generated_proforma": None,
+        },
+    )
+
+
+@login_required
+def proforma_list(request):
+    lane = _resolve_lane_with_path(request)
+    proformas = _apply_proforma_lane(
+        ProformaInvoice.objects.select_related(
+            "transaction__customer", "created_by", "loading"
+        ),
+        lane,
+    )
+    page_obj, query_string, page_range = paginate_queryset(request, proformas)
+    return render(
+        request,
+        "logistics/invoicing/proforma_list.html",
+        {
+            "proformas": page_obj,
+            "page_obj": page_obj,
+            "query_string": query_string,
+            "page_range": page_range,
+            "active_lane": lane,
+            "active_lane_label": _lane_label(lane),
+            "can_switch_lane": _can_switch_lane(request.user),
+            "can_manage_business_documents": _can_manage_business_documents(
+                request.user
+            ),
+            "can_edit_business_documents": _can_directly_edit_business_documents(
+                request.user
+            ),
+            "can_edit_purchase_orders": _can_directly_edit_purchase_orders(
+                request.user
+            ),
+        },
+    )
+
+
+@login_required
+@role_required("PROCUREMENT", "OFFICE_ADMIN", "FINANCE", "DIRECTOR", "ADMIN")
+def proforma_create(request):
+    """Single simple entry form for sourcing agents to create proforma invoices."""
+    from decimal import Decimal, InvalidOperation
+    import datetime
+
+    pi_document = None
+    sourcing_record = None
+    prefill_items = []
+    initial_transaction = None
+    initial_notes = ""
+    initial_validity_date = request.GET.get("validity_date", "")
+    form_values = _build_proforma_form_values()
+
+    from_doc_pk = request.GET.get("from_doc")
+    from_sourcing_pk = request.GET.get("from_sourcing")
+    transaction_pk = request.GET.get("transaction")
+
+    if from_doc_pk:
+        pi_document = (
+            Document.objects.filter(pk=from_doc_pk)
+            .select_related("transaction__customer")
+            .first()
+        )
+        if pi_document:
+            initial_transaction = pi_document.transaction
+            sd = pi_document.structured_data or {}
+            if sd.get("items"):
+                for it in sd["items"]:
+                    name = it.get("name") or it.get("description") or ""
+                    if name:
+                        quantity = it.get("quantity") or "1"
+                        unit_price = it.get("unit_price", it.get("amount", ""))
+                        total = it.get("total", "")
+                        if unit_price in (None, "") and total not in (None, ""):
+                            try:
+                                quantity_decimal = Decimal(str(quantity or "1"))
+                                if quantity_decimal:
+                                    unit_price = Decimal(str(total)) / quantity_decimal
+                            except Exception:
+                                unit_price = total
+                        prefill_items.append(
+                            {
+                                "description": name,
+                                "quantity": quantity,
+                                "unit_price": (
+                                    unit_price if unit_price not in (None, "") else "0"
+                                ),
+                                "sales_price": (
+                                    unit_price if unit_price not in (None, "") else "0"
+                                ),
+                            }
+                        )
+            initial_notes = build_sourcing_notes(sd) if sd else ""
+    elif from_sourcing_pk:
+        sourcing_record = (
+            Sourcing.objects.filter(pk=from_sourcing_pk)
+            .select_related("transaction__customer", "generated_proforma")
+            .first()
+        )
+        if sourcing_record:
+            generated_proforma = _generated_proforma_for_sourcing(sourcing_record)
+            if generated_proforma:
+                messages.info(
+                    request,
+                    "This Q-Worksheet has already been converted to a proforma.",
+                )
+                return redirect(
+                    _proforma_route_name(generated_proforma, "detail"),
+                    pk=generated_proforma.pk,
+                )
+            initial_transaction = sourcing_record.transaction
+            prefill_items = _prefill_proforma_items_from_sourcing(sourcing_record)
+            initial_notes = sourcing_record.notes or ""
+    elif transaction_pk:
+        from .models import Transaction as Txn
+
+        initial_transaction = Txn.objects.filter(pk=transaction_pk).first()
+
+    if initial_transaction and request.method != "POST":
+        locked_response = _locked_trade_document_response(request, initial_transaction)
+        if locked_response:
+            return locked_response
+
+    if request.method == "POST":
+        errors = []
+        transaction_id = request.POST.get("transaction")
+        validity_date_raw = request.POST.get("validity_date", "").strip()
+        form_values = _build_proforma_form_values(post_data=request.POST)
+
+        if not transaction_id:
+            errors.append("Transaction is required.")
+
+        # Parse item rows
+        descs = request.POST.getlist("item_desc[]")
+        qtys = request.POST.getlist("item_qty[]")
+        unit_prices = request.POST.getlist("item_unit_price[]")
+        sales_prices = request.POST.getlist("item_sales_price[]")
+
+        items = []
+        subtotal = Decimal("0")
+        for desc, qty, unit_price_raw, sales_price_raw in zip(
+            descs, qtys, unit_prices, sales_prices
+        ):
+            desc = normalize_text_entry("description", desc)
+            if not desc:
+                continue
+            try:
+                qty_d = Decimal(qty.strip() or "1")
+                unit_price_d = Decimal(unit_price_raw.strip() or "0")
+                sales_price_d = Decimal(sales_price_raw.strip() or "0")
+            except InvalidOperation:
+                continue
+            line_total = qty_d * unit_price_d
+            sales_price_d = line_total
+            subtotal += line_total
+            items.append(
+                {
+                    "description": desc,
+                    "quantity": str(qty_d),
+                    "unit_price": float(unit_price_d),
+                    "sales_price": float(sales_price_d),
+                    "total": float(line_total),
+                }
+            )
+
+        if not items:
+            errors.append("Add at least one item.")
+
+        fee_values, fee_errors = _parse_quote_fees(request.POST)
+        errors.extend(fee_errors)
+
+        # Parse validity date
+        validity_date = None
+        if validity_date_raw:
+            try:
+                validity_date = datetime.date.fromisoformat(validity_date_raw)
+            except ValueError:
+                errors.append("Invalid validity date.")
+        if not validity_date:
+            validity_date = datetime.date.today() + datetime.timedelta(days=30)
+
+        if not errors:
+            try:
+                txn = Transaction.objects.get(pk=transaction_id)
+            except Transaction.DoesNotExist:
+                errors.append("Transaction not found.")
+
+        if not errors:
+            locked_response = _locked_trade_document_response(request, txn)
+            if locked_response:
+                return locked_response
+
+        if not errors:
+            proforma = ProformaInvoice.objects.create(
+                transaction=txn,
+                source_sourcing=sourcing_record,
+                items=items,
+                subtotal=subtotal,
+                sourcing_fee=fee_values["sourcing_fee"],
+                handling_fee=fee_values["handling_fee"],
+                shipping_fee=fee_values["shipping_fee"],
+                validity_date=validity_date,
+                status="DRAFT",
+                created_by=request.user,
+            )
+            Transaction.objects.filter(
+                pk=txn.pk,
+                status__in=["RECEIVED", "CLEANED", "SENT_TO_SOURCING", "QUOTED"],
+            ).update(status="PROFORMA_CREATED")
+            _notify_roles(
+                title="Proforma invoice created",
+                message=(
+                    f"Proforma invoice {display_document_number(proforma, 'PI')} was created for transaction "
+                    f"{txn.transaction_id}."
+                ),
+                link=reverse(
+                    _proforma_route_name(proforma, "detail"),
+                    kwargs={"pk": proforma.pk},
+                ),
+                category="invoice",
+            )
+            messages.success(request, "Proforma Invoice created successfully.")
+            fulfillment = FulfillmentOrder.objects.filter(transaction=txn).first()
+            if fulfillment:
+                return redirect("fulfillment_order_update", pk=fulfillment.pk)
+            return redirect(_proforma_route_name(proforma, "detail"), pk=proforma.pk)
+        else:
+            for e in errors:
+                messages.error(request, e)
+
+    transactions = _transactions_with_lock_status(
+        Transaction.objects.select_related("customer").order_by("-created_at")
+    )
+    return render(
+        request,
+        "logistics/invoicing/proforma_form.html",
+        {
+            "pi_document": pi_document,
+            "sourcing_record": sourcing_record,
+            "prefill_items": prefill_items,
+            "initial_transaction": initial_transaction,
+            "initial_notes": initial_notes,
+            "initial_validity_date": initial_validity_date,
+            "form_values": form_values,
+            "transactions": transactions,
+            "title": "Create Proforma Invoice",
+            "closed_trade_edit": bool(
+                initial_transaction and _trade_documents_locked(initial_transaction)
+            ),
+        },
+    )
+
+
+@login_required
+def proforma_detail(request, pk):
+    proforma = get_object_or_404(
+        ProformaInvoice.objects.select_related(
+            "transaction__customer", "created_by", "loading"
+        ),
+        pk=pk,
+    )
+    canonical = _canonical_route_redirect(
+        request, _proforma_route_name(proforma, "detail"), pk=proforma.pk
+    )
+    if canonical:
+        return canonical
+    final_invoice = _final_invoice_for_proforma(proforma)
+    document_signature = _document_signature_for(proforma)
+    return render(
+        request,
+        "logistics/invoicing/proforma_detail.html",
+        {
+            "proforma": proforma,
+            "final_invoice": final_invoice,
+            "document_signature": document_signature,
+            "can_manage_business_documents": _can_manage_business_documents(
+                request.user
+            ),
+            "can_edit_business_documents": _can_directly_edit_business_documents(
+                request.user
+            ),
+        },
+    )
+
+
+def _final_invoice_for_proforma(proforma):
+    try:
+        return proforma.final_invoice
+    except FinalInvoice.DoesNotExist:
+        pass
+
+    legacy_qs = proforma.transaction.final_invoices.filter(proforma__isnull=True)
+    if proforma.loading_id:
+        legacy_qs = legacy_qs.filter(loading_id=proforma.loading_id)
+    return legacy_qs.order_by("created_at", "pk").first()
+
+
+def _unbilled_proforma_for_transaction(transaction):
+    return (
+        transaction.proforma_invoices.filter(final_invoice__isnull=True)
+        .order_by("created_at", "pk")
+        .first()
+    )
+
+
+@login_required
+@role_required("PROCUREMENT", "FINANCE", "DIRECTOR", "ADMIN")
+def proforma_sign(request, pk):
+    proforma = get_object_or_404(
+        ProformaInvoice.objects.select_related("transaction__customer", "loading"),
+        pk=pk,
+    )
+    return _sign_business_document(
+        request,
+        document=proforma,
+        detail_route=_proforma_route_name(proforma, "detail"),
+        document_label=f"Proforma {display_document_number(proforma, 'PI')}",
+    )
+
+
+@login_required
+@role_required("PROCUREMENT", "OFFICE_ADMIN", "FINANCE", "DIRECTOR", "ADMIN")
+def proforma_update(request, pk):
+    """Edit a draft proforma invoice using the same simplified entry template."""
+    from decimal import Decimal, InvalidOperation
+    import datetime
+
+    proforma = get_object_or_404(ProformaInvoice, pk=pk)
+    canonical = _canonical_route_redirect(
+        request, _proforma_route_name(proforma, "update"), pk=proforma.pk
+    )
+    if canonical and request.method != "POST":
+        return canonical
+    edit_guard = _guard_business_document_edit_permission(
+        request,
+        edit_label=f"proforma {display_document_number(proforma, 'PI')}",
+        link=reverse(
+            _proforma_route_name(proforma, "update"), kwargs={"pk": proforma.pk}
+        ),
+        redirect_url=reverse(
+            _proforma_route_name(proforma, "detail"), kwargs={"pk": proforma.pk}
+        ),
+    )
+    if edit_guard:
+        return edit_guard
+    locked_response = _locked_trade_document_response(request, proforma.transaction)
+    if locked_response:
+        return locked_response
+    is_freight = bool(proforma.loading_id)
+    form_values = _build_proforma_form_values(proforma=proforma)
+    if proforma.status == "SENT":
+        messages.error(request, "Sent proformas cannot be edited.")
+        return redirect(_proforma_route_name(proforma, "detail"), pk=pk)
+
+    if request.method == "POST":
+        errors = []
+        validity_date_raw = request.POST.get("validity_date", "").strip()
+        form_values = _build_proforma_form_values(post_data=request.POST)
+
+        descs = request.POST.getlist("item_desc[]")
+        qtys = request.POST.getlist("item_qty[]")
+        unit_prices = request.POST.getlist("item_unit_price[]")
+        sales_prices = request.POST.getlist("item_sales_price[]")
+        units = request.POST.getlist("item_unit[]")
+
+        items = []
+        subtotal = Decimal("0")
+        zipped = zip(
+            descs,
+            qtys,
+            unit_prices,
+            sales_prices,
+            units if units else [""] * len(descs),
+        )
+        for desc, qty, unit_price_raw, sales_price_raw, item_unit in zipped:
+            desc = normalize_text_entry("description", desc)
+            if not desc:
+                continue
+            try:
+                qty_d = Decimal(qty.strip() or "1")
+                unit_price_d = Decimal(unit_price_raw.strip() or "0")
+                sales_price_d = Decimal(sales_price_raw.strip() or "0")
+            except InvalidOperation:
+                continue
+            line_total = qty_d * unit_price_d
+            sales_price_d = line_total
+            subtotal += line_total
+            item_dict = {
+                "description": desc,
+                "quantity": str(qty_d),
+                "unit_price": float(unit_price_d),
+                "sales_price": float(sales_price_d),
+                "total": float(line_total),
+            }
+            if item_unit:
+                item_dict["unit"] = normalize_text_entry("unit", item_unit)
+            items.append(item_dict)
+
+        fee_values, fee_errors = _parse_quote_fees(request.POST)
+        errors.extend(fee_errors)
+
+        validity_date = proforma.validity_date
+        if validity_date_raw:
+            try:
+                validity_date = datetime.date.fromisoformat(validity_date_raw)
+            except ValueError:
+                errors.append("Invalid validity date.")
+
+        if not errors:
+            proforma.items = items
+            proforma.subtotal = subtotal
+            proforma.sourcing_fee = fee_values["sourcing_fee"]
+            proforma.handling_fee = fee_values["handling_fee"]
+            proforma.shipping_fee = fee_values["shipping_fee"]
+            proforma.validity_date = validity_date
+            proforma.save()
+            messages.success(request, "Proforma Invoice updated.")
+            fulfillment = FulfillmentOrder.objects.filter(
+                transaction=proforma.transaction
+            ).first()
+            if fulfillment:
+                return redirect("fulfillment_order_update", pk=fulfillment.pk)
+            return redirect(_proforma_route_name(proforma, "detail"), pk=pk)
+        else:
+            for e in errors:
+                messages.error(request, e)
+
+    transactions = _transactions_with_lock_status(
+        Transaction.objects.select_related("customer").order_by("-created_at")
+    )
+    return render(
+        request,
+        "logistics/invoicing/proforma_form.html",
+        {
+            "proforma": proforma,
+            "form_values": form_values,
+            "initial_transaction": proforma.transaction,
+            "transactions": transactions,
+            "title": "Edit Proforma Invoice",
+            "is_freight": is_freight,
+            "loading": proforma.loading,
+            "closed_trade_edit": _trade_documents_locked(proforma.transaction),
+        },
+    )
+
+
+@login_required
+@role_required("PROCUREMENT", "OFFICE_ADMIN", "FINANCE", "DIRECTOR", "ADMIN")
+def proforma_confirm(request, pk):
+    """Confirm a proforma and convert it into a client-facing invoice."""
+    from decimal import Decimal
+
+    proforma = get_object_or_404(ProformaInvoice, pk=pk)
+    canonical = _canonical_route_redirect(
+        request, _proforma_route_name(proforma, "confirm"), pk=proforma.pk
+    )
+    if canonical and request.method != "POST":
+        return canonical
+    locked_response = _locked_trade_document_response(request, proforma.transaction)
+    if locked_response:
+        return locked_response
+    existing_invoice = _final_invoice_for_proforma(proforma)
+    if existing_invoice:
+        messages.info(
+            request,
+            f"This proforma already has final invoice {display_document_number(existing_invoice, 'FI')}.",
+        )
+        return redirect(
+            _final_invoice_route_name(existing_invoice, "detail"),
+            pk=existing_invoice.pk,
+        )
+    if request.method == "POST":
+        final_items = []
+        subtotal = Decimal("0")
+        for it in proforma.items or []:
+            sp = Decimal(str(it.get("sales_price") or it.get("amount") or "0"))
+            qty = Decimal(str(it.get("quantity") or "1"))
+            line = sp * qty
+            subtotal += line
+            final_items.append(
+                {
+                    "description": it.get("description", ""),
+                    "quantity": str(qty),
+                    "amount": float(line),
+                }
+            )
+        invoice = FinalInvoice.objects.create(
+            transaction=proforma.transaction,
+            loading=proforma.loading
+            or getattr(proforma.transaction, "source_loading", None),
+            proforma=proforma,
+            items=final_items,
+            subtotal=subtotal,
+            sourcing_fee=proforma.sourcing_fee,
+            shipping_cost=proforma.shipping_fee,
+            service_fee=proforma.handling_fee,
+            total_amount=subtotal,
+            created_by=request.user,
+        )
+        proforma.status = "SENT"
+        proforma.save(update_fields=["status"])
+        Transaction.objects.filter(pk=proforma.transaction.pk).update(
+            status="FINAL_INVOICE_CREATED"
+        )
+        _notify_roles(
+            title="Final invoice generated",
+            message=(
+                f"Final invoice {display_document_number(invoice, 'FI')} was generated from proforma "
+                f"{display_document_number(proforma, 'PI')} for transaction {proforma.transaction.transaction_id}."
+            ),
+            link=reverse(
+                _final_invoice_route_name(invoice, "detail"), kwargs={"pk": invoice.pk}
+            ),
+            category="invoice",
+        )
+        messages.success(request, "Proforma confirmed. Invoice created.")
+        return redirect(_final_invoice_route_name(invoice, "detail"), pk=invoice.pk)
+    return render(
+        request,
+        "logistics/invoicing/proforma_confirm.html",
+        {
+            "proforma": proforma,
+            "closed_trade_edit": _trade_documents_locked(proforma.transaction),
+        },
+    )
+
+
+def _build_final_invoice_items(post_data):
+    """Parse final-invoice builder rows into stored line items and subtotal."""
+    from decimal import Decimal, InvalidOperation
+
+    descs = post_data.getlist("item_desc[]")
+    qtys = post_data.getlist("item_qty[]")
+    unit_prices = post_data.getlist("item_unit_price[]")
+
+    items = []
+    subtotal = Decimal("0")
+    errors = []
+
+    for index, (desc, qty_raw, unit_price_raw) in enumerate(
+        zip(descs, qtys, unit_prices), start=1
+    ):
+        desc = normalize_text_entry("description", desc or "")
+        qty_raw = (qty_raw or "").strip()
+        unit_price_raw = (unit_price_raw or "").strip()
+
+        if not desc and not qty_raw and not unit_price_raw:
+            continue
+        if not desc:
+            errors.append(f"Line {index}: description is required.")
+            continue
+
+        try:
+            quantity = Decimal(qty_raw or "1")
+            unit_price = Decimal(unit_price_raw or "0")
+        except InvalidOperation:
+            errors.append(f"Line {index}: quantity and unit price must be numbers.")
+            continue
+
+        if quantity < 0 or unit_price < 0:
+            errors.append(f"Line {index}: quantity and unit price cannot be negative.")
+            continue
+
+        line_total = quantity * unit_price
+        subtotal += line_total
+        items.append(
+            {
+                "description": desc,
+                "quantity": str(quantity),
+                "unit_price": float(unit_price),
+                "amount": float(line_total),
+                "total": float(line_total),
+            }
+        )
+
+    if not items:
+        errors.append("Add at least one invoice item.")
+
+    return items, subtotal, errors
+
+
+def _build_final_invoice_form_context(
+    *,
+    invoice=None,
+    post_data=None,
+    title,
+    initial_transaction_id="",
+    initial_proforma_id="",
+):
+    transactions = _transactions_with_lock_status(
+        Transaction.objects.select_related("customer").order_by("-created_at")
+    )
+
+    if post_data is not None:
+        line_items = []
+        descs = post_data.getlist("item_desc[]")
+        qtys = post_data.getlist("item_qty[]")
+        unit_prices = post_data.getlist("item_unit_price[]")
+        for desc, qty, unit_price in zip(descs, qtys, unit_prices):
+            if not any(
+                [(desc or "").strip(), (qty or "").strip(), (unit_price or "").strip()]
+            ):
+                continue
+            line_items.append(
+                {
+                    "description": desc,
+                    "quantity": qty or "1",
+                    "unit_price": unit_price or "0",
+                }
+            )
+        if not line_items:
+            line_items = [{"description": "", "quantity": "1", "unit_price": "0"}]
+
+        form_values = {
+            "transaction_id": post_data.get("transaction", ""),
+            "proforma_id": post_data.get("proforma", ""),
+            "sourcing_fee": post_data.get("sourcing_fee", "0"),
+            "shipping_cost": post_data.get("shipping_cost", "0"),
+            "service_fee": post_data.get("service_fee", "0"),
+            "currency": post_data.get("currency", "USD"),
+            "shipping_mode": post_data.get("shipping_mode", "SEA"),
+            "route": post_data.get("route", "China-Mombasa-Kampala"),
+            "is_confirmed": bool(post_data.get("is_confirmed")),
+        }
+    elif invoice is not None:
+        line_items = invoice.items or []
+        if not line_items:
+            line_items = [{"description": "", "quantity": "1", "unit_price": "0"}]
+        form_values = {
+            "transaction_id": str(invoice.transaction_id),
+            "proforma_id": str(invoice.proforma_id or ""),
+            "sourcing_fee": invoice.sourcing_fee,
+            "shipping_cost": invoice.shipping_cost,
+            "service_fee": invoice.service_fee,
+            "currency": invoice.currency,
+            "shipping_mode": invoice.shipping_mode,
+            "route": invoice.route,
+            "is_confirmed": invoice.is_confirmed,
+        }
+    else:
+        line_items = [{"description": "", "quantity": "1", "unit_price": "0"}]
+        form_values = {
+            "transaction_id": str(initial_transaction_id or ""),
+            "proforma_id": str(initial_proforma_id or ""),
+            "sourcing_fee": "0",
+            "shipping_cost": "0",
+            "service_fee": "0",
+            "currency": "USD",
+            "shipping_mode": "SEA",
+            "route": "China-Mombasa-Kampala",
+            "is_confirmed": False,
+        }
+
+    selected_transaction_id = form_values.get("transaction_id")
+    selected_proforma_id = form_values.get("proforma_id")
+    selected_transaction = None
+    selected_proforma = None
+    if selected_transaction_id:
+        selected_transaction = (
+            Transaction.objects.filter(pk=selected_transaction_id)
+            .select_related("source_loading")
+            .first()
+        )
+    if selected_proforma_id:
+        selected_proforma = (
+            ProformaInvoice.objects.filter(pk=selected_proforma_id)
+            .select_related("transaction__customer", "loading")
+            .first()
+        )
+    is_freight_invoice = bool(
+        (invoice and invoice.loading_id)
+        or (selected_transaction and selected_transaction.source_loading_id)
+    )
+
+    return {
+        "invoice": invoice,
+        "title": title,
+        "transactions": transactions,
+        "line_items": line_items,
+        "form_values": form_values,
+        "selected_proforma": selected_proforma,
+        "is_freight_invoice": is_freight_invoice,
+        "closed_trade_edit": bool(
+            selected_transaction and _trade_documents_locked(selected_transaction)
+        ),
+        "shipping_mode_choices": FinalInvoice.SHIPPING_MODE_CHOICES,
+    }
+
+
+@login_required
+def proforma_pdf(request, pk):
+    proforma = get_object_or_404(
+        ProformaInvoice.objects.select_related(
+            "transaction__customer", "created_by", "loading"
+        ),
+        pk=pk,
+    )
+    preview_url = reverse(
+        _proforma_route_name(proforma, "html_preview"), kwargs={"pk": proforma.pk}
+    )
+    return redirect(f"{preview_url}?download=1")
+
+
+@login_required
+@xframe_options_sameorigin
+def proforma_html_preview(request, pk):
+    """Render the proforma standalone template as plain HTML (for iframe embedding)."""
+    proforma = get_object_or_404(
+        ProformaInvoice.objects.select_related(
+            "transaction__customer", "created_by", "loading"
+        ),
+        pk=pk,
+    )
+    document_signature = _document_signature_for(proforma)
+    document_number = display_document_number(proforma, "PI")
+    response = render(
+        request,
+        "logistics/pdf/proforma_standalone.html",
+        {
+            "proforma": proforma,
+            "document_signature": document_signature,
+            "document_number": document_number,
+            "auto_print_pdf": request.GET.get("download") == "1",
+        },
+    )
+    return _prevent_stale_pdf_cache(response)
+
+
+@login_required
+def final_invoice_list(request):
+    lane = _resolve_lane_with_path(request)
+    invoices = _apply_final_invoice_lane(
+        FinalInvoice.objects.select_related(
+            "transaction__customer", "created_by", "loading"
+        ),
+        lane,
+    )
+    page_obj, query_string, page_range = paginate_queryset(request, invoices)
+
+    for inv in page_obj:
+        total_paid = _final_invoice_total_paid(inv)
+        payment_snapshot = _final_invoice_payment_snapshot(inv, total_paid)
+        inv.total_paid_for_display = payment_snapshot["total_paid"]
+        inv.balance_for_display = payment_snapshot["invoice_balance"]
+        inv.can_edit_invoice = total_paid <= 0
+        inv.can_record_payment = payment_snapshot["can_record_payment"]
+        inv.procurement_ready = payment_snapshot["procurement_ready"]
+        inv.payment_status_label = payment_snapshot["invoice_label"]
+        inv.payment_status_class = payment_snapshot["invoice_class"]
+
+    return render(
+        request,
+        "logistics/invoicing/final_list.html",
+        {
+            "invoices": page_obj,
+            "page_obj": page_obj,
+            "query_string": query_string,
+            "page_range": page_range,
+            "active_lane": lane,
+            "active_lane_label": _lane_label(lane),
+            "can_switch_lane": _can_switch_lane(request.user),
+            "can_manage_business_documents": _can_manage_business_documents(
+                request.user
+            ),
+            "can_edit_business_documents": _can_directly_edit_business_documents(
+                request.user
+            ),
+        },
+    )
+
+
+@login_required
+def final_invoice_detail(request, pk):
+    invoice = get_object_or_404(
+        FinalInvoice.objects.select_related(
+            "transaction__customer", "created_by", "loading"
+        ),
+        pk=pk,
+    )
+    canonical = _canonical_route_redirect(
+        request, _final_invoice_route_name(invoice, "detail"), pk=invoice.pk
+    )
+    if canonical:
+        return canonical
+    total_paid = _final_invoice_total_paid(invoice)
+    payment_snapshot = _final_invoice_payment_snapshot(invoice, total_paid)
+    purchase_orders_qs = invoice.transaction.purchase_orders.filter(
+        Q(final_invoice=invoice) | Q(final_invoice__isnull=True)
+    ).select_related("parent_po", "final_invoice")
+    purchase_order = (
+        purchase_orders_qs.filter(parent_po__isnull=True)
+        .order_by("-created_at")
+        .first()
+        or purchase_orders_qs.order_by("-created_at").first()
+    )
+    split_purchase_orders = purchase_orders_qs.filter(parent_po__isnull=False).order_by(
+        "-created_at"
+    )
+    if purchase_order:
+        _decorate_purchase_order_invoice_payment(purchase_order)
+    for split_purchase_order in split_purchase_orders:
+        _decorate_purchase_order_invoice_payment(split_purchase_order)
+
+    total_paid_decimal = total_paid or 0
+    balance = payment_snapshot["invoice_balance"]
+    payment_status_label = payment_snapshot["invoice_label"]
+    payment_status_class = payment_snapshot["invoice_class"]
+    can_edit_invoice = total_paid_decimal <= 0
+
+    is_logistics_invoice = bool(invoice.loading_id)
+    if is_logistics_invoice:
+        purchase_order = None
+        split_purchase_orders = []
+    can_generate_po = (
+        not is_logistics_invoice
+        and payment_snapshot["procurement_ready"]
+        and purchase_order is None
+    )
+    document_signature = _document_signature_for(invoice)
+    return render(
+        request,
+        "logistics/invoicing/final_detail.html",
+        {
+            "invoice": invoice,
+            "total_paid": total_paid,
+            "balance": balance,
+            "payment_status_label": payment_status_label,
+            "payment_status_class": payment_status_class,
+            "can_edit_invoice": can_edit_invoice,
+            "can_record_payment": payment_snapshot["can_record_payment"],
+            "can_record_payment_entry": _can_record_payment_entry(request.user),
+            "purchase_order": purchase_order,
+            "split_purchase_orders": split_purchase_orders,
+            "can_generate_po": can_generate_po,
+            "payment_snapshot": payment_snapshot,
+            "document_signature": document_signature,
+            "is_logistics_invoice": is_logistics_invoice,
+            "can_manage_business_documents": _can_manage_business_documents(
+                request.user
+            ),
+        },
+    )
+
+
+@login_required
+@role_required("PROCUREMENT", "FINANCE", "DIRECTOR", "ADMIN")
+def final_invoice_sign(request, pk):
+    invoice = get_object_or_404(
+        FinalInvoice.objects.select_related("transaction__customer", "loading"),
+        pk=pk,
+    )
+    return _sign_business_document(
+        request,
+        document=invoice,
+        detail_route=_final_invoice_route_name(invoice, "detail"),
+        document_label=f"Final Invoice {display_document_number(invoice, 'FI')}",
+    )
+
+
+@login_required
+@role_required("PROCUREMENT", "OFFICE_ADMIN", "FINANCE", "DIRECTOR", "ADMIN")
+def final_invoice_create(request):
+    if request.method == "POST":
+        from decimal import Decimal, InvalidOperation
+
+        items, subtotal, errors = _build_final_invoice_items(request.POST)
+        transaction_id = (request.POST.get("transaction") or "").strip()
+        proforma_id = (request.POST.get("proforma") or "").strip()
+        sourcing_fee_raw = (request.POST.get("sourcing_fee") or "0").strip()
+        shipping_cost_raw = (request.POST.get("shipping_cost") or "0").strip()
+        service_fee_raw = (request.POST.get("service_fee") or "0").strip()
+        currency = (
+            normalize_text_entry("currency", request.POST.get("currency") or "USD")
+            or "USD"
+        )
+        shipping_mode = (request.POST.get("shipping_mode") or "SEA").strip() or "SEA"
+        route = (
+            normalize_text_entry(
+                "route", request.POST.get("route") or "China-Mombasa-Kampala"
+            )
+            or "China-Mombasa-Kampala"
+        )
+        is_confirmed = bool(request.POST.get("is_confirmed"))
+
+        try:
+            sourcing_fee = Decimal(sourcing_fee_raw or "0")
+            shipping_cost = Decimal(shipping_cost_raw or "0")
+            service_fee = Decimal(service_fee_raw or "0")
+            if sourcing_fee < 0 or shipping_cost < 0 or service_fee < 0:
+                raise InvalidOperation
+        except InvalidOperation:
+            errors.append("Additional charges must be valid non-negative numbers.")
+
+        txn = None
+        proforma = None
+        if not transaction_id:
+            errors.append("Select a transaction.")
+        else:
+            try:
+                txn = Transaction.objects.get(pk=transaction_id)
+            except Transaction.DoesNotExist:
+                errors.append("Transaction not found.")
+
+        if not errors and proforma_id:
+            try:
+                proforma = ProformaInvoice.objects.get(pk=proforma_id)
+            except ProformaInvoice.DoesNotExist:
+                errors.append("Proforma not found.")
+            else:
+                if proforma.transaction_id != txn.pk:
+                    errors.append(
+                        "Selected proforma does not belong to this transaction."
+                    )
+                else:
+                    existing_invoice = _final_invoice_for_proforma(proforma)
+                    if existing_invoice:
+                        messages.info(
+                            request,
+                            f"This proforma already has final invoice {display_document_number(existing_invoice, 'FI')}.",
+                        )
+                        return redirect(
+                            _final_invoice_route_name(existing_invoice, "detail"),
+                            pk=existing_invoice.pk,
+                        )
+
+        if not errors and not proforma:
+            proforma = _unbilled_proforma_for_transaction(txn)
+            if not proforma and txn.proforma_invoices.exists():
+                errors.append(
+                    "Every proforma on this transaction already has a final invoice. Open the existing invoice instead of creating another one."
+                )
+
+        if not errors:
+            locked_response = _locked_trade_document_response(request, txn)
+            if locked_response:
+                return locked_response
+
+        if not errors:
+            invoice = FinalInvoice.objects.create(
+                transaction=txn,
+                loading=getattr(txn, "source_loading", None),
+                proforma=proforma,
+                items=items,
+                subtotal=subtotal,
+                sourcing_fee=sourcing_fee,
+                shipping_cost=shipping_cost,
+                service_fee=service_fee,
+                currency=currency,
+                shipping_mode=shipping_mode,
+                route=route,
+                is_confirmed=is_confirmed,
+                created_by=request.user,
+            )
+            Transaction.objects.filter(pk=invoice.transaction.pk).update(
+                status="FINAL_INVOICE_CREATED"
+            )
+            _notify_roles(
+                title="Final invoice created",
+                message=(
+                    f"Final invoice {display_document_number(invoice, 'FI')} was created for transaction "
+                    f"{invoice.transaction.transaction_id}."
+                ),
+                link=reverse(
+                    _final_invoice_route_name(invoice, "detail"),
+                    kwargs={"pk": invoice.pk},
+                ),
+                category="invoice",
+            )
+            messages.success(request, "Final invoice created")
+            return redirect(_final_invoice_route_name(invoice, "detail"), pk=invoice.pk)
+
+        for error in errors:
+            messages.error(request, error)
+    else:
+        transaction_pk = request.GET.get("transaction", "")
+        proforma_pk = request.GET.get("proforma", "")
+        initial_proforma = None
+        if proforma_pk:
+            initial_proforma = ProformaInvoice.objects.filter(pk=proforma_pk).first()
+            if initial_proforma:
+                existing_invoice = _final_invoice_for_proforma(initial_proforma)
+                if existing_invoice:
+                    messages.info(
+                        request,
+                        f"This proforma already has final invoice {display_document_number(existing_invoice, 'FI')}.",
+                    )
+                    return redirect(
+                        _final_invoice_route_name(existing_invoice, "detail"),
+                        pk=existing_invoice.pk,
+                    )
+                transaction_pk = str(initial_proforma.transaction_id)
+        if transaction_pk:
+            initial_transaction = Transaction.objects.filter(pk=transaction_pk).first()
+            if initial_transaction:
+                locked_response = _locked_trade_document_response(
+                    request, initial_transaction
+                )
+                if locked_response:
+                    return locked_response
+    return render(
+        request,
+        "logistics/invoicing/final_form.html",
+        _build_final_invoice_form_context(
+            post_data=request.POST if request.method == "POST" else None,
+            title="Create Final Invoice",
+            initial_transaction_id=transaction_pk if request.method != "POST" else "",
+            initial_proforma_id=(
+                initial_proforma.pk
+                if request.method != "POST" and initial_proforma
+                else ""
+            ),
+        ),
+    )
+
+
+@login_required
+@role_required("PROCUREMENT", "OFFICE_ADMIN", "FINANCE", "DIRECTOR", "ADMIN")
+def final_invoice_update(request, pk):
+    invoice = get_object_or_404(FinalInvoice, pk=pk)
+    canonical = _canonical_route_redirect(
+        request, _final_invoice_route_name(invoice, "update"), pk=invoice.pk
+    )
+    if canonical and request.method != "POST":
+        return canonical
+    edit_guard = _guard_business_document_edit_permission(
+        request,
+        edit_label=f"final invoice {display_document_number(invoice, 'FI')}",
+        link=reverse(
+            _final_invoice_route_name(invoice, "update"), kwargs={"pk": invoice.pk}
+        ),
+        redirect_url=reverse(
+            _final_invoice_route_name(invoice, "detail"), kwargs={"pk": invoice.pk}
+        ),
+    )
+    if edit_guard:
+        return edit_guard
+    locked_response = _locked_trade_document_response(request, invoice.transaction)
+    if locked_response:
+        return locked_response
+    locked_paid_total = _final_invoice_total_paid(invoice)
+    if locked_paid_total > 0:
+        messages.error(
+            request,
+            "This invoice already has recorded payments and can no longer be edited.",
+        )
+        return redirect(_final_invoice_route_name(invoice, "detail"), pk=invoice.pk)
+
+    if request.method == "POST":
+        from decimal import Decimal, InvalidOperation
+
+        items, subtotal, errors = _build_final_invoice_items(request.POST)
+        transaction_id = (request.POST.get("transaction") or "").strip()
+        sourcing_fee_raw = (request.POST.get("sourcing_fee") or "0").strip()
+        shipping_cost_raw = (request.POST.get("shipping_cost") or "0").strip()
+        service_fee_raw = (request.POST.get("service_fee") or "0").strip()
+        currency = (
+            normalize_text_entry(
+                "currency", request.POST.get("currency") or invoice.currency
+            )
+            or "USD"
+        )
+        shipping_mode = (
+            request.POST.get("shipping_mode") or invoice.shipping_mode
+        ).strip() or "SEA"
+        route = (
+            normalize_text_entry("route", request.POST.get("route") or invoice.route)
+            or "China-Mombasa-Kampala"
+        )
+        is_confirmed = bool(request.POST.get("is_confirmed"))
+
+        try:
+            sourcing_fee = Decimal(sourcing_fee_raw or "0")
+            shipping_cost = Decimal(shipping_cost_raw or "0")
+            service_fee = Decimal(service_fee_raw or "0")
+            if sourcing_fee < 0 or shipping_cost < 0 or service_fee < 0:
+                raise InvalidOperation
+        except InvalidOperation:
+            errors.append("Additional charges must be valid non-negative numbers.")
+
+        txn = None
+        if not transaction_id:
+            errors.append("Select a transaction.")
+        else:
+            try:
+                txn = Transaction.objects.get(pk=transaction_id)
+            except Transaction.DoesNotExist:
+                errors.append("Transaction not found.")
+
+        if not errors:
+            invoice.transaction = txn
+            invoice.items = items
+            invoice.subtotal = subtotal
+            invoice.sourcing_fee = sourcing_fee
+            invoice.shipping_cost = shipping_cost
+            invoice.service_fee = service_fee
+            invoice.currency = currency
+            invoice.shipping_mode = shipping_mode
+            invoice.route = route
+            invoice.is_confirmed = is_confirmed
+            invoice.created_by = request.user
+            try:
+                invoice.save()
+            except ValidationError as exc:
+                if hasattr(exc, "messages"):
+                    errors.extend(exc.messages)
+                else:
+                    errors.append(str(exc))
+            else:
+                messages.success(request, "Final invoice updated")
+                return redirect(
+                    _final_invoice_route_name(invoice, "detail"), pk=invoice.pk
+                )
+
+        for error in errors:
+            messages.error(request, error)
+    return render(
+        request,
+        "logistics/invoicing/final_form.html",
+        _build_final_invoice_form_context(
+            invoice=invoice,
+            post_data=request.POST if request.method == "POST" else None,
+            title="Update Final Invoice",
+        ),
+    )
+
+
+@login_required
+@xframe_options_sameorigin
+def final_invoice_html_preview(request, pk):
+    invoice = get_object_or_404(
+        FinalInvoice.objects.select_related(
+            "transaction__customer", "created_by", "loading"
+        ),
+        pk=pk,
+    )
+    canonical = _canonical_route_redirect(
+        request, _final_invoice_route_name(invoice, "html_preview"), pk=invoice.pk
+    )
+    if canonical:
+        return canonical
+    total_paid = _final_invoice_total_paid(invoice) or 0
+    balance = max((invoice.total_amount or 0) - total_paid, 0)
+    if total_paid > 0 and balance <= 0:
+        payment_status_label = "Paid"
+        payment_status_class = "bg-success"
+    elif total_paid > 0:
+        payment_status_label = "Partial Payment"
+        payment_status_class = "bg-warning text-dark"
+    else:
+        payment_status_label = "Unpaid"
+        payment_status_class = "bg-secondary"
+    response = render(
+        request,
+        "logistics/pdf/final_invoice_standalone.html",
+        {
+            "invoice": invoice,
+            "document_number": display_document_number(invoice, "FI"),
+            "total_paid": total_paid,
+            "balance": balance,
+            "payment_status_label": payment_status_label,
+            "payment_status_class": payment_status_class,
+            "document_signature": _document_signature_for(invoice),
+            "auto_print_pdf": request.GET.get("download") == "1",
+        },
+    )
+    _prevent_stale_pdf_cache(response)
+    return response
+
+
+@login_required
+def final_invoice_pdf(request, pk):
+    invoice = get_object_or_404(
+        FinalInvoice.objects.select_related("transaction__customer", "created_by"),
+        pk=pk,
+    )
+    preview_url = reverse(
+        _final_invoice_route_name(invoice, "html_preview"), kwargs={"pk": invoice.pk}
+    )
+    return redirect(f"{preview_url}?download=1")
+
+
+def _ensure_purchase_order_for_transaction(transaction, user, invoice=None):
+    """Create a base purchase order from an invoice whose item funds are covered."""
+    if invoice is None:
+        invoice = transaction.final_invoices.order_by(
+            "-is_confirmed", "-created_at"
+        ).first()
+    existing = (
+        transaction.purchase_orders.filter(
+            parent_po__isnull=True,
+            final_invoice=invoice,
+        )
+        .order_by("-created_at")
+        .first()
+    )
+    if existing:
+        return existing, False
+
+    proforma = transaction.proforma_invoices.order_by("-created_at").first()
+    if not invoice:
+        return None, False
+
+    purchase_order = PurchaseOrder.objects.create(
+        transaction=transaction,
+        proforma=proforma,
+        final_invoice=invoice,
+        supplier_name=(proforma.supplier_name if proforma else "Supplier Pending"),
+        supplier_address=(proforma.supplier_address if proforma else ""),
+        items=invoice.items,
+        subtotal=invoice.subtotal,
+        notes="Base purchase order generated from final invoice with item funds covered.",
+        created_by=user,
+    )
+    return purchase_order, True
+
+
+@login_required
+@role_required("PROCUREMENT", "OFFICE_ADMIN", "FINANCE", "DIRECTOR", "ADMIN")
+def final_invoice_generate_purchase_order(request, pk):
+    """Generate a base purchase order once invoice item funds are covered."""
+    invoice = get_object_or_404(
+        FinalInvoice.objects.select_related(
+            "transaction", "transaction__customer", "loading"
+        ),
+        pk=pk,
+    )
+    canonical = _canonical_route_redirect(
+        request, _final_invoice_route_name(invoice, "generate_po"), pk=invoice.pk
+    )
+    if canonical and request.method != "POST":
+        return canonical
+    if invoice.loading_id:
+        messages.error(
+            request,
+            "Purchase orders are only available in the sourcing / trade flow. Logistics invoices stay in the freight billing flow.",
+        )
+        return redirect(_final_invoice_route_name(invoice, "detail"), pk=invoice.pk)
+    payment_snapshot = _final_invoice_payment_snapshot(invoice)
+    if not payment_snapshot["procurement_ready"]:
+        messages.error(
+            request,
+            "Purchase orders can only be generated from invoices marked Paid or Post Pay. Record enough client payment to cover the item funds first.",
+        )
+        return redirect(_final_invoice_route_name(invoice, "detail"), pk=invoice.pk)
+
+    purchase_order, created = _ensure_purchase_order_for_transaction(
+        invoice.transaction,
+        request.user,
+        invoice=invoice,
+    )
+    if purchase_order and created:
+        messages.success(
+            request,
+            f"Purchase Order {purchase_order.po_number} generated from {display_document_number(invoice, 'FI')}.",
+        )
+    elif purchase_order:
+        messages.info(
+            request,
+            f"Purchase Order {purchase_order.po_number} already exists for {display_document_number(invoice, 'FI')}.",
+        )
+    else:
+        messages.error(request, "Unable to generate purchase order for this invoice.")
+    return redirect(_final_invoice_route_name(invoice, "detail"), pk=invoice.pk)
+
+
+def _parse_purchase_order_items(post_data):
+    """Parse PO line items from request payload into normalized JSON rows."""
+    from decimal import Decimal, InvalidOperation
+
+    descs = post_data.getlist("item_desc[]")
+    qtys = post_data.getlist("item_qty[]")
+    unit_prices = post_data.getlist("item_unit_price[]")
+
+    items = []
+    subtotal = Decimal("0")
+    for desc, qty_raw, unit_price_raw in zip(descs, qtys, unit_prices):
+        description = normalize_text_entry("description", desc or "")
+        if not description:
+            continue
+        try:
+            quantity = Decimal((qty_raw or "1").strip() or "1")
+            unit_price = Decimal((unit_price_raw or "0").strip() or "0")
+        except InvalidOperation:
+            continue
+        if quantity < 0 or unit_price < 0:
+            continue
+        line_total = quantity * unit_price
+        subtotal += line_total
+        items.append(
+            {
+                "description": description,
+                "quantity": str(quantity),
+                "unit_price": float(unit_price),
+                "amount": float(line_total),
+                "total": float(line_total),
+            }
+        )
+
+    return items, subtotal
+
+
+def _decimal_from_value(value, default="0"):
+    from decimal import InvalidOperation
+
+    try:
+        return Decimal(str(value if value not in (None, "") else default))
+    except (InvalidOperation, TypeError, ValueError):
+        return Decimal(default)
+
+
+def _format_decimal_for_json(value):
+    value = Decimal(value).quantize(Decimal("0.01"))
+    return format(value.normalize(), "f") if value != 0 else "0"
+
+
+def _purchase_order_item_quantity(item):
+    return _decimal_from_value((item or {}).get("quantity"), "0")
+
+
+def _purchase_order_item_unit_price(item):
+    item = item or {}
+    for key in ("unit_price", "sales_price"):
+        if item.get(key) not in (None, ""):
+            return _decimal_from_value(item.get(key), "0")
+    amount = item.get("total", item.get("amount"))
+    quantity = _purchase_order_item_quantity(item)
+    if amount not in (None, "") and quantity:
+        return _decimal_from_value(amount, "0") / quantity
+    return _decimal_from_value(amount, "0")
+
+
+def _purchase_order_item_with_quantity(item, quantity, unit_price=None):
+    updated = dict(item or {})
+    quantity = Decimal(quantity).quantize(Decimal("0.01"))
+    unit_price = (
+        Decimal(unit_price).quantize(Decimal("0.01"))
+        if unit_price not in (None, "")
+        else _purchase_order_item_unit_price(item)
+    )
+    line_total = (quantity * unit_price).quantize(Decimal("0.01"))
+    updated["quantity"] = _format_decimal_for_json(quantity)
+    updated["unit_price"] = float(unit_price.quantize(Decimal("0.01")))
+    updated["amount"] = float(line_total)
+    updated["total"] = float(line_total)
+    return updated
+
+
+def _purchase_order_items_subtotal(items):
+    subtotal = Decimal("0.00")
+    for item in items or []:
+        quantity = _purchase_order_item_quantity(item)
+        subtotal += quantity * _purchase_order_item_unit_price(item)
+    return subtotal.quantize(Decimal("0.01"))
+
+
+def _next_split_po_number(base_po):
+    existing_suffixes = []
+    for split in base_po.split_purchase_orders.all():
+        suffix = str(split.po_number or "").replace(f"{base_po.po_number}-SP", "", 1)
+        try:
+            existing_suffixes.append(int(suffix))
+        except (TypeError, ValueError):
+            continue
+    next_suffix = (max(existing_suffixes) if existing_suffixes else 0) + 1
+    return f"{base_po.po_number}-SP{next_suffix}"
+
+
+def _purchase_order_line_split_total(base_po, line_index, exclude_split_pk=None):
+    splits = base_po.split_purchase_orders.filter(original_po_line_index=line_index)
+    if exclude_split_pk:
+        splits = splits.exclude(pk=exclude_split_pk)
+    return splits.aggregate(total=Sum("split_quantity"))["total"] or Decimal("0.00")
+
+
+def _purchase_order_original_line_quantity(base_po, line_index, item):
+    existing_split = (
+        base_po.split_purchase_orders.filter(
+            original_po_line_index=line_index,
+            original_po_line_quantity__isnull=False,
+        )
+        .order_by("created_at")
+        .first()
+    )
+    if existing_split:
+        return existing_split.original_po_line_quantity
+    return _purchase_order_item_quantity(item) + _purchase_order_line_split_total(
+        base_po, line_index
+    )
+
+
+def _is_purchase_order_received_locked(purchase_order):
+    status = (purchase_order.status or "").upper()
+    effective_status = (getattr(purchase_order, "effective_status", "") or "").upper()
+    return status in {"RECEIVED", "FULFILLED"} or effective_status in {
+        "RECEIVED",
+        "FULFILLED",
+    }
+
+
+def _purchase_order_split_line_options(base_po):
+    options = []
+    items = list(base_po.items or [])
+    for line_index, item in enumerate(items):
+        original_quantity = _purchase_order_original_line_quantity(
+            base_po, line_index, item
+        )
+        split_total = _purchase_order_line_split_total(base_po, line_index)
+        remaining_quantity = original_quantity - split_total
+        options.append(
+            {
+                "index": line_index,
+                "number": line_index + 1,
+                "description": item.get("description")
+                or item.get("name")
+                or "Line item",
+                "original_quantity": original_quantity,
+                "split_quantity": split_total,
+                "remaining_quantity": remaining_quantity,
+                "unit_price": _purchase_order_item_unit_price(item),
+                "can_split": original_quantity > Decimal("2.00")
+                and remaining_quantity > 0,
+                "can_move_item": remaining_quantity > 0,
+            }
+        )
+    return options
+
+
+def _purchase_order_split_metadata(line_index, item, original_quantity, split_quantity):
+    return {
+        "index": line_index,
+        "number": line_index + 1,
+        "description": item.get("description") or item.get("name") or "Line item",
+        "original_quantity": _format_decimal_for_json(original_quantity),
+        "split_quantity": _format_decimal_for_json(split_quantity),
+        "unit_price": _format_decimal_for_json(_purchase_order_item_unit_price(item)),
+    }
+
+
+def _remove_purchase_order_items(base_po, line_indices):
+    selected_indices = set(line_indices)
+    remaining_items = [
+        item
+        for line_index, item in enumerate(list(base_po.items or []))
+        if line_index not in selected_indices
+    ]
+    base_po.items = remaining_items
+    base_po.subtotal = _purchase_order_items_subtotal(remaining_items)
+    base_po.save(update_fields=["items", "subtotal", "updated_at"])
+
+
+def _parse_selected_po_line_indices(post_data):
+    indices = []
+    for raw_index in post_data.getlist("selected_line_indices"):
+        try:
+            line_index = int(str(raw_index).strip())
+        except (TypeError, ValueError):
+            continue
+        if line_index not in indices:
+            indices.append(line_index)
+    return indices
+
+
+def _validate_purchase_order_item_split(base_po, line_indices):
+    items = list(base_po.items or [])
+    active_indices = [
+        line_index
+        for line_index, item in enumerate(items)
+        if _purchase_order_item_quantity(item) > 0
+    ]
+    errors = []
+    if not line_indices:
+        errors.append("Select at least one PO item line to move into the split PO.")
+        return [], errors
+    invalid_indices = [
+        line_index
+        for line_index in line_indices
+        if line_index < 0
+        or line_index >= len(items)
+        or _purchase_order_item_quantity(items[line_index]) <= 0
+    ]
+    if invalid_indices:
+        errors.append(
+            "One or more selected PO item lines are no longer available to split."
+        )
+    if len(set(line_indices)) >= len(active_indices):
+        errors.append(
+            "A whole-item split must leave at least one item line on the main PO."
+        )
+    if errors:
+        return [], errors
+
+    selected_lines = []
+    for line_index in line_indices:
+        item = items[line_index]
+        quantity = _purchase_order_item_quantity(item)
+        selected_lines.append((line_index, item, quantity))
+    return selected_lines, []
+
+
+def _validate_purchase_order_split_quantity(
+    base_po, line_index, split_quantity, *, exclude_split_pk=None
+):
+    items = list(base_po.items or [])
+    if line_index is None or line_index < 0 or line_index >= len(items):
+        return None, ["Select a valid PO line to split."]
+    item = items[line_index]
+    original_quantity = _purchase_order_original_line_quantity(
+        base_po, line_index, item
+    )
+    other_split_total = _purchase_order_line_split_total(
+        base_po, line_index, exclude_split_pk=exclude_split_pk
+    )
+    remaining_after_split = original_quantity - other_split_total - split_quantity
+    errors = []
+    if original_quantity <= Decimal("2.00"):
+        errors.append(
+            "PO lines can only be split when the original quantity is greater than 2."
+        )
+    if split_quantity <= 0:
+        errors.append("Split quantity must be greater than zero.")
+    if remaining_after_split <= 0:
+        errors.append(
+            "Split quantity cannot consume the entire PO line; the main PO must keep a remaining balance."
+        )
+    return item, errors
+
+
+def _sync_purchase_order_split_line(base_po, line_index):
+    items = list(base_po.items or [])
+    if line_index is None or line_index < 0 or line_index >= len(items):
+        return
+    item = items[line_index]
+    original_quantity = _purchase_order_original_line_quantity(
+        base_po, line_index, item
+    )
+    split_total = _purchase_order_line_split_total(base_po, line_index)
+    remaining_quantity = max(original_quantity - split_total, Decimal("0.00"))
+    items[line_index] = _purchase_order_item_with_quantity(item, remaining_quantity)
+    base_po.items = items
+    base_po.subtotal = _purchase_order_items_subtotal(items)
+    base_po.save(update_fields=["items", "subtotal", "updated_at"])
+
+
+def _decorate_purchase_order_line_quantities(purchase_order):
+    base_po = purchase_order.root_po
+    if purchase_order.is_split:
+        if purchase_order.split_mode == "ITEMS" and purchase_order.split_lines:
+            purchase_order.line_quantity_summary = [
+                {
+                    "number": line.get("number", 0),
+                    "description": line.get("description", "Line item"),
+                    "original_quantity": line.get("original_quantity"),
+                    "split_quantity": line.get("split_quantity"),
+                    "remaining_quantity": None,
+                    "can_split": False,
+                }
+                for line in purchase_order.split_lines
+            ]
+            return purchase_order
+        purchase_order.line_quantity_summary = [
+            {
+                "number": (purchase_order.original_po_line_index or 0) + 1,
+                "description": (
+                    (purchase_order.items or [{}])[0].get("description", "Line item")
+                    if purchase_order.items
+                    else "Line item"
+                ),
+                "original_quantity": purchase_order.original_po_line_quantity,
+                "split_quantity": purchase_order.split_quantity,
+                "remaining_quantity": None,
+                "can_split": False,
+            }
+        ]
+        return purchase_order
+    purchase_order.line_quantity_summary = _purchase_order_split_line_options(base_po)
+    return purchase_order
+
+
+@login_required
+@role_required("PROCUREMENT", "OFFICE_ADMIN", "FINANCE", "DIRECTOR", "ADMIN")
+def purchase_order_split_create(request, pk):
+    """Create a supplier split purchase order for one source PO line."""
+    purchase_order = get_object_or_404(
+        PurchaseOrder.objects.select_related(
+            "transaction",
+            "transaction__customer",
+            "proforma",
+            "final_invoice",
+            "parent_po",
+        ),
+        pk=pk,
+    )
+    base_po = purchase_order.root_po
+    _decorate_purchase_order_status(base_po)
+    _decorate_purchase_order_edit_lock(base_po)
+    _decorate_purchase_order_line_quantities(base_po)
+    if base_po.edit_locked:
+        messages.error(request, base_po.edit_lock_message)
+        return redirect("purchase_order_detail", pk=base_po.pk)
+    if _is_purchase_order_received_locked(base_po):
+        messages.warning(
+            request,
+            "This purchase order has already been received/fulfilled; split operations are blocked.",
+        )
+        return redirect("purchase_order_detail", pk=base_po.pk)
+    if purchase_order.is_split:
+        messages.warning(
+            request, "Open the main purchase order before creating another line split."
+        )
+        return redirect("purchase_order_detail", pk=base_po.pk)
+    if purchase_order.transaction.is_closed:
+        messages.error(
+            request, "This trade is closed; purchase orders cannot be split."
+        )
+        return redirect("purchase_order_detail", pk=base_po.pk)
+
+    _decorate_purchase_order_invoice_payment(base_po)
+    invoice = (
+        base_po.final_invoice
+        or purchase_order.transaction.final_invoices.order_by(
+            "-is_confirmed", "-created_at"
+        ).first()
+    )
+    suppliers = Supplier.objects.all().order_by("name")
+    line_options = _purchase_order_split_line_options(base_po)
+    split_mode = "QUANTITY"
+
+    if request.method == "POST":
+        split_mode = (request.POST.get("split_mode") or "QUANTITY").strip().upper()
+        if split_mode not in {"ITEMS", "QUANTITY"}:
+            split_mode = "QUANTITY"
+        supplier_id = (request.POST.get("supplier_id") or "").strip()
+        manual_supplier_name = normalize_text_entry(
+            "supplier_name", request.POST.get("supplier_name") or ""
+        )
+        manual_supplier_address = normalize_text_entry(
+            "supplier_address", request.POST.get("supplier_address") or ""
+        )
+        split_notes = (request.POST.get("notes") or "").strip()
+        try:
+            line_index = int((request.POST.get("line_index") or "-1").strip() or "-1")
+        except ValueError:
+            line_index = -1
+        split_quantity = _decimal_from_value(request.POST.get("split_quantity"), "0")
+
+        supplier_name = ""
+        supplier_address = ""
+        if supplier_id:
+            supplier = get_object_or_404(Supplier, pk=supplier_id)
+            supplier_name = supplier.name
+            supplier_address = supplier.address or ""
+        elif manual_supplier_name:
+            supplier_name = manual_supplier_name
+            supplier_address = manual_supplier_address
+        else:
+            messages.error(
+                request,
+                "Select a supplier or provide supplier name manually to create a split purchase order.",
+            )
+            return render(
+                request,
+                "logistics/invoicing/purchase_order_split_form.html",
+                {
+                    "purchase_order": purchase_order,
+                    "base_po": base_po,
+                    "invoice": invoice,
+                    "suppliers": suppliers,
+                    "line_options": line_options,
+                    "split_mode": split_mode,
+                },
+            )
+
+        if split_mode == "ITEMS":
+            selected_line_indices = _parse_selected_po_line_indices(request.POST)
+            selected_lines, errors = _validate_purchase_order_item_split(
+                base_po, selected_line_indices
+            )
+            if not errors:
+                split_items = []
+                split_lines = []
+                for selected_index, selected_item, selected_quantity in selected_lines:
+                    supplier_unit_price = _decimal_from_value(
+                        request.POST.get(f"line_unit_price_{selected_index}"),
+                        str(_purchase_order_item_unit_price(selected_item)),
+                    )
+                    split_items.append(
+                        _purchase_order_item_with_quantity(
+                            selected_item, selected_quantity, supplier_unit_price
+                        )
+                    )
+                    split_lines.append(
+                        _purchase_order_split_metadata(
+                            selected_index,
+                            selected_item,
+                            selected_quantity,
+                            selected_quantity,
+                        )
+                    )
+                split_subtotal = _purchase_order_items_subtotal(split_items)
+                first_index, first_item, first_quantity = selected_lines[0]
+                with transaction.atomic():
+                    split_po = PurchaseOrder.objects.create(
+                        po_number=_next_split_po_number(base_po),
+                        transaction=base_po.transaction,
+                        proforma=base_po.proforma,
+                        final_invoice=invoice,
+                        parent_po=base_po,
+                        original_po_line_index=first_index,
+                        original_po_line_snapshot=first_item,
+                        original_po_line_quantity=first_quantity,
+                        split_quantity=sum(
+                            (line_quantity for _, _, line_quantity in selected_lines),
+                            Decimal("0.00"),
+                        ),
+                        split_mode="ITEMS",
+                        split_lines=split_lines,
+                        supplier_name=supplier_name,
+                        supplier_address=supplier_address,
+                        items=split_items,
+                        subtotal=split_subtotal,
+                        notes=split_notes
+                        or f"Independent supplier PO split from original PO {base_po.po_number}.",
+                        created_by=request.user,
+                    )
+                    _remove_purchase_order_items(base_po, selected_line_indices)
+                messages.success(
+                    request,
+                    f"Independent supplier PO {split_po.po_number} created from {base_po.po_number}.",
+                )
+                return redirect("purchase_order_detail", pk=split_po.pk)
+        else:
+            source_item, errors = _validate_purchase_order_split_quantity(
+                base_po, line_index, split_quantity
+            )
+            if not errors:
+                original_quantity = _purchase_order_original_line_quantity(
+                    base_po, line_index, source_item
+                )
+                split_item = _purchase_order_item_with_quantity(
+                    source_item,
+                    split_quantity,
+                    _decimal_from_value(
+                        request.POST.get("split_unit_price"),
+                        str(_purchase_order_item_unit_price(source_item)),
+                    ),
+                )
+                split_subtotal = _purchase_order_items_subtotal([split_item])
+                split_lines = [
+                    _purchase_order_split_metadata(
+                        line_index, source_item, original_quantity, split_quantity
+                    )
+                ]
+                with transaction.atomic():
+                    split_po = PurchaseOrder.objects.create(
+                        po_number=_next_split_po_number(base_po),
+                        transaction=base_po.transaction,
+                        proforma=base_po.proforma,
+                        final_invoice=invoice,
+                        parent_po=base_po,
+                        original_po_line_index=line_index,
+                        original_po_line_snapshot=source_item,
+                        original_po_line_quantity=original_quantity,
+                        split_quantity=split_quantity,
+                        split_mode="QUANTITY",
+                        split_lines=split_lines,
+                        supplier_name=supplier_name,
+                        supplier_address=supplier_address,
+                        items=[split_item],
+                        subtotal=split_subtotal,
+                        notes=split_notes
+                        or f"Independent supplier PO split from original PO {base_po.po_number}.",
+                        created_by=request.user,
+                    )
+                    _sync_purchase_order_split_line(base_po, line_index)
+                messages.success(
+                    request,
+                    f"Independent supplier PO {split_po.po_number} created from {base_po.po_number}.",
+                )
+                return redirect("purchase_order_detail", pk=split_po.pk)
+
+        if errors:
+            for error in errors:
+                messages.error(request, error)
+            return render(
+                request,
+                "logistics/invoicing/purchase_order_split_form.html",
+                {
+                    "purchase_order": purchase_order,
+                    "base_po": base_po,
+                    "invoice": invoice,
+                    "suppliers": suppliers,
+                    "line_options": line_options,
+                    "split_mode": split_mode,
+                },
+            )
+
+    return render(
+        request,
+        "logistics/invoicing/purchase_order_split_form.html",
+        {
+            "purchase_order": purchase_order,
+            "base_po": base_po,
+            "invoice": invoice,
+            "suppliers": suppliers,
+            "line_options": line_options,
+            "split_mode": split_mode,
+        },
+    )
+
+
+@login_required
+@role_required("PROCUREMENT", "OFFICE_ADMIN", "FINANCE", "DIRECTOR", "ADMIN")
+def purchase_order_split_quantity_update(request, pk):
+    split_po = get_object_or_404(
+        PurchaseOrder.objects.select_related(
+            "transaction__customer",
+            "created_by",
+            "parent_po",
+            "final_invoice",
+            "proforma",
+        ),
+        pk=pk,
+        parent_po__isnull=False,
+    )
+    base_po = split_po.root_po
+    _decorate_purchase_order_status(base_po)
+    _decorate_purchase_order_status(split_po)
+    _decorate_purchase_order_edit_lock(base_po)
+    _decorate_purchase_order_edit_lock(split_po)
+    if split_po.split_mode == "ITEMS":
+        messages.info(
+            request,
+            "This split PO was created by moving whole item lines, so its quantities are fixed from the selected items.",
+        )
+        return redirect("purchase_order_detail", pk=split_po.pk)
+    if base_po.transaction.is_closed:
+        messages.error(
+            request, "This trade is closed; split quantities cannot be edited."
+        )
+        return redirect("purchase_order_detail", pk=split_po.pk)
+    if _is_purchase_order_received_locked(
+        base_po
+    ) or _is_purchase_order_received_locked(split_po):
+        messages.error(
+            request,
+            "This purchase order has been received/fulfilled; split quantity edits are blocked.",
+        )
+        return redirect("purchase_order_detail", pk=split_po.pk)
+
+    if request.method == "POST":
+        split_quantity = _decimal_from_value(request.POST.get("split_quantity"), "0")
+        line_index = split_po.original_po_line_index
+        source_item, errors = _validate_purchase_order_split_quantity(
+            base_po,
+            line_index,
+            split_quantity,
+            exclude_split_pk=split_po.pk,
+        )
+        if not errors:
+            original_quantity = _purchase_order_original_line_quantity(
+                base_po, line_index, source_item
+            )
+            split_item = _purchase_order_item_with_quantity(source_item, split_quantity)
+            with transaction.atomic():
+                split_po.original_po_line_quantity = original_quantity
+                split_po.split_quantity = split_quantity
+                split_po.items = [split_item]
+                split_po.subtotal = _purchase_order_items_subtotal([split_item])
+                split_po.split_mode = "QUANTITY"
+                split_po.split_lines = [
+                    _purchase_order_split_metadata(
+                        line_index,
+                        source_item,
+                        original_quantity,
+                        split_quantity,
+                    )
+                ]
+                split_po.save(
+                    update_fields=[
+                        "original_po_line_quantity",
+                        "split_quantity",
+                        "split_mode",
+                        "split_lines",
+                        "items",
+                        "subtotal",
+                        "updated_at",
+                    ]
+                )
+                _sync_purchase_order_split_line(base_po, line_index)
+            messages.success(
+                request,
+                "Split quantity updated and the main PO balance was recalculated.",
+            )
+            return redirect("purchase_order_detail", pk=split_po.pk)
+        for error in errors:
+            messages.error(request, error)
+
+    return render(
+        request,
+        "logistics/invoicing/purchase_order_split_form.html",
+        {
+            "purchase_order": split_po,
+            "base_po": base_po,
+            "invoice": split_po.final_invoice,
+            "suppliers": Supplier.objects.none(),
+            "line_options": _purchase_order_split_line_options(base_po),
+            "split_po": split_po,
+            "is_split_quantity_edit": True,
+        },
+    )
+
+
+@login_required
+def purchase_order_list(request):
+    search = (request.GET.get("search") or "").strip()
+    status_filter = (request.GET.get("status") or "").strip().upper()
+    type_filter = (request.GET.get("type") or "").strip().lower()
+    lock_filter = (request.GET.get("lock") or "").strip().lower()
+
+    purchase_orders = PurchaseOrder.objects.select_related(
+        "transaction__customer", "created_by", "parent_po", "final_invoice"
+    )
+    if search:
+        po_search_q = (
+            Q(po_number__icontains=search)
+            | Q(transaction__transaction_id__icontains=search)
+            | Q(transaction__customer__name__icontains=search)
+            | Q(supplier_name__icontains=search)
+        )
+        if search.isdigit():
+            po_search_q |= Q(final_invoice_id=int(search))
+        purchase_orders = purchase_orders.filter(po_search_q)
+    if type_filter == "base":
+        purchase_orders = purchase_orders.filter(parent_po__isnull=True)
+    elif type_filter == "split":
+        purchase_orders = purchase_orders.filter(parent_po__isnull=False)
+
+    decorated_purchase_orders = list(purchase_orders)
+    for purchase_order in decorated_purchase_orders:
+        _decorate_purchase_order_status(purchase_order)
+        _decorate_purchase_order_invoice_payment(purchase_order)
+        _decorate_purchase_order_edit_lock(purchase_order)
+        _decorate_purchase_order_line_quantities(purchase_order)
+        _decorate_purchase_order_supplier_payment(purchase_order, request.user)
+
+    valid_statuses = {choice[0] for choice in PurchaseOrder.STATUS_CHOICES}
+    if status_filter in valid_statuses:
+        decorated_purchase_orders = [
+            purchase_order
+            for purchase_order in decorated_purchase_orders
+            if purchase_order.effective_status == status_filter
+        ]
+    if lock_filter == "locked":
+        decorated_purchase_orders = [
+            purchase_order
+            for purchase_order in decorated_purchase_orders
+            if purchase_order.edit_locked
+        ]
+    elif lock_filter == "open":
+        decorated_purchase_orders = [
+            purchase_order
+            for purchase_order in decorated_purchase_orders
+            if not purchase_order.edit_locked
+        ]
+
+    summary = {
+        "total": len(decorated_purchase_orders),
+        "base": sum(
+            1
+            for purchase_order in decorated_purchase_orders
+            if not purchase_order.parent_po_id
+        ),
+        "split": sum(
+            1
+            for purchase_order in decorated_purchase_orders
+            if purchase_order.parent_po_id
+        ),
+        "locked": sum(
+            1
+            for purchase_order in decorated_purchase_orders
+            if purchase_order.edit_locked
+        ),
+        "fulfilled": sum(
+            1
+            for purchase_order in decorated_purchase_orders
+            if purchase_order.effective_status == "FULFILLED"
+        ),
+    }
+
+    page_obj, query_string, page_range = paginate_queryset(
+        request, decorated_purchase_orders
+    )
+    return render(
+        request,
+        "logistics/invoicing/purchase_order_list.html",
+        {
+            "purchase_orders": page_obj,
+            "page_obj": page_obj,
+            "query_string": query_string,
+            "page_range": page_range,
+            "search": search,
+            "status_filter": status_filter,
+            "type_filter": type_filter,
+            "lock_filter": lock_filter,
+            "summary": summary,
+            "status_choices": PurchaseOrder.STATUS_CHOICES,
+            "can_manage_business_documents": _can_manage_business_documents(
+                request.user
+            ),
+            "can_edit_business_documents": _can_directly_edit_business_documents(
+                request.user
+            ),
+        },
+    )
+
+
+@login_required
+@role_required("PROCUREMENT", "OFFICE_ADMIN", "FINANCE", "DIRECTOR", "ADMIN")
+def purchase_order_update(request, pk):
+    """Edit a base or split PO so each supplier version can be tailored independently."""
+    purchase_order = get_object_or_404(
+        PurchaseOrder.objects.select_related(
+            "transaction__customer",
+            "created_by",
+            "parent_po",
+            "final_invoice",
+            "proforma",
+        ),
+        pk=pk,
+    )
+    _decorate_purchase_order_status(purchase_order)
+    _decorate_purchase_order_edit_lock(purchase_order)
+    if purchase_order.is_split:
+        if purchase_order.split_mode == "ITEMS":
+            messages.info(
+                request,
+                "Whole-item split purchase orders keep the selected item lines fixed. Open the main PO to create another split.",
+            )
+            return redirect("purchase_order_detail", pk=purchase_order.pk)
+        messages.info(
+            request,
+            "Split purchase orders only allow split quantity changes; supplier and line editing stays locked to the source PO line.",
+        )
+        return redirect("purchase_order_split_quantity_update", pk=purchase_order.pk)
+    edit_guard = _guard_purchase_order_edit_permission(request, purchase_order)
+    if edit_guard:
+        return edit_guard
+    if purchase_order.edit_locked:
+        messages.error(request, purchase_order.edit_lock_message)
+        return redirect("purchase_order_detail", pk=purchase_order.pk)
+
+    suppliers = Supplier.objects.all().order_by("name")
+
+    if request.method == "POST":
+        supplier_id = (request.POST.get("supplier_id") or "").strip()
+        supplier_name = normalize_text_entry(
+            "supplier_name", request.POST.get("supplier_name") or ""
+        )
+        supplier_address = normalize_text_entry(
+            "supplier_address", request.POST.get("supplier_address") or ""
+        )
+        notes = (request.POST.get("notes") or "").strip()
+        status = (request.POST.get("status") or "PENDING").strip().upper()
+
+        if supplier_id:
+            supplier = get_object_or_404(Supplier, pk=supplier_id)
+            supplier_name = supplier.name
+            supplier_address = supplier.address or ""
+
+        if not supplier_name:
+            messages.error(request, "Supplier name is required.")
+            return render(
+                request,
+                "logistics/invoicing/purchase_order_form.html",
+                {
+                    "purchase_order": purchase_order,
+                    "suppliers": suppliers,
+                    "title": f"Edit Purchase Order {purchase_order.po_number}",
+                },
+            )
+
+        items, subtotal = _parse_purchase_order_items(request.POST)
+        if not items:
+            messages.error(request, "Add at least one valid line item for this PO.")
+            return render(
+                request,
+                "logistics/invoicing/purchase_order_form.html",
+                {
+                    "purchase_order": purchase_order,
+                    "suppliers": suppliers,
+                    "title": f"Edit Purchase Order {purchase_order.po_number}",
+                },
+            )
+
+        valid_statuses = {choice[0] for choice in PurchaseOrder.STATUS_CHOICES}
+        if status not in valid_statuses:
+            status = purchase_order.status
+
+        purchase_order.supplier_name = supplier_name
+        purchase_order.supplier_address = supplier_address
+        purchase_order.items = items
+        purchase_order.subtotal = subtotal
+        purchase_order.notes = notes
+        purchase_order.status = status
+        purchase_order.save(
+            update_fields=[
+                "supplier_name",
+                "supplier_address",
+                "items",
+                "subtotal",
+                "notes",
+                "status",
+                "updated_at",
+            ]
+        )
+        messages.success(
+            request,
+            f"Purchase Order {purchase_order.po_number} updated for supplier dispatch.",
+        )
+        return redirect("purchase_order_detail", pk=purchase_order.pk)
+
+    return render(
+        request,
+        "logistics/invoicing/purchase_order_form.html",
+        {
+            "purchase_order": purchase_order,
+            "suppliers": suppliers,
+            "title": f"Edit Purchase Order {purchase_order.po_number}",
+        },
+    )
+
+
+@login_required
+def purchase_order_detail(request, pk):
+    purchase_order = get_object_or_404(_purchase_order_document_queryset(), pk=pk)
+    return render(
+        request,
+        "logistics/invoicing/purchase_order_detail.html",
+        _purchase_order_display_context(purchase_order, request.user),
+    )
+
+
+def _purchase_order_document_queryset():
+    return PurchaseOrder.objects.select_related(
+        "transaction__customer",
+        "created_by",
+        "parent_po",
+        "final_invoice",
+    )
+
+
+def _purchase_order_display_context(purchase_order, user):
+    _decorate_purchase_order_status(purchase_order)
+    _decorate_purchase_order_invoice_payment(purchase_order)
+    _decorate_purchase_order_edit_lock(purchase_order)
+    _decorate_purchase_order_line_quantities(purchase_order)
+    base_po = purchase_order.root_po
+    sibling_splits = base_po.split_purchase_orders.select_related(
+        "created_by", "final_invoice"
+    ).order_by("-created_at")
+    has_supplier_splits = sibling_splits.exists()
+    for split_purchase_order in sibling_splits:
+        _decorate_purchase_order_status(split_purchase_order)
+        _decorate_purchase_order_invoice_payment(split_purchase_order)
+        _decorate_purchase_order_edit_lock(split_purchase_order)
+        _decorate_purchase_order_line_quantities(split_purchase_order)
+    can_start_invoice_fulfillment = getattr(
+        purchase_order, "can_start_invoice_fulfillment", False
+    )
+    _decorate_purchase_order_supplier_payment(
+        purchase_order, user, has_supplier_splits=has_supplier_splits
+    )
+    can_split_purchase_order = (
+        not purchase_order.is_split
+        and not purchase_order.transaction.is_closed
+        and not purchase_order.edit_locked
+        and not _is_purchase_order_received_locked(purchase_order)
+        and (
+            any(line["can_split"] for line in purchase_order.line_quantity_summary)
+            or sum(
+                1
+                for line in purchase_order.line_quantity_summary
+                if line["can_move_item"]
+            )
+            > 1
+        )
+    )
+    return {
+        "purchase_order": purchase_order,
+        "base_po": base_po,
+        "sibling_splits": sibling_splits,
+        "can_start_invoice_fulfillment": can_start_invoice_fulfillment,
+        "supplier_payments": purchase_order.supplier_payment_records,
+        "supplier_total_paid": purchase_order.supplier_total_paid,
+        "supplier_balance_due": purchase_order.supplier_balance_due,
+        "can_record_supplier_payment": purchase_order.can_record_supplier_payment,
+        "can_request_supplier_payment": purchase_order.can_request_supplier_payment,
+        "can_split_purchase_order": can_split_purchase_order,
+        "can_manage_business_documents": _can_manage_business_documents(user),
+        "can_edit_business_documents": _can_directly_edit_business_documents(user),
+        "can_edit_purchase_orders": _can_directly_edit_purchase_orders(user),
+        "has_supplier_splits": has_supplier_splits,
+        "supplier_payments_include_splits": purchase_order.supplier_payments_include_splits,
+    }
+
+
+@login_required
+@xframe_options_sameorigin
+def purchase_order_html_preview(request, pk):
+    purchase_order = get_object_or_404(_purchase_order_document_queryset(), pk=pk)
+    context = _purchase_order_display_context(purchase_order, request.user)
+    context.update(
+        {
+            "document_number": purchase_order.po_number,
+            "auto_print_pdf": request.GET.get("download") == "1",
+        }
+    )
+    response = render(
+        request,
+        "logistics/pdf/purchase_order_standalone.html",
+        context,
+    )
+    return _prevent_stale_pdf_cache(response)
+
+
+def _render_purchase_order_pdf_bytes(purchase_order):
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        rightMargin=36,
+        leftMargin=36,
+        topMargin=36,
+        bottomMargin=36,
+    )
+    styles = getSampleStyleSheet()
+    title_style = styles["Title"]
+    title_style.fontSize = 18
+    title_style.leading = 22
+    normal = styles["BodyText"]
+    normal.fontSize = 8.5
+    normal.leading = 11
+    small = styles["BodyText"]
+    small.fontSize = 7.5
+    small.leading = 9
+
+    story = []
+    story.append(Paragraph("GMI TERRALINK", title_style))
+    story.append(Paragraph("PURCHASE ORDER", styles["Heading2"]))
+    story.append(Spacer(1, 8))
+
+    detail_rows = [
+        [
+            "PO No.",
+            purchase_order.po_number,
+            "Transaction",
+            purchase_order.transaction.transaction_id,
+        ],
+        [
+            "Supplier",
+            purchase_order.supplier_name or "-",
+            "Customer",
+            purchase_order.transaction.customer.name,
+        ],
+        [
+            "Issue Date",
+            purchase_order.created_at.strftime("%d %b %Y"),
+            "Status",
+            getattr(purchase_order, "effective_status_display", None)
+            or purchase_order.get_status_display(),
+        ],
+    ]
+    if purchase_order.final_invoice:
+        detail_rows.append(
+            [
+                "Invoice",
+                display_document_number(purchase_order.final_invoice, "FI"),
+                "",
+                "",
+            ]
+        )
+    detail_table = Table(detail_rows, colWidths=[70, 170, 70, 170])
+    detail_table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, -1), colors.whitesmoke),
+                ("TEXTCOLOR", (0, 0), (0, -1), colors.HexColor("#8a6d1d")),
+                ("TEXTCOLOR", (2, 0), (2, -1), colors.HexColor("#8a6d1d")),
+                ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
+                ("FONTNAME", (2, 0), (2, -1), "Helvetica-Bold"),
+                ("GRID", (0, 0), (-1, -1), 0.35, colors.lightgrey),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("FONTSIZE", (0, 0), (-1, -1), 8.5),
+                ("LEFTPADDING", (0, 0), (-1, -1), 6),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+                ("TOPPADDING", (0, 0), (-1, -1), 5),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+            ]
+        )
+    )
+    story.append(detail_table)
+    story.append(Spacer(1, 10))
+
+    if purchase_order.supplier_address:
+        story.append(Paragraph("Supplier Address", styles["Heading4"]))
+        story.append(
+            Paragraph(
+                escape(purchase_order.supplier_address).replace("\n", "<br />"), normal
+            )
+        )
+        story.append(Spacer(1, 8))
+
+    item_rows = [["No", "Item Description", "Quantity", "Unit Cost", "Amount"]]
+    for index, item in enumerate(purchase_order.items or [], start=1):
+        description = (
+            item.get("description")
+            or item.get("name")
+            or "Item description not recorded"
+        )
+        quantity = _purchase_order_item_quantity(item)
+        unit_price = _purchase_order_item_unit_price(item)
+        amount = (quantity * unit_price).quantize(Decimal("0.01"))
+        item_rows.append(
+            [
+                str(index),
+                Paragraph(escape(str(description)), normal),
+                _format_decimal_for_json(quantity),
+                f"USD {unit_price:,.2f}",
+                f"USD {amount:,.2f}",
+            ]
+        )
+    if len(item_rows) == 1:
+        item_rows.append(["-", "No line items.", "-", "-", "-"])
+    items_table = Table(item_rows, colWidths=[30, 250, 70, 75, 80], repeatRows=1)
+    items_table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#222222")),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("ALIGN", (0, 0), (0, -1), "CENTER"),
+                ("ALIGN", (2, 1), (-1, -1), "RIGHT"),
+                ("GRID", (0, 0), (-1, -1), 0.35, colors.lightgrey),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("FONTSIZE", (0, 0), (-1, -1), 8.5),
+                ("TOPPADDING", (0, 0), (-1, -1), 6),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+            ]
+        )
+    )
+    story.append(items_table)
+    story.append(Spacer(1, 8))
+
+    total_table = Table(
+        [["PO Subtotal", f"USD {purchase_order.subtotal:,.2f}"]],
+        colWidths=[380, 125],
+    )
+    total_table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#d4af37")),
+                ("FONTNAME", (0, 0), (-1, -1), "Helvetica-Bold"),
+                ("ALIGN", (1, 0), (1, 0), "RIGHT"),
+                ("GRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#8a6d1d")),
+                ("FONTSIZE", (0, 0), (-1, -1), 9),
+                ("TOPPADDING", (0, 0), (-1, -1), 7),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
+            ]
+        )
+    )
+    story.append(total_table)
+    story.append(Spacer(1, 12))
+
+    if purchase_order.notes:
+        story.append(Paragraph("Notes", styles["Heading4"]))
+        story.append(
+            Paragraph(escape(purchase_order.notes).replace("\n", "<br />"), normal)
+        )
+        story.append(Spacer(1, 10))
+
+    story.append(
+        Paragraph(
+            "This purchase order authorises supplier procurement for the listed goods only. Quote the PO number on all supplier correspondence.",
+            small,
+        )
+    )
+    doc.build(story)
+    return buffer.getvalue()
+
+
+@login_required
+def purchase_order_pdf(request, pk):
+    purchase_order = get_object_or_404(_purchase_order_document_queryset(), pk=pk)
+    context = _purchase_order_display_context(purchase_order, request.user)
+    context.update(
+        {
+            "document_number": purchase_order.po_number,
+            "auto_print_pdf": False,
+        }
+    )
+    pdf_bytes = _render_purchase_order_pdf_bytes(purchase_order)
+    response = HttpResponse(pdf_bytes, content_type="application/pdf")
+    response["Content-Disposition"] = (
+        f'inline; filename="{purchase_order.po_number}.pdf"; '
+        f"filename*=UTF-8''{quote(f'{purchase_order.po_number}.pdf')}"
+    )
+    return _prevent_stale_pdf_cache(response)
+
+
+@login_required
+@role_required("PROCUREMENT", "OFFICE_ADMIN", "FINANCE", "DIRECTOR", "ADMIN")
+def purchase_order_correction_request(request, pk):
+    purchase_order = get_object_or_404(
+        PurchaseOrder.objects.select_related(
+            "transaction__customer", "final_invoice", "parent_po"
+        ),
+        pk=pk,
+    )
+    _decorate_purchase_order_status(purchase_order)
+    _decorate_purchase_order_edit_lock(purchase_order)
+    if request.method != "POST":
+        return redirect("purchase_order_detail", pk=purchase_order.pk)
+
+    reason = normalize_text_entry("reason", request.POST.get("reason") or "")
+    correction = normalize_text_entry(
+        "correction", request.POST.get("correction") or ""
+    )
+    affects_money = request.POST.get("affects_money") == "on"
+    if not reason or not correction:
+        messages.error(
+            request,
+            "Provide both the reason and the correction needed before requesting Director approval.",
+        )
+        return redirect("purchase_order_detail", pk=purchase_order.pk)
+
+    money_note = ""
+    if affects_money and purchase_order.final_invoice_id:
+        money_note = (
+            f" Money correction flagged: review linked invoice "
+            f"{display_document_number(purchase_order.final_invoice, 'FI')} so totals stay aligned."
+        )
+    elif affects_money:
+        money_note = " Money correction flagged: confirm whether a linked invoice adjustment is required."
+
+    _notify_roles(
+        title="Locked purchase order correction requested",
+        message=(
+            f"{request.user.get_full_name() or request.user.username} requested a correction "
+            f"for {purchase_order.po_number}. Reason: {reason}. Correction: {correction}."
+            f"{money_note}"
+        ),
+        link=reverse("purchase_order_detail", kwargs={"pk": purchase_order.pk}),
+        category="system",
+        roles=["ADMIN", "DIRECTOR"],
+    )
+    log_audit(
+        "purchase_order",
+        "update",
+        purchase_order.id,
+        f"Correction requested for {purchase_order.po_number}: {reason}",
+        request.user,
+    )
+    messages.success(
+        request,
+        "Correction request sent to the Director with the reason and proposed change.",
+    )
+    return redirect("purchase_order_detail", pk=purchase_order.pk)
+
+
+def _pdf_report_response(filename, title, headers, rows):
+    """Render tabular data into a downloadable PDF report."""
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=landscape(A4),
+        leftMargin=30,
+        rightMargin=30,
+        topMargin=30,
+        bottomMargin=30,
+    )
+    styles = getSampleStyleSheet()
+    elements = []
+    title_style = styles["Title"]
+    title_style.textColor = PDF_BRAND_BLACK
+    elements.append(Paragraph(f"<b>GMI TERRALINK - {title}</b>", title_style))
+    elements.append(Spacer(1, 10))
+
+    header_style = styles["BodyText"].clone("GMIReportHeader")
+    header_style.fontName = "Helvetica-Bold"
+    header_style.fontSize = 6.8
+    header_style.leading = 8
+    header_style.textColor = PDF_BRAND_BLACK
+    body_style = styles["BodyText"].clone("GMIReportCell")
+    body_style.fontName = "Helvetica"
+    body_style.fontSize = 6.4
+    body_style.leading = 7.5
+    body_style.wordWrap = "CJK"
+
+    def cell_paragraph(value, style):
+        if value is None:
+            value = ""
+        text = escape(str(value)).replace("\n", "<br/>")
+        return Paragraph(text, style)
+
+    table_data = [[cell_paragraph(header, header_style) for header in headers]] + [
+        [cell_paragraph(cell, body_style) for cell in row] for row in rows
+    ]
+    col_count = len(headers)
+    page_width = landscape(A4)[0] - 60
+    weights = []
+    for index, header in enumerate(headers):
+        values = [
+            str(row[index] if index < len(row) and row[index] is not None else "")
+            for row in rows[:25]
+        ]
+        sample_length = max([len(str(header))] + [len(value) for value in values])
+        weights.append(max(0.75, min(2.6, sample_length / 12)))
+    total_weight = sum(weights) or 1
+    col_widths = [page_width * (weight / total_weight) for weight in weights]
+    table = Table(
+        table_data,
+        colWidths=col_widths,
+        repeatRows=1,
+        splitByRow=1,
+        hAlign="LEFT",
+    )
+    table.setStyle(
+        TableStyle(
+            [
+                ("TEXTCOLOR", (0, 0), (-1, 0), PDF_BRAND_BLACK),
+                ("BACKGROUND", (0, 0), (-1, 0), PDF_BRAND_GOLD),
+                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("FONTSIZE", (0, 0), (-1, 0), 6.8),
+                ("FONTSIZE", (0, 1), (-1, -1), 6.4),
+                (
+                    "ROWBACKGROUNDS",
+                    (0, 1),
+                    (-1, -1),
+                    [colors.white, PDF_SOFT_GREY],
+                ),
+                ("GRID", (0, 0), (-1, -1), 0.4, PDF_BORDER),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 3),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 3),
+                ("TOPPADDING", (0, 0), (-1, -1), 3),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+            ]
+        )
+    )
+    elements.append(table)
+    doc.build(elements)
+    buffer.seek(0)
+    response = HttpResponse(buffer, content_type="application/pdf")
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return response
+
+
+def _format_datetime(value):
+    return value.strftime("%Y-%m-%d %H:%M") if value else ""
+
+
+def _serialize_compact_json(value):
+    if value in (None, "", [], {}):
+        return ""
+    return json.dumps(value, ensure_ascii=True)
+
+
+def _count_collection(value):
+    if isinstance(value, (list, tuple, dict)):
+        return len(value)
+    return 0
+
+
+@login_required
+@role_required("DIRECTOR", "FINANCE", "ADMIN", "OFFICE_ADMIN")
+def reports_dashboard(request):
+    can_view_financial_totals = request.user.is_superuser or request.user.role in {
+        "ADMIN",
+        "DIRECTOR",
+        "FINANCE",
+    }
+    totals = (
+        DirectorReportingService.financial_totals()
+        if can_view_financial_totals
+        else {"total_revenue": 0, "outstanding_balance": 0}
+    )
+    conversion = DirectorReportingService.conversion_rate()
+    top_clients = DirectorReportingService.top_clients()
+    profit_estimate = DirectorReportingService.profit_estimate()
+    trend_labels, trend_values = DirectorReportingService.revenue_trend()
+    status_labels, status_values = (
+        DirectorReportingService.transaction_status_breakdown()
+    )
+    trade_summary = DirectorReportingService.trade_activity_summary()
+    trade_pipeline_labels, trade_pipeline_values = (
+        DirectorReportingService.trade_pipeline_breakdown()
+    )
+    supplier_activity = DirectorReportingService.sourcing_activity_by_supplier()
+    supplier_labels, supplier_values = (
+        DirectorReportingService.sourcing_activity_by_supplier_chart()
+    )
+    recent_sourcing_activity = DirectorReportingService.recent_sourcing_activity()
+    commission_totals = DirectorReportingService.commission_totals()
+    context = {
+        "total_revenue": totals["total_revenue"],
+        "outstanding_balance": totals["outstanding_balance"],
+        "active_shipments": DirectorReportingService.active_shipments_count(),
+        "profit_estimate": profit_estimate,
+        "conversion_rate": conversion["rate"],
+        "conversion_inquiries": conversion["inquiries"],
+        "conversion_confirmed": conversion["confirmed"],
+        "top_clients": top_clients,
+        "trade_summary": trade_summary,
+        "supplier_activity": supplier_activity,
+        "recent_sourcing_activity": recent_sourcing_activity,
+        "trend_labels_json": json.dumps(trend_labels),
+        "trend_values_json": json.dumps(trend_values),
+        "status_labels_json": json.dumps(status_labels),
+        "status_values_json": json.dumps(status_values),
+        "trade_pipeline_labels_json": json.dumps(trade_pipeline_labels),
+        "trade_pipeline_values_json": json.dumps(trade_pipeline_values),
+        "supplier_labels_json": json.dumps(supplier_labels),
+        "supplier_values_json": json.dumps(supplier_values),
+        "commission_totals": commission_totals,
+    }
+    return render(request, "logistics/reports/dashboard.html", context)
+
+
+@login_required
+@director_required
+def export_clients_csv(request):
+    response = HttpResponse(content_type="text/csv")
+    response["Content-Disposition"] = 'attachment; filename="clients_report.csv"'
+    writer = csv.writer(response)
+    writer.writerow(
+        [
+            "Client ID",
+            "Name",
+            "Contact Person",
+            "Phone",
+            "Address",
+            "Date Registered",
+            "Remarks",
+        ]
+    )
+    for client in Client.objects.all():
+        writer.writerow(
+            [
+                client.client_id,
+                client.name,
+                client.contact_person,
+                client.phone,
+                client.address,
+                client.date_registered.strftime("%Y-%m-%d %H:%M"),
+                client.remarks or "",
+            ]
+        )
+    log_audit("client", "export", 0, "CSV Export", request.user)
+    return response
+
+
+@login_required
+@director_required
+def export_clients_pdf(request):
+    headers = [
+        "Client ID",
+        "Name",
+        "Contact Person",
+        "Phone",
+        "Address",
+        "Date Registered",
+        "Remarks",
+    ]
+    rows = [
+        [
+            client.client_id,
+            client.name,
+            client.contact_person,
+            client.phone,
+            client.address,
+            client.date_registered.strftime("%Y-%m-%d %H:%M"),
+            client.remarks or "",
+        ]
+        for client in Client.objects.all()
+    ]
+    response = _pdf_report_response(
+        "clients_report.pdf", "Clients Report", headers, rows
+    )
+    log_audit("client", "export", 0, "PDF Export", request.user)
+    return response
+
+
+@login_required
+@director_required
+def export_shipments_csv(request):
+    response = HttpResponse(content_type="text/csv")
+    response["Content-Disposition"] = 'attachment; filename="shipments_report.csv"'
+    writer = csv.writer(response)
+    writer.writerow(
+        [
+            "Loading ID",
+            "Client",
+            "Loading Date",
+            "Item Description",
+            "Weight (KG)",
+            "Container Number",
+            "Container Size",
+            "Origin",
+            "Destination",
+        ]
+    )
+    for loading in Loading.objects.select_related("client"):
+        writer.writerow(
+            [
+                loading.loading_id,
+                loading.client.name,
+                loading.loading_date.strftime("%Y-%m-%d %H:%M"),
+                loading.item_description,
+                loading.weight,
+                loading.container_number,
+                loading.get_container_size_display() if loading.container_size else "",
+                loading.origin,
+                loading.destination,
+            ]
+        )
+    log_audit("loading", "export", 0, "CSV Export", request.user)
+    return response
+
+
+@login_required
+@director_required
+def export_shipments_pdf(request):
+    headers = [
+        "Loading ID",
+        "Client",
+        "Loading Date",
+        "Item Description",
+        "Weight (KG)",
+        "Container Number",
+        "Container Size",
+        "Origin",
+        "Destination",
+    ]
+    rows = [
+        [
+            loading.loading_id,
+            loading.client.name,
+            loading.loading_date.strftime("%Y-%m-%d %H:%M"),
+            loading.item_description,
+            loading.weight or "",
+            loading.container_number,
+            loading.get_container_size_display() if loading.container_size else "",
+            loading.origin,
+            loading.destination,
+        ]
+        for loading in Loading.objects.select_related("client")
+    ]
+    response = _pdf_report_response(
+        "shipments_report.pdf", "Shipments Report", headers, rows
+    )
+    log_audit("loading", "export", 0, "PDF Export", request.user)
+    return response
+
+
+@login_required
+@director_required
+def export_payments_csv(request):
+    response = HttpResponse(content_type="text/csv")
+    response["Content-Disposition"] = 'attachment; filename="payments_report.csv"'
+    writer = csv.writer(response)
+    writer.writerow(
+        [
+            "Loading ID",
+            "Client",
+            "Amount Charged",
+            "Amount Paid",
+            "Balance",
+            "Payment Date",
+            "Payment Method",
+            "Receipt Number",
+        ]
+    )
+    for payment in Payment.objects.select_related("loading__client"):
+        writer.writerow(
+            [
+                payment.loading.loading_id,
+                payment.loading.client.name,
+                payment.amount_charged,
+                payment.amount_paid,
+                payment.balance,
+                (
+                    payment.payment_date.strftime("%Y-%m-%d %H:%M")
+                    if payment.payment_date
+                    else ""
+                ),
+                payment.get_payment_method_display() if payment.payment_method else "",
+                payment.receipt_number or "",
+            ]
+        )
+    log_audit("payment", "export", 0, "CSV Export", request.user)
+    return response
+
+
+@login_required
+@director_required
+def export_payments_pdf(request):
+    headers = [
+        "Loading ID",
+        "Client",
+        "Amount Charged",
+        "Amount Paid",
+        "Balance",
+        "Payment Date",
+        "Payment Method",
+        "Receipt Number",
+    ]
+    rows = [
+        [
+            payment.loading.loading_id,
+            payment.loading.client.name,
+            f"${payment.amount_charged:,.2f}",
+            f"${payment.amount_paid:,.2f}",
+            f"${payment.balance:,.2f}",
+            (
+                payment.payment_date.strftime("%Y-%m-%d %H:%M")
+                if payment.payment_date
+                else ""
+            ),
+            payment.get_payment_method_display() if payment.payment_method else "",
+            payment.receipt_number or "",
+        ]
+        for payment in Payment.objects.select_related("loading__client")
+    ]
+    response = _pdf_report_response(
+        "payments_report.pdf", "Payments Report", headers, rows
+    )
+    log_audit("payment", "export", 0, "PDF Export", request.user)
+    return response
+
+
+@login_required
+@director_required
+def export_containers_csv(request):
+    response = HttpResponse(content_type="text/csv")
+    response["Content-Disposition"] = (
+        'attachment; filename="container_returns_report.csv"'
+    )
+    writer = csv.writer(response)
+    writer.writerow(
+        [
+            "Container Number",
+            "Container Size",
+            "Loading ID",
+            "Client",
+            "Return Date",
+            "Condition",
+            "Status",
+            "Remarks",
+        ]
+    )
+    for container in ContainerReturn.objects.select_related("loading__client"):
+        size_display = (
+            container.get_container_size_display()
+            if container.container_size
+            else (
+                container.loading.get_container_size_display()
+                if container.loading.container_size
+                else ""
+            )
+        )
+        writer.writerow(
+            [
+                container.container_number,
+                size_display,
+                container.loading.loading_id,
+                container.loading.client.name,
+                container.return_date.strftime("%Y-%m-%d %H:%M"),
+                container.get_condition_display(),
+                container.get_status_display(),
+                container.remarks or "",
+            ]
+        )
+    log_audit("container_return", "export", 0, "CSV Export", request.user)
+    return response
+
+
+@login_required
+@director_required
+def export_containers_pdf(request):
+    headers = [
+        "Container Number",
+        "Container Size",
+        "Loading ID",
+        "Client",
+        "Return Date",
+        "Condition",
+        "Status",
+        "Remarks",
+    ]
+    rows = []
+    for container in ContainerReturn.objects.select_related("loading__client"):
+        size_display = (
+            container.get_container_size_display()
+            if container.container_size
+            else (
+                container.loading.get_container_size_display()
+                if container.loading.container_size
+                else ""
+            )
+        )
+        rows.append(
+            [
+                container.container_number,
+                size_display,
+                container.loading.loading_id,
+                container.loading.client.name,
+                container.return_date.strftime("%Y-%m-%d %H:%M"),
+                container.get_condition_display(),
+                container.get_status_display(),
+                container.remarks or "",
+            ]
+        )
+    response = _pdf_report_response(
+        "container_returns_report.pdf", "Container Returns Report", headers, rows
+    )
+    log_audit("container_return", "export", 0, "PDF Export", request.user)
+    return response
+
+
+@login_required
+def noticeboard(request):
+    if request.method == "POST":
+        form = NoticeboardTaskForm(request.POST)
+        if form.is_valid():
+            task = form.save(commit=False)
+            task.created_by = request.user
+            task.save()
+            task_link = reverse("noticeboard")
+            if task.assigned_to_id:
+                Notification.objects.create(
+                    recipient=task.assigned_to,
+                    title="Noticeboard task assigned",
+                    message=f"{request.user.get_full_name() or request.user.username} assigned you: {task.title}",
+                    category="system",
+                    link=task_link,
+                )
+            if task.assigned_role:
+                _notify_roles(
+                    title="Noticeboard department task",
+                    message=f"{request.user.get_full_name() or request.user.username} assigned {task.title} to your department.",
+                    link=task_link,
+                    category="system",
+                    roles=[task.assigned_role],
+                )
+            messages.success(request, "Noticeboard task posted.")
+            return redirect("noticeboard")
+    else:
+        form = NoticeboardTaskForm()
+
+    tasks = NoticeboardTask.objects.select_related(
+        "assigned_to", "created_by", "completed_by"
+    )
+    task_page_obj, task_query_string, task_page_range = paginate_queryset(
+        request, tasks, per_page=10
+    )
+    notifications = request.user.notifications.all().order_by("is_read", "-created_at")
+    notice_page_obj, notice_query_string, notice_page_range = paginate_queryset(
+        request, notifications, per_page=8
+    )
+    employees = CustomUser.objects.filter(is_active=True).order_by(
+        "role", "first_name", "last_name", "username"
+    )
+    return render(
+        request,
+        "logistics/noticeboard.html",
+        {
+            "form": form,
+            "tasks": task_page_obj,
+            "page_obj": task_page_obj,
+            "query_string": task_query_string,
+            "page_range": task_page_range,
+            "notifications": notice_page_obj,
+            "notice_page_obj": notice_page_obj,
+            "notice_query_string": notice_query_string,
+            "notice_page_range": notice_page_range,
+            "employees": employees,
+            "unread_count": request.user.notifications.filter(is_read=False).count(),
+        },
+    )
+
+
+@login_required
+def noticeboard_task_done(request, pk):
+    task = get_object_or_404(NoticeboardTask, pk=pk)
+    can_complete = (
+        request.user.is_superuser
+        or getattr(request.user, "role", "") == "ADMIN"
+        or task.created_by_id == request.user.pk
+        or task.assigned_to_id == request.user.pk
+        or (
+            task.assigned_role
+            and task.assigned_role == getattr(request.user, "role", "")
+        )
+    )
+    if request.method != "POST":
+        return redirect("noticeboard")
+    if not can_complete:
+        messages.error(
+            request,
+            "Only the creator, assignee or assigned department can mark this task done.",
+        )
+        return redirect("noticeboard")
+    if not task.is_done:
+        task.is_done = True
+        task.completed_by = request.user
+        task.completed_at = timezone.now()
+        task.save(
+            update_fields=["is_done", "completed_by", "completed_at", "updated_at"]
+        )
+        messages.success(request, "Noticeboard task marked done.")
+    return redirect("noticeboard")
+
+
+@login_required
+def notifications_mark_all_read(request):
+    request.user.notifications.filter(is_read=False).update(is_read=True)
+    next_url = _safe_next_url(request)
+    if next_url:
+        return redirect(next_url)
+    return _redirect_back(request, default="dashboard")
+
+
+@login_required
+def notification_open(request, pk):
+    notification = get_object_or_404(request.user.notifications, pk=pk)
+    if not notification.is_read:
+        notification.is_read = True
+        notification.save(update_fields=["is_read"])
+    target = notification.link or _safe_next_url(request)
+    if target and url_has_allowed_host_and_scheme(
+        target,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        return redirect(target)
+    if target and target.startswith("/") and not target.startswith("//"):
+        return redirect(target)
+    return _redirect_back(request, default="dashboard")
+
+
+@login_required
+@director_required
+def export_transactions_csv(request):
+    response = HttpResponse(content_type="text/csv")
+    response["Content-Disposition"] = (
+        'attachment; filename="trade_transactions_report.csv"'
+    )
+    writer = csv.writer(response)
+    writer.writerow(
+        [
+            "Entry Number",
+            "Client",
+            "Status",
+            "Description",
+            "Estimated Delivery",
+            "Created By",
+            "Created At",
+        ]
+    )
+    for transaction in Transaction.objects.select_related("customer", "created_by"):
+        writer.writerow(
+            [
+                transaction.transaction_id,
+                transaction.customer.name,
+                transaction.get_status_display(),
+                transaction.description or "",
+                (
+                    transaction.estimated_delivery.isoformat()
+                    if transaction.estimated_delivery
+                    else ""
+                ),
+                transaction.created_by.username,
+                _format_datetime(transaction.created_at),
+            ]
+        )
+    log_audit("transaction", "export", 0, "CSV Export", request.user)
+    return response
+
+
+@login_required
+@director_required
+def export_transactions_pdf(request):
+    headers = [
+        "Entry Number",
+        "Client",
+        "Status",
+        "Description",
+        "Estimated Delivery",
+        "Created By",
+        "Created At",
+    ]
+    rows = [
+        [
+            transaction.transaction_id,
+            transaction.customer.name,
+            transaction.get_status_display(),
+            transaction.description or "",
+            (
+                transaction.estimated_delivery.isoformat()
+                if transaction.estimated_delivery
+                else ""
+            ),
+            transaction.created_by.username,
+            _format_datetime(transaction.created_at),
+        ]
+        for transaction in Transaction.objects.select_related("customer", "created_by")
+    ]
+    response = _pdf_report_response(
+        "trade_transactions_report.pdf", "Trade Transactions Report", headers, rows
+    )
+    log_audit("transaction", "export", 0, "PDF Export", request.user)
+    return response
+
+
+@login_required
+@director_required
+def export_sourcing_csv(request):
+    response = HttpResponse(content_type="text/csv")
+    response["Content-Disposition"] = 'attachment; filename="sourcing_report.csv"'
+    writer = csv.writer(response)
+    writer.writerow(
+        [
+            "Entry Number",
+            "Client",
+            "Supplier",
+            "Supplier Contact",
+            "Item Lines",
+            "Price Entries",
+            "Notes",
+            "Created By",
+            "Created At",
+        ]
+    )
+    queryset = Sourcing.objects.select_related("transaction__customer", "created_by")
+    for sourcing in queryset:
+        writer.writerow(
+            [
+                sourcing.transaction.transaction_id,
+                sourcing.transaction.customer.name,
+                sourcing.supplier_name,
+                sourcing.supplier_contact or "",
+                _count_collection(sourcing.item_details),
+                _count_collection(sourcing.unit_prices),
+                sourcing.notes or "",
+                sourcing.created_by.username,
+                _format_datetime(sourcing.created_at),
+            ]
+        )
+    log_audit("sourcing", "export", 0, "CSV Export", request.user)
+    return response
+
+
+@login_required
+@director_required
+def export_sourcing_pdf(request):
+    headers = [
+        "Entry Number",
+        "Client",
+        "Supplier",
+        "Supplier Contact",
+        "Item Lines",
+        "Price Entries",
+        "Notes",
+        "Created By",
+        "Created At",
+    ]
+    rows = [
+        [
+            sourcing.transaction.transaction_id,
+            sourcing.transaction.customer.name,
+            sourcing.supplier_name,
+            sourcing.supplier_contact or "",
+            _count_collection(sourcing.item_details),
+            _count_collection(sourcing.unit_prices),
+            sourcing.notes or "",
+            sourcing.created_by.username,
+            _format_datetime(sourcing.created_at),
+        ]
+        for sourcing in Sourcing.objects.select_related(
+            "transaction__customer", "created_by"
+        )
+    ]
+    response = _pdf_report_response(
+        "sourcing_report.pdf", "Sourcing Activity Report", headers, rows
+    )
+    log_audit("sourcing", "export", 0, "PDF Export", request.user)
+    return response
+
+
+@login_required
+@director_required
+def export_proformas_csv(request):
+    response = HttpResponse(content_type="text/csv")
+    response["Content-Disposition"] = (
+        'attachment; filename="proforma_invoices_report.csv"'
+    )
+    writer = csv.writer(response)
+    writer.writerow(
+        [
+            "Record",
+            "Entry Number",
+            "Client",
+            "Status",
+            "Supplier",
+            "Item Lines",
+            "Subtotal",
+            "Validity Date",
+            "Created By",
+            "Created At",
+        ]
+    )
+    queryset = ProformaInvoice.objects.select_related(
+        "transaction__customer", "created_by"
+    )
+    for proforma in queryset:
+        writer.writerow(
+            [
+                display_document_number(proforma, "PI"),
+                proforma.transaction.transaction_id,
+                proforma.transaction.customer.name,
+                proforma.get_status_display(),
+                proforma.supplier_name or "",
+                _count_collection(proforma.items),
+                proforma.subtotal,
+                proforma.validity_date.isoformat(),
+                proforma.created_by.username,
+                _format_datetime(proforma.created_at),
+            ]
+        )
+    log_audit("proforma_invoice", "export", 0, "CSV Export", request.user)
+    return response
+
+
+@login_required
+@director_required
+def export_proformas_pdf(request):
+    headers = [
+        "Record",
+        "Entry Number",
+        "Client",
+        "Status",
+        "Supplier",
+        "Item Lines",
+        "Subtotal",
+        "Validity Date",
+        "Created By",
+        "Created At",
+    ]
+    rows = [
+        [
+            display_document_number(proforma, "PI"),
+            proforma.transaction.transaction_id,
+            proforma.transaction.customer.name,
+            proforma.get_status_display(),
+            proforma.supplier_name or "",
+            _count_collection(proforma.items),
+            f"{proforma.subtotal:,.2f}",
+            proforma.validity_date.isoformat(),
+            proforma.created_by.username,
+            _format_datetime(proforma.created_at),
+        ]
+        for proforma in ProformaInvoice.objects.select_related(
+            "transaction__customer", "created_by"
+        )
+    ]
+    response = _pdf_report_response(
+        "proforma_invoices_report.pdf", "Proforma Invoices Report", headers, rows
+    )
+    log_audit("proforma_invoice", "export", 0, "PDF Export", request.user)
+    return response
+
+
+@login_required
+@director_required
+def export_final_invoices_csv(request):
+    response = HttpResponse(content_type="text/csv")
+    response["Content-Disposition"] = 'attachment; filename="final_invoices_report.csv"'
+    writer = csv.writer(response)
+    writer.writerow(
+        [
+            "Record",
+            "Entry Number",
+            "Client",
+            "Confirmed",
+            "Shipping Mode",
+            "Route",
+            "Currency",
+            "Total Amount",
+            "Confirmed At",
+            "Created At",
+        ]
+    )
+    queryset = FinalInvoice.objects.select_related("transaction__customer")
+    for invoice in queryset:
+        writer.writerow(
+            [
+                display_document_number(invoice, "FI"),
+                invoice.transaction.transaction_id,
+                invoice.transaction.customer.name,
+                "Yes" if invoice.is_confirmed else "No",
+                invoice.get_shipping_mode_display(),
+                invoice.route,
+                invoice.currency,
+                invoice.total_amount,
+                _format_datetime(invoice.confirmed_at),
+                _format_datetime(invoice.created_at),
+            ]
+        )
+    log_audit("final_invoice", "export", 0, "CSV Export", request.user)
+    return response
+
+
+@login_required
+@director_required
+def export_final_invoices_pdf(request):
+    headers = [
+        "Record",
+        "Entry Number",
+        "Client",
+        "Confirmed",
+        "Shipping Mode",
+        "Route",
+        "Currency",
+        "Total Amount",
+        "Confirmed At",
+        "Created At",
+    ]
+    rows = [
+        [
+            display_document_number(invoice, "FI"),
+            invoice.transaction.transaction_id,
+            invoice.transaction.customer.name,
+            "Yes" if invoice.is_confirmed else "No",
+            invoice.get_shipping_mode_display(),
+            invoice.route,
+            invoice.currency,
+            f"{invoice.total_amount:,.2f}",
+            _format_datetime(invoice.confirmed_at),
+            _format_datetime(invoice.created_at),
+        ]
+        for invoice in FinalInvoice.objects.select_related("transaction__customer")
+    ]
+    response = _pdf_report_response(
+        "final_invoices_report.pdf", "Final Invoices Report", headers, rows
+    )
+    log_audit("final_invoice", "export", 0, "PDF Export", request.user)
+    return response
+
+
+@login_required
+@director_required
+def export_purchase_orders_csv(request):
+    response = HttpResponse(content_type="text/csv")
+    response["Content-Disposition"] = (
+        'attachment; filename="purchase_orders_report.csv"'
+    )
+    writer = csv.writer(response)
+    writer.writerow(
+        [
+            "PO Number",
+            "Entry Number",
+            "Client",
+            "Supplier",
+            "Status",
+            "Item Lines",
+            "Subtotal",
+            "Linked Invoice",
+            "Split PO",
+            "Created At",
+        ]
+    )
+    queryset = PurchaseOrder.objects.select_related(
+        "transaction__customer", "final_invoice", "parent_po"
+    )
+    for purchase_order in queryset:
+        writer.writerow(
+            [
+                purchase_order.po_number,
+                purchase_order.transaction.transaction_id,
+                purchase_order.transaction.customer.name,
+                purchase_order.supplier_name,
+                purchase_order.get_status_display(),
+                _count_collection(purchase_order.items),
+                purchase_order.subtotal,
+                (
+                    display_document_number(purchase_order.final_invoice, "FI")
+                    if purchase_order.final_invoice_id
+                    else ""
+                ),
+                "Yes" if purchase_order.is_split else "No",
+                _format_datetime(purchase_order.created_at),
+            ]
+        )
+    log_audit("purchase_order", "export", 0, "CSV Export", request.user)
+    return response
+
+
+@login_required
+@director_required
+def export_purchase_orders_pdf(request):
+    headers = [
+        "PO Number",
+        "Entry Number",
+        "Client",
+        "Supplier",
+        "Status",
+        "Item Lines",
+        "Subtotal",
+        "Linked Invoice",
+        "Split PO",
+        "Created At",
+    ]
+    rows = [
+        [
+            purchase_order.po_number,
+            purchase_order.transaction.transaction_id,
+            purchase_order.transaction.customer.name,
+            purchase_order.supplier_name,
+            purchase_order.get_status_display(),
+            _count_collection(purchase_order.items),
+            f"{purchase_order.subtotal:,.2f}",
+            (
+                display_document_number(purchase_order.final_invoice, "FI")
+                if purchase_order.final_invoice_id
+                else ""
+            ),
+            "Yes" if purchase_order.is_split else "No",
+            _format_datetime(purchase_order.created_at),
+        ]
+        for purchase_order in PurchaseOrder.objects.select_related(
+            "transaction__customer", "final_invoice", "parent_po"
+        )
+    ]
+    response = _pdf_report_response(
+        "purchase_orders_report.pdf", "Purchase Orders Report", headers, rows
+    )
+    log_audit("purchase_order", "export", 0, "PDF Export", request.user)
+    return response
+
+
+@login_required
+@director_required
+def export_trade_payments_csv(request):
+    response = HttpResponse(content_type="text/csv")
+    response["Content-Disposition"] = 'attachment; filename="trade_payments_report.csv"'
+    writer = csv.writer(response)
+    writer.writerow(
+        [
+            "Entry Number",
+            "Client",
+            "Final Invoice",
+            "Amount Due Snapshot",
+            "Amount Paid",
+            "Currency",
+            "Balance After",
+            "Full Payment",
+            "Payment Method",
+            "Reference",
+            "Payment Date",
+            "Created By",
+        ]
+    )
+    queryset = TransactionPaymentRecord.objects.select_related(
+        "transaction__customer", "final_invoice", "created_by"
+    )
+    for record in queryset:
+        writer.writerow(
+            [
+                record.transaction.transaction_id,
+                record.transaction.customer.name,
+                (
+                    display_document_number(record.final_invoice, "FI")
+                    if record.final_invoice_id
+                    else ""
+                ),
+                record.amount_due_snapshot,
+                record.amount,
+                record.currency,
+                record.balance_after,
+                "Yes" if record.is_full_payment else "No",
+                record.get_payment_method_display(),
+                record.reference or "",
+                _format_datetime(record.payment_date),
+                record.created_by.username,
+            ]
+        )
+    log_audit("transaction_payment_record", "export", 0, "CSV Export", request.user)
+    return response
+
+
+@login_required
+@director_required
+def export_trade_payments_pdf(request):
+    headers = [
+        "Entry Number",
+        "Client",
+        "Final Invoice",
+        "Amount Due",
+        "Amount Paid",
+        "Currency",
+        "Balance After",
+        "Full Payment",
+        "Method",
+        "Reference",
+        "Payment Date",
+        "Created By",
+    ]
+    rows = [
+        [
+            record.transaction.transaction_id,
+            record.transaction.customer.name,
+            (
+                display_document_number(record.final_invoice, "FI")
+                if record.final_invoice_id
+                else ""
+            ),
+            f"{record.amount_due_snapshot:,.2f}",
+            f"{record.amount:,.2f}",
+            record.currency,
+            f"{record.balance_after:,.2f}",
+            "Yes" if record.is_full_payment else "No",
+            record.get_payment_method_display(),
+            record.reference or "",
+            _format_datetime(record.payment_date),
+            record.created_by.username,
+        ]
+        for record in TransactionPaymentRecord.objects.select_related(
+            "transaction__customer", "final_invoice", "created_by"
+        )
+    ]
+    response = _pdf_report_response(
+        "trade_payments_report.pdf", "Trade Payments Report", headers, rows
+    )
+    log_audit("transaction_payment_record", "export", 0, "PDF Export", request.user)
+    return response
+
+
+# ===== AUDIT LOGS =====
+
+
+@login_required
+def audit_log_view(request):
+    if request.user.role not in {"ADMIN", "superuser"}:
+        messages.error(request, "Permission denied")
+        return redirect("dashboard")
+    logs = AuditLog.objects.select_related("user")
+    total_logs = logs.count()
+    page_obj, query_string, page_range = paginate_queryset(
+        request, logs, per_page=AUDIT_PAGE_SIZE
+    )
+    return render(
+        request,
+        "logistics/audit_logs.html",
+        {
+            "logs": page_obj,
+            "page_obj": page_obj,
+            "query_string": query_string,
+            "page_range": page_range,
+            "total_logs": total_logs,
+        },
+    )
+
+
+@login_required
+def workflow_guide(request):
+    """Static workflow reference page — accessible to all authenticated users."""
+    if request.GET.get("download") == "1":
+        from django.template.loader import render_to_string
+
+        html = render_to_string(
+            "logistics/workflow_guide.html",
+            {"download_mode": True, "request": request, "user": request.user},
+        )
+        response = HttpResponse(html, content_type="text/html; charset=utf-8")
+        response["Content-Disposition"] = (
+            'attachment; filename="GMI_Terralink_Workflow_Guide.html"'
+        )
+        return response
+    return render(request, "logistics/workflow_guide.html")
+
+
+# ===== UTILITIES =====
+
+
+def paginate_queryset(request, queryset, per_page=DEFAULT_PAGE_SIZE):
+    """Paginate any queryset while preserving existing filters/searches."""
+    paginator = Paginator(queryset, per_page)
+    page_number = request.GET.get("page")
+    page_obj = paginator.get_page(page_number)
+    query_params = request.GET.copy()
+    if "page" in query_params:
+        query_params.pop("page")
+    query_string = query_params.urlencode()
+    if query_string:
+        query_string = f"{query_string}&"
+    page_range = paginator.get_elided_page_range(page_obj.number)
+    return page_obj, query_string, page_range
+
+
+def log_audit(model_type, action, object_id, object_str, user, changes=None):
+    AuditLog.objects.create(
+        user=user,
+        model_type=model_type,
+        action=action,
+        object_id=object_id,
+        object_str=object_str,
+        changes=changes,
+    )
+
+
+@login_required
+@role_required("DIRECTOR", "FINANCE", "ADMIN", "OFFICE_ADMIN")
+def director_finance_summary(request):
+    """Executive finance summary across lanes."""
+    from .models import Commission
+
+    def section_page(items, page_param, per_page):
+        paginator = Paginator(items, per_page)
+        page_obj = paginator.get_page(request.GET.get(page_param))
+        query_params = request.GET.copy()
+        if page_param in query_params:
+            query_params.pop(page_param)
+        query_string = query_params.urlencode()
+        if query_string:
+            query_string = f"{query_string}&"
+        return page_obj, paginator.get_elided_page_range(page_obj.number), query_string
+
+    period_mode = (request.GET.get("period") or "weekly").strip().lower()
+    if period_mode not in {"weekly", "monthly"}:
+        period_mode = "weekly"
+
+    def period_bucket(value):
+        movement_date = value.date() if isinstance(value, datetime) else value
+        if period_mode == "monthly":
+            period_start = movement_date.replace(day=1)
+            return period_start, period_start.strftime("%B %Y")
+        period_start = movement_date - timedelta(days=movement_date.weekday())
+        return period_start, f"Week of {period_start.strftime('%d %b %Y')}"
+
+    def movement_sort_value(value):
+        if isinstance(value, datetime):
+            return value
+        return datetime.combine(value, datetime.min.time())
+
+    all_invoices = list(
+        FinalInvoice.objects.select_related("transaction__customer", "loading")
+    )
+    total_billed = sum(
+        (invoice.total_amount or Decimal("0.00")) for invoice in all_invoices
+    )
+    total_collected = sum(
+        _final_invoice_total_paid(invoice) for invoice in all_invoices
+    )
+    outstanding_balance = max(total_billed - total_collected, Decimal("0.00"))
+    collection_rate = (
+        round((total_collected / total_billed) * Decimal("100.00"), 2)
+        if total_billed
+        else Decimal("0.00")
+    )
+
+    conversion = DirectorReportingService.conversion_rate()
+    top_clients = DirectorReportingService.top_clients()
+    status_counts = DirectorReportingService.transactions_per_status()
+    trend_labels, trend_values = DirectorReportingService.revenue_trend()
+    status_labels, status_values = (
+        DirectorReportingService.transaction_status_breakdown()
+    )
+    trade_summary = DirectorReportingService.trade_activity_summary()
+    commission_totals = DirectorReportingService.commission_totals()
+
+    trade_client_payments = TransactionPaymentRecord.objects.select_related(
+        "transaction__customer", "final_invoice", "created_by"
+    )
+    logistics_client_payments = PaymentTransaction.objects.select_related(
+        "payment__loading__client", "created_by"
+    )
+    supplier_payments = SupplierPayment.objects.select_related(
+        "purchase_order__transaction__customer", "created_by"
+    )
+    commission_entries = list(
+        Commission.objects.select_related("client", "created_by").order_by(
+            "-date", "-created_at"
+        )
+    )
+
+    trade_client_collected = trade_client_payments.aggregate(total=Sum("amount"))[
+        "total"
+    ] or Decimal("0.00")
+    logistics_client_collected = logistics_client_payments.aggregate(
+        total=Sum("amount")
+    )["total"] or Decimal("0.00")
+    supplier_paid_out = supplier_payments.aggregate(total=Sum("amount"))[
+        "total"
+    ] or Decimal("0.00")
+    change_given = trade_client_payments.aggregate(total=Sum("change_given"))[
+        "total"
+    ] or Decimal("0.00")
+    commission_earned = Commission.objects.aggregate(total=Sum("amount"))[
+        "total"
+    ] or Decimal("0.00")
+    commission_usd = Commission.objects.filter(currency="USD").aggregate(
+        total=Sum("amount")
+    )["total"] or Decimal("0.00")
+
+    invoice_components = {
+        "items": sum((invoice.subtotal or Decimal("0.00")) for invoice in all_invoices),
+        "sourcing_fees": sum(
+            (invoice.sourcing_fee or Decimal("0.00")) for invoice in all_invoices
+        ),
+        "shipping_costs": sum(
+            (invoice.shipping_cost or Decimal("0.00")) for invoice in all_invoices
+        ),
+        "service_fees": sum(
+            (invoice.service_fee or Decimal("0.00")) for invoice in all_invoices
+        ),
+    }
+    money_additions = [
+        {
+            "label": "Client trade payments",
+            "amount": trade_client_collected,
+            "currency": "USD",
+            "count": trade_client_payments.count(),
+            "description": "Cash received from sourcing/trade final invoices.",
+        },
+        {
+            "label": "Freight payment receipts",
+            "amount": logistics_client_collected,
+            "currency": "UGX",
+            "count": logistics_client_payments.count(),
+            "description": "Cash received from logistics freight payment transactions.",
+        },
+        {
+            "label": "Commission earned",
+            "amount": commission_earned,
+            "currency": "Mixed",
+            "count": Commission.objects.count(),
+            "description": "Director commission entries recorded in the commission ledger.",
+        },
+    ]
+    money_subtractions = [
+        {
+            "label": "Supplier payments",
+            "amount": supplier_paid_out,
+            "currency": "USD",
+            "count": supplier_payments.count(),
+            "description": "Cash paid out to suppliers against purchase orders.",
+        },
+        {
+            "label": "Client change given",
+            "amount": change_given,
+            "currency": "USD",
+            "count": trade_client_payments.filter(change_given__gt=0).count(),
+            "description": "Cash returned to clients during trade payment collection.",
+        },
+    ]
+    total_additions = trade_client_collected + commission_usd
+    total_subtractions = supplier_paid_out + change_given
+    net_cash_position = total_additions - total_subtractions
+
+    recent_movements = []
+    for payment in trade_client_payments.order_by("-payment_date"):
+        recent_movements.append(
+            {
+                "date": payment.payment_date,
+                "direction": "in",
+                "label": "Client payment",
+                "reference": (
+                    payment.reference
+                    or display_document_number(payment.final_invoice, "FI")
+                    if payment.final_invoice_id
+                    else payment.transaction.transaction_id
+                ),
+                "party": payment.transaction.customer.name,
+                "amount": payment.amount,
+                "currency": payment.currency,
+            }
+        )
+        if (payment.change_given or Decimal("0.00")) > Decimal("0.00"):
+            recent_movements.append(
+                {
+                    "date": payment.payment_date,
+                    "direction": "out",
+                    "label": "Client change given",
+                    "reference": payment.reference
+                    or (
+                        display_document_number(payment.final_invoice, "FI")
+                        if payment.final_invoice_id
+                        else payment.transaction.transaction_id
+                    ),
+                    "party": payment.transaction.customer.name,
+                    "amount": payment.change_given,
+                    "currency": payment.currency,
+                }
+            )
+    for payment in supplier_payments.order_by("-paid_at"):
+        recent_movements.append(
+            {
+                "date": payment.paid_at,
+                "direction": "out",
+                "label": "Supplier payment",
+                "reference": payment.reference or payment.purchase_order.po_number,
+                "party": payment.supplier_name or payment.purchase_order.supplier_name,
+                "amount": payment.amount,
+                "currency": payment.currency,
+            }
+        )
+    for payment in logistics_client_payments.order_by("-payment_date"):
+        recent_movements.append(
+            {
+                "date": payment.payment_date,
+                "direction": "in",
+                "label": "Freight receipt",
+                "reference": payment.receipt_number,
+                "party": payment.payment.loading.client.name,
+                "amount": payment.amount,
+                "currency": "UGX",
+            }
+        )
+    for commission in commission_entries:
+        recent_movements.append(
+            {
+                "date": commission.date,
+                "direction": "in",
+                "label": "Commission earned",
+                "reference": commission.notes or "Commission ledger",
+                "party": commission.client.name,
+                "amount": commission.amount,
+                "currency": commission.currency,
+            }
+        )
+    recent_movements = sorted(
+        recent_movements,
+        key=lambda movement: movement_sort_value(movement["date"]),
+        reverse=True,
+    )
+
+    period_map = {}
+    for movement in recent_movements:
+        period_start, period_label = period_bucket(movement["date"])
+        key = (period_start, movement["currency"])
+        row = period_map.setdefault(
+            key,
+            {
+                "period_start": period_start,
+                "period": period_label,
+                "currency": movement["currency"],
+                "additions": Decimal("0.00"),
+                "subtractions": Decimal("0.00"),
+                "count": 0,
+            },
+        )
+        amount = movement["amount"] or Decimal("0.00")
+        if movement["direction"] == "in":
+            row["additions"] += amount
+        else:
+            row["subtractions"] += amount
+        row["count"] += 1
+    period_rows = sorted(
+        (
+            {
+                **row,
+                "net": row["additions"] - row["subtractions"],
+            }
+            for row in period_map.values()
+        ),
+        key=lambda row: (row["period_start"], row["currency"]),
+        reverse=True,
+    )
+
+    recent_invoices = list(
+        FinalInvoice.objects.select_related(
+            "transaction__customer", "created_by", "loading"
+        ).order_by("-created_at")
+    )
+    for invoice in recent_invoices:
+        paid_total = _final_invoice_total_paid(invoice)
+        balance = max(
+            (invoice.total_amount or Decimal("0.00")) - paid_total, Decimal("0.00")
+        )
+        invoice.total_paid_for_display = paid_total
+        invoice.balance_for_display = balance
+        if paid_total > 0 and balance <= 0:
+            invoice.payment_status_label = "Paid"
+            invoice.payment_status_class = "bg-success"
+        elif paid_total > 0:
+            invoice.payment_status_label = "Partial Payment"
+            invoice.payment_status_class = "bg-warning text-dark"
+        else:
+            invoice.payment_status_label = "Unpaid"
+            invoice.payment_status_class = "bg-secondary"
+
+    additions_page, additions_page_range, additions_query_string = section_page(
+        money_additions, "additions_page", 8
+    )
+    subtractions_page, subtractions_page_range, subtractions_query_string = (
+        section_page(money_subtractions, "subtractions_page", 8)
+    )
+    movements_page, movements_page_range, movements_query_string = section_page(
+        recent_movements, "movements_page", 10
+    )
+    period_page, period_page_range, period_query_string = section_page(
+        period_rows, "period_page", 10
+    )
+    invoices_page, invoices_page_range, invoices_query_string = section_page(
+        recent_invoices, "invoices_page", 10
+    )
+    commission_page, commission_page_range, commission_query_string = section_page(
+        commission_entries, "commission_page", 10
+    )
+    clients_page, clients_page_range, clients_query_string = section_page(
+        list(top_clients), "clients_page", 10
+    )
+    status_rows = [
+        {"status": status, "total": total} for status, total in status_counts.items()
+    ]
+    status_total_records = sum(status_counts.values())
+    statuses_page, statuses_page_range, statuses_query_string = section_page(
+        status_rows, "statuses_page", 10
+    )
+
+    context = {
+        "total_billed": total_billed,
+        "total_collected": total_collected,
+        "outstanding_balance": outstanding_balance,
+        "collection_rate": collection_rate,
+        "confirmed_revenue": DirectorReportingService.total_revenue()
+        or Decimal("0.00"),
+        "legacy_outstanding_estimate": DirectorReportingService.outstanding_balances()
+        or Decimal("0.00"),
+        "active_shipments": DirectorReportingService.active_shipments_count(),
+        "conversion_rate": conversion,
+        "top_clients": top_clients,
+        "profit_estimate": DirectorReportingService.profit_estimate()
+        or Decimal("0.00"),
+        "transactions_per_status": status_counts,
+        "trade_summary": trade_summary,
+        "commission_totals": commission_totals,
+        "invoice_components": invoice_components,
+        "money_additions": money_additions,
+        "money_subtractions": money_subtractions,
+        "total_additions": total_additions,
+        "total_subtractions": total_subtractions,
+        "net_cash_position": net_cash_position,
+        "recent_movements": recent_movements,
+        "period_mode": period_mode,
+        "period_label": "Weekly" if period_mode == "weekly" else "Monthly",
+        "period_page": period_page,
+        "period_page_range": period_page_range,
+        "period_query_string": period_query_string,
+        "additions_page": additions_page,
+        "additions_page_range": additions_page_range,
+        "additions_query_string": additions_query_string,
+        "subtractions_page": subtractions_page,
+        "subtractions_page_range": subtractions_page_range,
+        "subtractions_query_string": subtractions_query_string,
+        "movements_page": movements_page,
+        "movements_page_range": movements_page_range,
+        "movements_query_string": movements_query_string,
+        "supplier_paid_out": supplier_paid_out,
+        "change_given": change_given,
+        "recent_invoices": recent_invoices,
+        "invoices_page": invoices_page,
+        "invoices_page_range": invoices_page_range,
+        "invoices_query_string": invoices_query_string,
+        "clients_page": clients_page,
+        "clients_page_range": clients_page_range,
+        "clients_query_string": clients_query_string,
+        "commission_page": commission_page,
+        "commission_page_range": commission_page_range,
+        "commission_query_string": commission_query_string,
+        "statuses_page": statuses_page,
+        "statuses_page_range": statuses_page_range,
+        "statuses_query_string": statuses_query_string,
+        "status_total_records": status_total_records,
+        "trend_labels_json": json.dumps(trend_labels),
+        "trend_values_json": json.dumps(trend_values),
+        "status_labels_json": json.dumps(status_labels),
+        "status_values_json": json.dumps(status_values),
+    }
+    return render(request, "logistics/reports/director_finance_summary.html", context)
+
+
+# ===== RECEIPTS =====
+
+
+@login_required
+def receipt_list(request):
+    """List all system-generated receipts."""
+    receipts = Receipt.objects.select_related(
+        "logistics_payment__payment__loading__client",
+        "sourcing_payment__transaction__customer",
+        "sourcing_payment__transaction__source_loading",
+        "sourcing_payment__final_invoice__loading",
+    ).all()
+
+    freight_receipt_filter = (
+        Q(logistics_payment__isnull=False)
+        | Q(sourcing_payment__final_invoice__loading__isnull=False)
+        | Q(sourcing_payment__transaction__source_loading__isnull=False)
+    )
+
+    source_filter = (request.GET.get("source") or "all").strip().lower()
+    if source_filter == "logistics":
+        receipts = receipts.filter(freight_receipt_filter)
+    elif source_filter == "sourcing":
+        receipts = receipts.filter(sourcing_payment__isnull=False).exclude(
+            freight_receipt_filter
+        )
+
+    payment_filter = (request.GET.get("payment_filter") or "all").strip().lower()
+    if payment_filter == "full":
+        receipts = receipts.filter(
+            sourcing_payment__isnull=False,
+            sourcing_payment__is_full_payment=True,
+        )
+    elif payment_filter == "partial":
+        receipts = receipts.filter(
+            sourcing_payment__isnull=False,
+            sourcing_payment__is_full_payment=False,
+        )
+
+    search = request.GET.get("search", "")
+    if search:
+        receipts = receipts.filter(
+            Q(receipt_number__icontains=search) | Q(issued_to__icontains=search)
+        )
+    page_obj, query_string, page_range = paginate_queryset(request, receipts)
+    for receipt in page_obj:
+        department_code = document_department_code(receipt)
+        if department_code == "LOG":
+            receipt.department_label = "Logistics"
+            receipt.department_short_label = "LOG"
+            receipt.department_icon = "bi-truck"
+            receipt.department_badge_class = "receipt-source-logistics"
+        elif department_code == "SRC" and receipt.sourcing_payment_id:
+            receipt.department_label = "Sourcing"
+            receipt.department_short_label = "SRC"
+            receipt.department_icon = "bi-globe2"
+            receipt.department_badge_class = "receipt-source-sourcing"
+        else:
+            receipt.department_label = "Unlinked"
+            receipt.department_short_label = "--"
+            receipt.department_icon = "bi-question-circle"
+            receipt.department_badge_class = "receipt-source-unlinked"
+    return render(
+        request,
+        "logistics/receipts/list.html",
+        {
+            "receipts": page_obj,
+            "page_obj": page_obj,
+            "query_string": query_string,
+            "page_range": page_range,
+            "search": search,
+            "payment_filter": payment_filter,
+            "source_filter": source_filter,
+        },
+    )
+
+
+@login_required
+def receipt_detail(request, pk):
+    """View a single receipt."""
+    receipt = get_object_or_404(Receipt, pk=pk)
+    can_reverse_receipt = (
+        request.user.is_superuser or getattr(request.user, "role", "") == "DIRECTOR"
+    )
+    client = None
+    if receipt.logistics_payment and receipt.logistics_payment.payment:
+        loading = receipt.logistics_payment.payment.loading
+        client = getattr(loading, "client", None)
+    elif receipt.sourcing_payment and receipt.sourcing_payment.transaction:
+        client = getattr(receipt.sourcing_payment.transaction, "customer", None)
+
+    # Decide whether the underlying invoice is fully paid. The PAID watermark
+    # should only appear for receipts whose source invoice/payment has zero
+    # outstanding balance (partial payments must not look like settlements).
+    invoice_fully_paid = False
+    try:
+        sourcing_payment = getattr(receipt, "sourcing_payment", None)
+        logistics_payment = getattr(receipt, "logistics_payment", None)
+        if sourcing_payment is not None:
+            final_invoice = sourcing_payment.final_invoice
+            if final_invoice is not None:
+                total_paid = _final_invoice_total_paid(final_invoice) or 0
+                total_amount = final_invoice.total_amount or 0
+                invoice_fully_paid = total_amount > 0 and total_paid >= total_amount
+        elif logistics_payment is not None:
+            payment = logistics_payment.payment
+            if payment is not None:
+                payment.refresh_totals()
+                amount_charged = payment.amount_charged or 0
+                amount_paid = payment.amount_paid or 0
+                invoice_fully_paid = (
+                    amount_charged > 0 and amount_paid >= amount_charged
+                )
+    except Exception:
+        invoice_fully_paid = False
+    return render(
+        request,
+        "logistics/receipts/detail.html",
+        {
+            "receipt": receipt,
+            "client": client,
+            "can_reverse_receipt": can_reverse_receipt,
+            "invoice_fully_paid": invoice_fully_paid,
+            "document_signature": _document_signature_for(receipt),
+        },
+    )
+
+
+@login_required
+def receipt_sign(request, pk):
+    """Sign an issued receipt using the user's active signature profile."""
+    receipt = get_object_or_404(Receipt, pk=pk)
+    return _sign_business_document(
+        request,
+        document=receipt,
+        detail_route="receipt_detail",
+        document_label=f"Receipt {display_document_number(receipt, 'RCT')}",
+    )
+
+
+@login_required
+@xframe_options_sameorigin
+def receipt_html_preview(request, pk):
+    """Render the same receipt document used for browser-based PDF generation."""
+    receipt = get_object_or_404(Receipt, pk=pk)
+    client = None
+    if receipt.logistics_payment and receipt.logistics_payment.payment:
+        loading = receipt.logistics_payment.payment.loading
+        client = getattr(loading, "client", None)
+    elif receipt.sourcing_payment and receipt.sourcing_payment.transaction:
+        client = getattr(receipt.sourcing_payment.transaction, "customer", None)
+
+    invoice_fully_paid = False
+    try:
+        if receipt.sourcing_payment and receipt.sourcing_payment.final_invoice:
+            fi = receipt.sourcing_payment.final_invoice
+            invoice_fully_paid = (
+                fi.total_amount or 0
+            ) > 0 and _final_invoice_total_paid(fi) >= (fi.total_amount or 0)
+        elif receipt.logistics_payment and receipt.logistics_payment.payment:
+            p = receipt.logistics_payment.payment
+            p.refresh_totals()
+            invoice_fully_paid = (p.amount_charged or 0) > 0 and (
+                p.amount_paid or 0
+            ) >= (p.amount_charged or 0)
+    except Exception:
+        invoice_fully_paid = False
+
+    response = render(
+        request,
+        "logistics/pdf/receipt_standalone.html",
+        {
+            "receipt": receipt,
+            "receipt_display_number": display_document_number(receipt, "RCT"),
+            "client": client,
+            "invoice_fully_paid": invoice_fully_paid,
+            "document_signature": _document_signature_for(receipt),
+            "auto_print_pdf": request.GET.get("download") == "1",
+        },
+    )
+    _prevent_stale_pdf_cache(response)
+    return response
+
+
+@login_required
+def receipt_pdf(request, pk):
+    receipt = get_object_or_404(Receipt, pk=pk)
+    return redirect(
+        f"{reverse('receipt_html_preview', kwargs={'pk': receipt.pk})}?download=1"
+    )
+
+
+@login_required
+def receipt_reverse(request, pk):
+    """Mark a receipt as reversed/refunded by an authorised user. Does not delete the record."""
+    receipt = get_object_or_404(Receipt, pk=pk)
+    can_reverse_receipt = (
+        request.user.is_superuser or getattr(request.user, "role", "") == "DIRECTOR"
+    )
+    if not can_reverse_receipt:
+        messages.error(
+            request,
+            "Director authorization is required to reverse or refund a receipt.",
+        )
+        return redirect("receipt_detail", pk=pk)
+    if receipt.is_reversed:
+        messages.warning(request, "This receipt has already been reversed.")
+        return redirect("receipt_detail", pk=pk)
+    if request.method == "POST":
+        notes = request.POST.get("reversal_notes", "").strip()
+        receipt.is_reversed = True
+        receipt.reversed_at = timezone.now()
+        receipt.reversed_by = request.user
+        receipt.reversal_notes = notes
+        receipt.save()
+        messages.success(
+            request, f"Receipt {receipt.receipt_number} has been reversed."
+        )
+        return redirect("receipt_list")
+    return render(request, "logistics/receipts/reverse.html", {"receipt": receipt})
+
+
+# ===== SOURCING PAYMENTS =====
+
+
+@login_required
+def sourcing_payment_create(request, transaction_pk=None):
+    """Record a payment against a sourcing Transaction."""
+    if not _can_record_payment_entry(request.user):
+        if transaction_pk:
+            link = reverse(
+                "sourcing_payment_create_for", kwargs={"transaction_pk": transaction_pk}
+            )
+            redirect_target = reverse(
+                "transaction_detail", kwargs={"pk": transaction_pk}
+            )
+        else:
+            link = reverse("sourcing_payment_create")
+            redirect_target = reverse("transaction_list")
+        _request_finance_payment_permission(
+            request,
+            payment_label="a client trade payment",
+            link=link,
+        )
+        return redirect(redirect_target)
+
+    initial = {}
+    requested_mode = (request.GET.get("mode") or "").strip().lower()
+    requested_invoice_pk = (
+        request.GET.get("invoice") or request.GET.get("final_invoice") or ""
+    ).strip()
+    if requested_mode == "full":
+        initial["is_full_payment"] = True
+    elif requested_mode == "partial":
+        initial["is_full_payment"] = False
+
+    txn = None
+    fi = None
+    if transaction_pk:
+        txn = get_object_or_404(Transaction, pk=transaction_pk)
+        initial["transaction"] = txn
+        # Pre-select the latest FinalInvoice (confirmed first, else any)
+        invoice_queryset = FinalInvoice.objects.filter(transaction=txn).order_by(
+            "-is_confirmed", "-created_at"
+        )
+        fi = None
+        if requested_invoice_pk:
+            fi = invoice_queryset.filter(pk=requested_invoice_pk).first()
+        if fi is None:
+            fi = invoice_queryset.first()
+        if fi:
+            initial["final_invoice"] = fi
+            total_paid = _final_invoice_total_paid(fi)
+            payment_snapshot = _final_invoice_payment_snapshot(fi, total_paid)
+            amount_due = payment_snapshot["invoice_balance"]
+            if not payment_snapshot["can_record_payment"]:
+                messages.info(
+                    request,
+                    "This invoice is already paid. Additional payments are disabled.",
+                )
+                return redirect("transaction_detail", pk=txn.pk)
+            initial["currency"] = fi.currency
+            initial["amount_due_snapshot"] = amount_due
+            initial["balance_after"] = amount_due
+            initial["change_given"] = 0
+
+    if request.method == "POST":
+        form = TransactionPaymentRecordForm(request.POST, request.FILES)
+        if form.is_valid():
+            record = form.save(commit=False)
+            record.created_by = request.user
+            record.save()
+            transaction = record.transaction
+            po_message = None
+            invoice = (
+                record.final_invoice
+                or transaction.final_invoices.order_by("-created_at").first()
+            )
+            if invoice:
+                total_paid = _final_invoice_total_paid(invoice)
+                payment_snapshot = _final_invoice_payment_snapshot(invoice, total_paid)
+                if payment_snapshot["fully_paid"]:
+                    Transaction.objects.filter(pk=transaction.pk).update(status="PAID")
+                if payment_snapshot["procurement_ready"]:
+                    purchase_order, created = _ensure_purchase_order_for_transaction(
+                        transaction,
+                        request.user,
+                        invoice=invoice,
+                    )
+                    if created and purchase_order:
+                        po_message = (
+                            f" Purchase Order {purchase_order.po_number} generated."
+                        )
+                        _notify_roles(
+                            title="Purchase order generated",
+                            message=f"PO {purchase_order.po_number} created for {transaction.transaction_id}.",
+                            link=f"/invoicing/purchase-orders/{purchase_order.pk}/",
+                            category="trading",
+                            roles=["ADMIN", "DIRECTOR", "FINANCE", "PROCUREMENT"],
+                        )
+            _notify_roles(
+                title="Client payment received",
+                message=(
+                    f"{record.amount} {record.currency} received for "
+                    f"{transaction.transaction_id}."
+                ),
+                link=f"/transactions/{transaction.pk}/",
+                category="trading",
+                roles=["ADMIN", "DIRECTOR", "FINANCE", "PROCUREMENT"],
+            )
+            _notify_roles(
+                title="Receipt generated",
+                message=(
+                    f"Receipt {display_document_number(record.receipt, 'RCT')} was generated for "
+                    f"{transaction.transaction_id}."
+                ),
+                link=reverse("receipt_detail", kwargs={"pk": record.receipt.pk}),
+                category="document",
+                roles=["ADMIN", "DIRECTOR", "FINANCE"],
+            )
+            messages.success(
+                request,
+                f"Payment recorded. Receipt {record.receipt.receipt_number} generated.{po_message or ''}",
+            )
+            return redirect("receipt_list")
+    else:
+        form = TransactionPaymentRecordForm(initial=initial)
+
+    selected_txn = None
+    selected_invoice = None
+    amount_due = None
+    total_paid = None
+    if form.is_bound:
+        selected_txn = form.cleaned_data.get("transaction") if form.is_valid() else None
+    elif txn:
+        selected_txn = txn
+        selected_invoice = fi
+
+    if selected_txn and not selected_invoice:
+        selected_invoice = selected_txn.final_invoices.order_by(
+            "-is_confirmed", "-created_at"
+        ).first()
+    if selected_txn and selected_invoice:
+        total_paid = _final_invoice_total_paid(selected_invoice)
+        amount_due = max(selected_invoice.total_amount - total_paid, 0)
+
+    return render(
+        request,
+        "logistics/sourcing_payments/form.html",
+        {
+            "form": form,
+            "title": "Record Trade Payment",
+            "selected_transaction": selected_txn,
+            "selected_invoice": selected_invoice,
+            "amount_due": amount_due,
+            "total_paid": total_paid,
+            "due_info_url": reverse("sourcing_payment_due_info"),
+        },
+    )
+
+
+@login_required
+@finance_required
+def sourcing_payment_due_info(request):
+    """Return invoice due/paid amounts for the selected sourcing transaction."""
+    transaction_id = request.GET.get("transaction_id")
+    invoice_id = request.GET.get("invoice_id")
+
+    if not transaction_id:
+        return JsonResponse(
+            {"ok": False, "message": "transaction_id is required."}, status=400
+        )
+
+    try:
+        transaction_id = int(transaction_id)
+    except (TypeError, ValueError):
+        return JsonResponse(
+            {"ok": False, "message": "transaction_id must be a valid integer."},
+            status=400,
+        )
+
+    transaction = get_object_or_404(Transaction, pk=transaction_id)
+    invoice_queryset = FinalInvoice.objects.filter(
+        transaction=transaction,
+    ).order_by("-is_confirmed", "-created_at")
+
+    selected_invoice = None
+    if invoice_id:
+        try:
+            invoice_id = int(invoice_id)
+        except (TypeError, ValueError):
+            return JsonResponse(
+                {"ok": False, "message": "invoice_id must be a valid integer."},
+                status=400,
+            )
+        selected_invoice = invoice_queryset.filter(pk=invoice_id).first()
+        if not selected_invoice:
+            # Fallback gracefully to the latest invoice for the chosen transaction.
+            selected_invoice = invoice_queryset.first()
+    else:
+        selected_invoice = invoice_queryset.first()
+
+    total_paid = (
+        _final_invoice_total_paid(selected_invoice)
+        if selected_invoice
+        else (transaction.payment_records.aggregate(total=Sum("amount"))["total"] or 0)
+    )
+
+    if not selected_invoice:
+        return JsonResponse(
+            {
+                "ok": False,
+                "message": "No confirmed invoice found for this transaction.",
+                "invoice_id": None,
+                "currency": "USD",
+                "total_paid": f"{total_paid:.2f}",
+                "amount_due": "0.00",
+            }
+        )
+
+    amount_due = max(selected_invoice.total_amount - total_paid, 0)
+    payment_snapshot = _final_invoice_payment_snapshot(selected_invoice, total_paid)
+    return JsonResponse(
+        {
+            "ok": payment_snapshot["can_record_payment"],
+            "invoice_id": selected_invoice.pk,
+            "currency": selected_invoice.currency,
+            "total_paid": f"{total_paid:.2f}",
+            "amount_due": f"{amount_due:.2f}",
+            "payment_status": payment_snapshot["invoice_label"],
+            "message": (
+                "This invoice is already paid. Additional payments are disabled."
+                if not payment_snapshot["can_record_payment"]
+                else ""
+            ),
+        }
+    )
+
+
+@login_required
+def sourcing_payment_list(request, transaction_pk):
+    """List all payment records for a given Transaction."""
+    txn = get_object_or_404(Transaction, pk=transaction_pk)
+    records = txn.payment_records.select_related("final_invoice", "created_by").all()
+    latest_invoice = txn.final_invoices.order_by("-is_confirmed", "-created_at").first()
+    payment_snapshot = (
+        _final_invoice_payment_snapshot(latest_invoice) if latest_invoice else None
+    )
+    return render(
+        request,
+        "logistics/sourcing_payments/list.html",
+        {
+            "transaction": txn,
+            "records": records,
+            "latest_invoice": latest_invoice,
+            "payment_snapshot": payment_snapshot,
+            "can_record_payment_entry": _can_record_payment_entry(request.user),
+        },
+    )
+
+
+# ===== Commission Module =====
+
+
+def _can_view_commissions(user):
+    return user.is_superuser or getattr(user, "role", "") in {"DIRECTOR", "ADMIN"}
+
+
+@login_required
+@director_required
+def commission_list(request):
+    from .models import Commission
+
+    commissions = Commission.objects.select_related("client", "created_by").all()
+
+    client_id = request.GET.get("client")
+    currency = request.GET.get("currency")
+    if client_id:
+        commissions = commissions.filter(client_id=client_id)
+    if currency:
+        commissions = commissions.filter(currency=currency)
+
+    totals = (
+        commissions.values("currency")
+        .annotate(total=Sum("amount"), entries=Count("id"))
+        .order_by("currency")
+    )
+
+    paginator = Paginator(commissions, DEFAULT_PAGE_SIZE)
+    page_obj = paginator.get_page(request.GET.get("page"))
+
+    return render(
+        request,
+        "logistics/commissions/list.html",
+        {
+            "commissions": page_obj,
+            "page_obj": page_obj,
+            "totals": list(totals),
+            "clients": Client.objects.order_by("name"),
+            "filter_client": client_id or "",
+            "filter_currency": currency or "",
+        },
+    )
+
+
+@login_required
+@director_required
+def commission_create(request):
+    from .forms import CommissionForm
+
+    if request.method == "POST":
+        form = CommissionForm(request.POST)
+        if form.is_valid():
+            commission = form.save(commit=False)
+            commission.created_by = request.user
+            commission.save()
+            messages.success(request, "Commission entry recorded successfully.")
+            log_audit(
+                "commission",
+                "create",
+                commission.id,
+                str(commission),
+                request.user,
+            )
+            return redirect("commission_list")
+    else:
+        form = CommissionForm()
+    return render(
+        request,
+        "logistics/commissions/form.html",
+        {"form": form, "title": "Record Commission"},
+    )
+
+
+@login_required
+@director_required
+def commission_update(request, pk):
+    from .forms import CommissionForm
+    from .models import Commission
+
+    commission = get_object_or_404(Commission, pk=pk)
+    if request.method == "POST":
+        form = CommissionForm(request.POST, instance=commission)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Commission entry updated.")
+            log_audit(
+                "commission",
+                "update",
+                commission.id,
+                str(commission),
+                request.user,
+            )
+            return redirect("commission_list")
+    else:
+        form = CommissionForm(instance=commission)
+    return render(
+        request,
+        "logistics/commissions/form.html",
+        {"form": form, "title": "Update Commission", "commission": commission},
+    )
+
+
+@login_required
+@director_required
+def commission_delete(request, pk):
+    from .models import Commission
+
+    commission = get_object_or_404(Commission, pk=pk)
+    if request.method == "POST":
+        label = str(commission)
+        commission_id = commission.id
+        commission.delete()
+        log_audit("commission", "delete", commission_id, label, request.user)
+        messages.success(request, "Commission entry deleted.")
+        return redirect("commission_list")
+    return render(
+        request,
+        "logistics/commissions/confirm_delete.html",
+        {"commission": commission},
+    )
+
+
+# ---------------------------------------------------------------------------
+# Proof of Delivery (shared between Logistics and Sourcing/Trading lanes)
+# ---------------------------------------------------------------------------
+
+
+def _render_pod_form(request, *, target, side, form):
+    """Render the POD capture form for either lane."""
+    return render(
+        request,
+        "logistics/pod/form.html",
+        {
+            "form": form,
+            "target": target,
+            "side": side,
+            "is_logistics": side == "logistics",
+            "is_trading": side == "trading",
+        },
+    )
+
+
+@login_required
+@role_required("ADMIN", "DIRECTOR", "FINANCE", "OFFICE_ADMIN")
+def record_logistics_pod(request, loading_pk):
+    """Capture POD for a Loading (logistics lane)."""
+    loading = get_object_or_404(Loading, pk=loading_pk)
+    if hasattr(loading, "proof_of_delivery"):
+        messages.info(
+            request,
+            f"Proof of Delivery {loading.proof_of_delivery.pod_number} already exists for this loading.",
+        )
+        return redirect("pod_detail", pk=loading.proof_of_delivery.pk)
+
+    if request.method == "POST":
+        form = ProofOfDeliveryForm(
+            request.POST, request.FILES, instance=ProofOfDelivery(loading=loading)
+        )
+        if form.is_valid():
+            pod = form.save(commit=False)
+            pod.loading = loading
+            pod.created_by = request.user
+            pod.save()
+            messages.success(
+                request,
+                f"Proof of Delivery {pod.pod_number} recorded for loading {loading.loading_id}.",
+            )
+            _notify_roles(
+                title="Proof of Delivery captured",
+                message=f"POD {pod.pod_number} recorded for loading {loading.loading_id}.",
+                link=f"/pod/{pod.pk}/",
+                category="logistics",
+                roles=["ADMIN", "DIRECTOR", "FINANCE", "OFFICE_ADMIN"],
+            )
+            return redirect("pod_detail", pk=pod.pk)
+    else:
+        form = ProofOfDeliveryForm(initial={"delivered_at": timezone.now()})
+
+    return _render_pod_form(request, target=loading, side="logistics", form=form)
+
+
+@login_required
+@role_required("ADMIN", "DIRECTOR", "FINANCE", "PROCUREMENT", "OFFICE_ADMIN")
+def record_trading_pod(request, fulfillment_pk):
+    """Capture POD for a FulfillmentOrder (sourcing / trading lane)."""
+    fulfillment = get_object_or_404(FulfillmentOrder, pk=fulfillment_pk)
+    if hasattr(fulfillment, "proof_of_delivery"):
+        messages.info(
+            request,
+            f"Proof of Delivery {fulfillment.proof_of_delivery.pod_number} already exists for this fulfillment.",
+        )
+        return redirect("pod_detail", pk=fulfillment.proof_of_delivery.pk)
+
+    if request.method == "POST":
+        form = ProofOfDeliveryForm(
+            request.POST,
+            request.FILES,
+            instance=ProofOfDelivery(fulfillment_order=fulfillment),
+        )
+        if form.is_valid():
+            pod = form.save(commit=False)
+            pod.fulfillment_order = fulfillment
+            pod.created_by = request.user
+            pod.save()
+            messages.success(
+                request,
+                f"Proof of Delivery {pod.pod_number} recorded for fulfillment {fulfillment.source_reference}.",
+            )
+            _notify_roles(
+                title="Proof of Delivery captured",
+                message=(
+                    f"POD {pod.pod_number} recorded for fulfillment "
+                    f"{fulfillment.source_reference} (txn {fulfillment.transaction.transaction_id})."
+                ),
+                link=f"/pod/{pod.pk}/",
+                category="trading",
+                roles=["ADMIN", "DIRECTOR", "FINANCE", "PROCUREMENT"],
+            )
+            return redirect("pod_detail", pk=pod.pk)
+    else:
+        form = ProofOfDeliveryForm(initial={"delivered_at": timezone.now()})
+
+    return _render_pod_form(request, target=fulfillment, side="trading", form=form)
+
+
+@login_required
+def pod_detail(request, pk):
+    pod = get_object_or_404(
+        ProofOfDelivery.objects.select_related(
+            "loading", "fulfillment_order__transaction__customer", "created_by"
+        ),
+        pk=pk,
+    )
+    return render(
+        request,
+        "logistics/pod/detail.html",
+        {
+            "pod": pod,
+            "is_logistics": pod.business_side == "logistics",
+            "is_trading": pod.business_side == "trading",
+        },
+    )
+
+
+@login_required
+def pod_delivery_note_pdf(request, pk):
+    pod = get_object_or_404(
+        ProofOfDelivery.objects.select_related(
+            "loading__client",
+            "fulfillment_order__transaction__customer",
+            "created_by",
+        ),
+        pk=pk,
+    )
+    response = HttpResponse(content_type="application/pdf")
+    response["Content-Disposition"] = (
+        f"attachment; filename=delivery_note_{pod.pod_number}.pdf"
+    )
+    pdf = canvas.Canvas(response, pagesize=A4)
+    width, height = A4
+
+    _draw_standard_doc_header(pdf, width, height, "DELIVERY NOTE", pod.pod_number)
+
+    y = height - 130
+    party_label = None
+    party_name = None
+
+    if pod.business_side == "logistics" and pod.loading and pod.loading.client:
+        party_label = "Client"
+        party_name = pod.loading.client.name
+    elif pod.business_side == "trading" and pod.fulfillment_order:
+        party_label = "Customer"
+        party_name = pod.fulfillment_order.transaction.customer.name
+
+    received = pod.received_by_name + (
+        f"  ({pod.received_by_phone})" if pod.received_by_phone else ""
+    )
+
+    detail_y = _draw_pdf_card(
+        pdf, 50, y, width - 100, 140, "Delivery Details", PDF_SOFT_GOLD
+    )
+    _draw_pdf_key_values(
+        pdf,
+        62,
+        detail_y,
+        [
+            ("Lane", pod.business_side.title()),
+            ("Reference", pod.target_reference),
+            (party_label or "Party", party_name),
+            ("Delivered at", pod.delivered_at.strftime("%Y-%m-%d %H:%M")),
+            ("Received by", received),
+            ("Address", pod.delivery_address[:80] if pod.delivery_address else None),
+            (
+                "GPS",
+                (
+                    f"{pod.gps_lat}, {pod.gps_lng}"
+                    if pod.gps_lat is not None and pod.gps_lng is not None
+                    else None
+                ),
+            ),
+        ],
+        label_width=100,
+        max_chars=72,
+    )
+
+    y -= 165
+
+    if pod.notes:
+        notes_y = _draw_pdf_card(pdf, 50, y, width - 100, 110, "Notes", colors.white)
+        pdf.setFont("Helvetica", 10)
+        pdf.setFillColor(PDF_BRAND_BLACK)
+        cursor = notes_y
+        for chunk in [pod.notes[i : i + 95] for i in range(0, len(pod.notes), 95)][:8]:
+            pdf.drawString(62, cursor, chunk)
+            cursor -= 14
+        y -= 130
+
+    y -= 30
+    pdf.setFillColor(PDF_BRAND_BLACK)
+    pdf.setFont("Helvetica-Bold", 11)
+    pdf.drawString(50, y, "Receiver Signature:")
+    pdf.line(180, y - 2, 420, y - 2)
+    y -= 30
+    pdf.drawString(50, y, "Issued by:")
+    pdf.setFont("Helvetica", 11)
+    pdf.drawString(150, y, pod.created_by.get_full_name() or pod.created_by.username)
+
+    _draw_international_terms_footer(pdf, 50, 110)
+    pdf.showPage()
+    pdf.save()
+    return response
+
+
+# ---------------------------------------------------------------------------
+# Tracking timelines (logistics Transit + trading Fulfillment ShipmentLegs)
+# ---------------------------------------------------------------------------
+
+
+def _timeline_timestamp_display(value):
+    if not value:
+        return ""
+    if isinstance(value, datetime):
+        return timezone.localtime(value).strftime("%d %b %Y %H:%M")
+    if isinstance(value, date):
+        return value.strftime("%d %b %Y")
+    return str(value)
+
+
+def _prepare_timeline_milestones(milestones):
+    for milestone in milestones:
+        milestone["timestamp_display"] = _timeline_timestamp_display(
+            milestone.get("timestamp")
+        )
+    return milestones
+
+
+def _build_transit_milestones(transit):
+    """Return a list of milestone dicts for the logistics transit timeline."""
+    loading = transit.loading
+    pod = getattr(loading, "proof_of_delivery", None)
+    now = timezone.now()
+    milestones = []
+
+    milestones.append(
+        {
+            "label": "Cargo registered",
+            "icon": "bi-box-seam-fill",
+            "state": "done",
+            "timestamp": loading.loading_date,
+            "detail": f"Loading {loading.loading_id} - {loading.client.name}",
+        }
+    )
+
+    boarding_state = (
+        "done" if transit.boarding_date and transit.boarding_date <= now else "pending"
+    )
+    milestones.append(
+        {
+            "label": "Boarding / Departure",
+            "icon": "bi-truck-flatbed",
+            "state": boarding_state,
+            "timestamp": transit.boarding_date,
+            "detail": f"Vessel {transit.vessel_name}",
+        }
+    )
+
+    in_transit_state = (
+        "done" if transit.status in ("in_transit", "arrived") else "pending"
+    )
+    milestones.append(
+        {
+            "label": "In transit",
+            "icon": "bi-compass-fill",
+            "state": in_transit_state,
+            "timestamp": transit.boarding_date,
+            "detail": transit.remarks or "",
+        }
+    )
+
+    eta_late = (
+        transit.status != "arrived"
+        and transit.eta_kampala
+        and transit.eta_kampala < now
+    )
+    eta_state = (
+        "done" if transit.status == "arrived" else ("late" if eta_late else "pending")
+    )
+    milestones.append(
+        {
+            "label": "ETA Kampala",
+            "icon": "bi-flag-fill",
+            "state": eta_state,
+            "timestamp": transit.eta_kampala,
+            "detail": "Estimated arrival",
+        }
+    )
+
+    arrived_state = "done" if transit.status == "arrived" else "pending"
+    milestones.append(
+        {
+            "label": "Arrived",
+            "icon": "bi-geo-alt-fill",
+            "state": arrived_state,
+            "timestamp": transit.updated_at if transit.status == "arrived" else None,
+            "detail": "",
+        }
+    )
+
+    pod_state = "done" if pod else "pending"
+    milestones.append(
+        {
+            "label": "Proof of Delivery",
+            "icon": "bi-file-earmark-check",
+            "state": pod_state,
+            "timestamp": pod.delivered_at if pod else None,
+            "detail": (
+                f"POD {pod.pod_number} - received by {pod.received_by_name}"
+                if pod
+                else "Not captured yet"
+            ),
+            "link": f"/pod/{pod.pk}/" if pod else None,
+        }
+    )
+
+    return _prepare_timeline_milestones(milestones)
+
+
+@login_required
+def transit_detail(request, pk):
+    """Read-only timeline view for a single Transit (logistics lane)."""
+    transit = get_object_or_404(
+        Transit.objects.select_related("loading__client", "created_by"), pk=pk
+    )
+    milestones = _build_transit_milestones(transit)
+    return render(
+        request,
+        "logistics/transits/detail.html",
+        {
+            "transit": transit,
+            "loading": transit.loading,
+            "milestones": milestones,
+            "pod": getattr(transit.loading, "proof_of_delivery", None),
+            "tracking_token": make_tracking_token("transit", transit.pk),
+        },
+    )
+
+
+def _build_fulfillment_milestones(fulfillment):
+    """Return milestones for the trading fulfillment timeline (order + legs + POD)."""
+    pod = getattr(fulfillment, "proof_of_delivery", None)
+    now = timezone.now().date()
+    milestones = []
+
+    milestones.append(
+        {
+            "label": "Fulfillment opened",
+            "icon": "bi-diagram-3-fill",
+            "state": "done",
+            "timestamp": fulfillment.created_at,
+            "detail": f"Status: {fulfillment.get_status_display()}",
+        }
+    )
+
+    legs = list(fulfillment.legs.all().order_by("sequence", "created_at"))
+    for leg in legs:
+        is_late = (
+            leg.status not in ("ARRIVED", "COMPLETED")
+            and leg.arrival_eta
+            and leg.arrival_eta < now
+        )
+        if leg.status in ("ARRIVED", "COMPLETED"):
+            state = "done"
+        elif is_late:
+            state = "late"
+        elif leg.status == "IN_TRANSIT":
+            state = "active"
+        else:
+            state = "pending"
+        milestones.append(
+            {
+                "label": f"Leg {leg.sequence}: {leg.get_leg_type_display()}",
+                "icon": "bi-signpost-split-fill",
+                "state": state,
+                "timestamp": leg.actual_arrival
+                or leg.arrival_eta
+                or leg.departure_date,
+                "detail": (
+                    f"{leg.origin} -> {leg.destination}"
+                    + (f" via {leg.carrier}" if leg.carrier else "")
+                    + f" - {leg.get_status_display()}"
+                ),
+            }
+        )
+
+    pod_state = "done" if pod else "pending"
+    milestones.append(
+        {
+            "label": "Proof of Delivery",
+            "icon": "bi-file-earmark-check",
+            "state": pod_state,
+            "timestamp": pod.delivered_at if pod else None,
+            "detail": (
+                f"POD {pod.pod_number} - received by {pod.received_by_name}"
+                if pod
+                else "Not captured yet"
+            ),
+            "link": f"/pod/{pod.pk}/" if pod else None,
+        }
+    )
+
+    return _prepare_timeline_milestones(milestones)
+
+
+@login_required
+def fulfillment_timeline(request, pk):
+    """Read-only timeline view for a FulfillmentOrder (sourcing / trading lane)."""
+    fulfillment = get_object_or_404(
+        FulfillmentOrder.objects.select_related(
+            "transaction__customer"
+        ).prefetch_related("legs"),
+        pk=pk,
+    )
+    milestones = _build_fulfillment_milestones(fulfillment)
+    return render(
+        request,
+        "logistics/fulfillment/timeline.html",
+        {
+            "fulfillment": fulfillment,
+            "transaction": fulfillment.transaction,
+            "milestones": milestones,
+            "pod": getattr(fulfillment, "proof_of_delivery", None),
+            "tracking_token": make_tracking_token("fulfillment", fulfillment.pk),
+        },
+    )
+
+
+# ---------------------------------------------------------------------------
+# Public tracking link (signed token) + POD list
+# ---------------------------------------------------------------------------
+
+from django.core import signing as _tracking_signing  # noqa: E402
+
+_TRACKING_SALT = "gmi.public.tracking"
+_TRACKING_MAX_AGE = 60 * 60 * 24 * 90  # 90 days
+
+
+def make_tracking_token(kind, pk):
+    """Return a signed, URL-safe token for ``kind`` (``transit``/``fulfillment``) and ``pk``."""
+    return _tracking_signing.dumps({"k": kind, "p": int(pk)}, salt=_TRACKING_SALT)
+
+
+def _decode_tracking_token(token):
+    try:
+        return _tracking_signing.loads(
+            token, salt=_TRACKING_SALT, max_age=_TRACKING_MAX_AGE
+        )
+    except _tracking_signing.SignatureExpired:
+        return {"_error": "expired"}
+    except _tracking_signing.BadSignature:
+        return {"_error": "invalid"}
+
+
+def public_track(request, token):
+    """Read-only public tracking page reachable by anyone with a signed link."""
+    payload = _decode_tracking_token(token)
+    if "_error" in payload:
+        return render(
+            request,
+            "logistics/tracking/public.html",
+            {"error": payload["_error"]},
+            status=404,
+        )
+
+    kind = payload.get("k")
+    pk = payload.get("p")
+    if kind == "transit":
+        transit = get_object_or_404(
+            Transit.objects.select_related("loading__client"), pk=pk
+        )
+        milestones = _build_transit_milestones(transit)
+        ctx = {
+            "kind": "transit",
+            "title": f"Shipment {transit.loading.loading_id}",
+            "subtitle": f"Vessel {transit.vessel_name}",
+            "client": transit.loading.client.name,
+            "status_label": transit.get_status_display(),
+            "milestones": milestones,
+            "eta": transit.eta_kampala,
+        }
+    elif kind == "fulfillment":
+        fulfillment = get_object_or_404(
+            FulfillmentOrder.objects.select_related(
+                "transaction__customer"
+            ).prefetch_related("legs"),
+            pk=pk,
+        )
+        milestones = _build_fulfillment_milestones(fulfillment)
+        ctx = {
+            "kind": "fulfillment",
+            "title": f"Order #{fulfillment.id}",
+            "subtitle": fulfillment.transaction.transaction_id,
+            "client": fulfillment.transaction.customer.name,
+            "status_label": fulfillment.get_status_display(),
+            "milestones": milestones,
+            "eta": fulfillment.planned_delivery_date,
+        }
+    else:
+        return render(
+            request,
+            "logistics/tracking/public.html",
+            {"error": "invalid"},
+            status=404,
+        )
+
+    return render(request, "logistics/tracking/public.html", ctx)
+
+
+@login_required
+def pod_list(request):
+    """List proof-of-delivery records, filterable by lane via ?lane=logistics|trading."""
+    lane = (request.GET.get("lane") or "").lower()
+    qs = ProofOfDelivery.objects.select_related(
+        "loading__client",
+        "fulfillment_order__transaction__customer",
+        "created_by",
+    ).order_by("-delivered_at")
+    if lane == "logistics":
+        qs = qs.filter(loading__isnull=False)
+    elif lane == "trading":
+        qs = qs.filter(fulfillment_order__isnull=False)
+    return render(
+        request,
+        "logistics/pod/list.html",
+        {"pods": qs, "lane": lane},
+    )
+
+
+# ---------------------------------------------------------------------------
+# Phase D: Trade / Loading closure
+# ---------------------------------------------------------------------------
+
+
+def _closure_item(label, ok, detail=""):
+    return {"label": label, "ok": bool(ok), "detail": detail}
+
+
+def evaluate_transaction_closure(transaction):
+    """Return (items, ready) for closing a trading transaction."""
+    items = []
+
+    proforma = transaction.proforma_invoices.order_by("-created_at").first()
+    items.append(
+        _closure_item(
+            "Proforma invoice issued",
+            proforma is not None,
+            str(proforma) if proforma else "No proforma yet",
+        )
+    )
+
+    final_invoice = transaction.final_invoices.order_by("-created_at").first()
+    items.append(
+        _closure_item(
+            "Final invoice issued",
+            final_invoice is not None,
+            str(final_invoice) if final_invoice else "No final invoice",
+        )
+    )
+
+    total_paid = (
+        _final_invoice_total_paid(final_invoice)
+        if final_invoice
+        else (transaction.payment_records.aggregate(total=Sum("amount"))["total"] or 0)
+    )
+    invoice_total = final_invoice.total_amount if final_invoice else 0
+    paid_ok = bool(final_invoice) and total_paid >= invoice_total and invoice_total > 0
+    items.append(
+        _closure_item(
+            "Customer payment settled",
+            paid_ok,
+            f"Paid {total_paid} / {invoice_total}",
+        )
+    )
+
+    fulfillment = getattr(transaction, "fulfillment_order", None)
+    delivered = bool(fulfillment) and fulfillment.status == "DELIVERED"
+    items.append(
+        _closure_item(
+            "Fulfillment delivered",
+            delivered,
+            fulfillment.get_status_display() if fulfillment else "No fulfillment",
+        )
+    )
+
+    pod = getattr(fulfillment, "proof_of_delivery", None) if fulfillment else None
+    items.append(
+        _closure_item(
+            "Proof of Delivery captured",
+            pod is not None,
+            pod.pod_number if pod else "Not captured",
+        )
+    )
+
+    ready = all(item["ok"] for item in items) and not transaction.is_closed
+    return items, ready
+
+
+def evaluate_loading_closure(loading):
+    """Return (items, ready) for closing a logistics loading."""
+    items = []
+
+    invoice = (
+        loading.final_invoices.order_by("-created_at").first()
+        if hasattr(loading, "final_invoices")
+        else None
+    )
+    if invoice is None:
+        invoice = (
+            FinalInvoice.objects.filter(loading=loading).order_by("-created_at").first()
+        )
+    items.append(
+        _closure_item(
+            "Freight invoice issued",
+            invoice is not None,
+            str(invoice) if invoice else "No invoice",
+        )
+    )
+
+    payments = Payment.objects.filter(loading=loading)
+    legacy_paid = payments.aggregate(total=Sum("amount_paid"))["total"] or Decimal("0")
+    total_charged = payments.aggregate(total=Sum("amount_charged"))["total"] or Decimal(
+        "0"
+    )
+    # Also count invoice-level payments (paid via the FinalInvoice "Record
+    # Payment" route) and any source-transaction payments tied to this cargo.
+    invoice_record_total = Decimal("0")
+    if invoice is not None:
+        invoice_record_total = invoice.payment_records.aggregate(total=Sum("amount"))[
+            "total"
+        ] or Decimal("0")
+    flow_transaction = getattr(loading, "source_transaction", None)
+    txn_total = Decimal("0")
+    if flow_transaction is not None:
+        txn_total = flow_transaction.payment_records.aggregate(total=Sum("amount"))[
+            "total"
+        ] or Decimal("0")
+    # Prefer the larger of invoice-scoped vs. transaction-scoped totals so the
+    # same payment isn't double-counted when recorded against both.
+    invoice_route_paid = max(invoice_record_total, txn_total)
+    total_paid = legacy_paid + invoice_route_paid
+    # Use the higher of the freight payment's charged amount or the final invoice
+    # total as the expected settlement target.
+    invoice_total = invoice.total_amount if invoice else Decimal("0")
+    expected_total = max(total_charged or Decimal("0"), invoice_total or Decimal("0"))
+    paid_ok = expected_total > 0 and total_paid >= expected_total
+    items.append(
+        _closure_item(
+            "Freight payment settled",
+            paid_ok,
+            f"Paid {total_paid} / {expected_total}",
+        )
+    )
+
+    transit = getattr(loading, "transit", None)
+    arrived = bool(transit) and transit.status == "arrived"
+    items.append(
+        _closure_item(
+            "Transit arrived",
+            arrived,
+            transit.get_status_display() if transit else "No transit record",
+        )
+    )
+
+    pod = getattr(loading, "proof_of_delivery", None)
+    items.append(
+        _closure_item(
+            "Proof of Delivery captured",
+            pod is not None,
+            pod.pod_number if pod else "Not captured",
+        )
+    )
+
+    if loading.entry_type == "FULL_CONTAINER":
+        container_returned = ContainerReturn.objects.filter(loading=loading).exists()
+        items.append(
+            _closure_item(
+                "Container returned",
+                container_returned,
+                "Recorded" if container_returned else "Pending",
+            )
+        )
+
+    ready = all(item["ok"] for item in items) and not loading.is_closed
+    return items, ready
+
+
+@login_required
+@role_required("ADMIN", "DIRECTOR", "FINANCE")
+def close_transaction(request, pk):
+    transaction = get_object_or_404(Transaction, pk=pk)
+    if transaction.is_closed:
+        messages.info(request, "Transaction already closed.")
+        return redirect("transaction_detail", pk=pk)
+    items, ready = evaluate_transaction_closure(transaction)
+    if not ready:
+        missing = [i["label"] for i in items if not i["ok"]]
+        messages.error(
+            request,
+            "Cannot close transaction. Pending: " + ", ".join(missing),
+        )
+        return redirect("transaction_detail", pk=pk)
+    if request.method == "POST":
+        transaction.status = "CLOSED"
+        transaction.closed_at = timezone.now()
+        transaction.closed_by = request.user
+        transaction.closure_notes = request.POST.get("closure_notes", "").strip()
+        transaction.save()
+        messages.success(request, f"Transaction {transaction.transaction_id} closed.")
+        _notify_roles(
+            title="Trade transaction closed",
+            message=(
+                f"{transaction.transaction_id} was closed by {request.user.get_full_name() or request.user.username}."
+            ),
+            link=f"/transactions/{transaction.pk}/",
+            category="trading",
+            roles=["ADMIN", "DIRECTOR", "FINANCE"],
+        )
+    return redirect("transaction_detail", pk=pk)
+
+
+@login_required
+@role_required("ADMIN", "DIRECTOR")
+def reopen_transaction(request, pk):
+    transaction = get_object_or_404(Transaction, pk=pk)
+    if not transaction.is_closed:
+        messages.info(request, "Transaction is not closed.")
+        return redirect("transaction_detail", pk=pk)
+    if request.method == "POST":
+        reason = _closed_trade_edit_reason(request)
+        if not reason:
+            messages.error(request, "Add a reason before reopening a closed trade.")
+            return redirect("transaction_detail", pk=pk)
+        transaction.status = "DELIVERED"
+        transaction.closure_notes = _append_trade_note(
+            transaction.closure_notes,
+            "Reopened",
+            reason,
+            request.user,
+        )
+        transaction.closed_at = None
+        transaction.closed_by = None
+        transaction.save()
+        log_audit(
+            "transaction",
+            "update",
+            transaction.pk,
+            transaction.transaction_id,
+            request.user,
+            changes={"reopen_reason": reason},
+        )
+        messages.success(request, "Transaction reopened.")
+    return redirect("transaction_detail", pk=pk)
+
+
+@login_required
+@role_required("ADMIN", "DIRECTOR", "FINANCE", "OFFICE_ADMIN")
+def close_loading(request, pk):
+    loading = get_object_or_404(Loading, pk=pk)
+    if loading.is_closed:
+        messages.info(request, "Loading already closed.")
+        return redirect("loading_detail", pk=pk)
+    items, ready = evaluate_loading_closure(loading)
+    if not ready:
+        missing = [i["label"] for i in items if not i["ok"]]
+        messages.error(
+            request,
+            "Cannot close loading. Pending: " + ", ".join(missing),
+        )
+        return redirect("loading_detail", pk=pk)
+    if request.method == "POST":
+        loading.closed_at = timezone.now()
+        loading.closed_by = request.user
+        loading.closure_notes = request.POST.get("closure_notes", "").strip()
+        loading.save()
+        messages.success(request, f"Loading {loading.loading_id} closed.")
+        _notify_roles(
+            title="Loading closed",
+            message=(
+                f"{loading.loading_id} was closed by {request.user.get_full_name() or request.user.username}."
+            ),
+            link=f"/loadings/{loading.pk}/",
+            category="logistics",
+            roles=["ADMIN", "DIRECTOR", "FINANCE", "OFFICE_ADMIN"],
+        )
+    return redirect("loading_detail", pk=pk)
+
+
+@login_required
+@role_required("ADMIN", "DIRECTOR")
+def reopen_loading(request, pk):
+    loading = get_object_or_404(Loading, pk=pk)
+    if not loading.is_closed:
+        messages.info(request, "Loading is not closed.")
+        return redirect("loading_detail", pk=pk)
+    if request.method == "POST":
+        loading.closed_at = None
+        loading.closed_by = None
+        loading.save()
+        messages.success(request, "Loading reopened.")
+    return redirect("loading_detail", pk=pk)
+
+
+# ===========================================================================
+# Phase E: Supplier Payments
+# ===========================================================================
+
+
+def _po_supplier_summary(purchase_order):
+    """Return (payments_qs, total_paid, balance_due) for a PO."""
+    if not purchase_order.is_split and purchase_order.split_purchase_orders.exists():
+        payments = SupplierPayment.objects.filter(
+            Q(purchase_order=purchase_order)
+            | Q(purchase_order__parent_po=purchase_order)
+        ).select_related("created_by", "purchase_order")
+    else:
+        payments = purchase_order.supplier_payments.select_related(
+            "created_by", "purchase_order"
+        )
+    payments = payments.order_by("-paid_at", "-id")
+    total_paid = payments.aggregate(total=Sum("amount"))["total"] or Decimal("0.00")
+    subtotal = purchase_order.subtotal or Decimal("0.00")
+    balance_due = max(subtotal - total_paid, Decimal("0.00"))
+    return payments, total_paid, balance_due
+
+
+def _decorate_purchase_order_supplier_payment(
+    purchase_order, user=None, *, has_supplier_splits=None
+):
+    payments, total_paid, balance_due = _po_supplier_summary(purchase_order)
+    if has_supplier_splits is None:
+        has_supplier_splits = (
+            not purchase_order.is_split
+            and purchase_order.split_purchase_orders.exists()
+        )
+    payments_include_splits = not purchase_order.is_split and has_supplier_splits
+    can_attempt_payment = (
+        not purchase_order.transaction.is_closed
+        and not purchase_order.payment_entry_locked
+        and balance_due > Decimal("0.00")
+        and not payments_include_splits
+    )
+    can_record = can_attempt_payment and _can_record_supplier_payment_entry(user)
+
+    purchase_order.supplier_payment_records = payments
+    purchase_order.supplier_total_paid = total_paid
+    purchase_order.supplier_balance_due = balance_due
+    purchase_order.supplier_payments_include_splits = payments_include_splits
+    purchase_order.can_record_supplier_payment = can_record
+    purchase_order.can_request_supplier_payment = can_attempt_payment and not can_record
+    if balance_due <= Decimal("0.00") and total_paid > 0:
+        purchase_order.supplier_payment_status_label = "Paid"
+        purchase_order.supplier_payment_status_class = "bg-success"
+    elif total_paid > 0:
+        purchase_order.supplier_payment_status_label = "Partial"
+        purchase_order.supplier_payment_status_class = "bg-warning text-dark"
+    else:
+        purchase_order.supplier_payment_status_label = "Unpaid"
+        purchase_order.supplier_payment_status_class = "bg-secondary"
+    return purchase_order
+
+
+def _decorate_purchase_order_edit_lock(purchase_order):
+    payments, total_paid, balance_due = _po_supplier_summary(purchase_order)
+    subtotal = purchase_order.subtotal or Decimal("0.00")
+    effective_status = getattr(
+        purchase_order,
+        "effective_status",
+        _purchase_order_effective_status(purchase_order, total_paid),
+    )
+    is_paid = subtotal > 0 and total_paid >= subtotal
+    is_cleared = total_paid > 0 and balance_due <= Decimal("0.00")
+    has_supplier_payment = total_paid > 0
+    is_served = effective_status in {
+        "RECEIVED",
+        "FULFILLED",
+    } or purchase_order.status in {
+        "RECEIVED",
+        "FULFILLED",
+    }
+    is_closed = purchase_order.transaction.is_closed
+
+    reasons = []
+    if is_served:
+        reasons.append("served/fulfilled")
+    if is_cleared or is_paid:
+        reasons.append("supplier balance cleared")
+    elif has_supplier_payment:
+        reasons.append("supplier payment recorded")
+    if is_closed:
+        reasons.append("trade closed")
+
+    payment_entry_locked = is_served or is_cleared or is_paid or is_closed
+
+    purchase_order.edit_locked = bool(reasons)
+    purchase_order.payment_entry_locked = payment_entry_locked
+    purchase_order.edit_lock_reasons = reasons
+    purchase_order.edit_lock_reason = ", ".join(reasons)
+    purchase_order.edit_lock_message = (
+        "This purchase order is locked because it is "
+        f"{purchase_order.edit_lock_reason}. Request Director approval for corrections."
+        if reasons
+        else ""
+    )
+    purchase_order.can_edit_purchase_order = not purchase_order.edit_locked
+    purchase_order.can_record_more_supplier_payment = not payment_entry_locked
+    purchase_order.supplier_total_paid_for_lock = total_paid
+    purchase_order.supplier_balance_due_for_lock = balance_due
+    purchase_order.has_supplier_payments_for_lock = payments.exists()
+    return purchase_order
+
+
+def _purchase_order_effective_status(purchase_order, total_paid=None):
+    if purchase_order.status in {"RECEIVED", "FULFILLED"}:
+        return purchase_order.status
+    if total_paid is None:
+        _, total_paid, _ = _po_supplier_summary(purchase_order)
+    subtotal = purchase_order.subtotal or Decimal("0.00")
+    if subtotal > 0 and total_paid >= subtotal:
+        return "FULFILLED"
+    supplier_name = (purchase_order.supplier_name or "").strip().lower()
+    has_named_supplier = supplier_name and "pending" not in supplier_name
+    if total_paid > 0 or has_named_supplier:
+        return "SENT"
+    return purchase_order.status or "PENDING"
+
+
+def _decorate_purchase_order_status(purchase_order, persist=False):
+    _, total_paid, _ = _po_supplier_summary(purchase_order)
+    effective_status = _purchase_order_effective_status(purchase_order, total_paid)
+    purchase_order.effective_status = effective_status
+    purchase_order.effective_status_display = dict(PurchaseOrder.STATUS_CHOICES).get(
+        effective_status, purchase_order.get_status_display()
+    )
+    if persist and effective_status != purchase_order.status:
+        purchase_order.status = effective_status
+        purchase_order.save(update_fields=["status", "updated_at"])
+    return purchase_order
+
+
+@login_required
+def record_supplier_payment(request, po_pk):
+    purchase_order = get_object_or_404(
+        PurchaseOrder.objects.select_related("transaction"), pk=po_pk
+    )
+    if not _can_record_supplier_payment_entry(request.user):
+        _request_finance_payment_permission(
+            request,
+            payment_label=f"a supplier payment for {purchase_order.po_number}",
+            link=reverse(
+                "record_supplier_payment", kwargs={"po_pk": purchase_order.pk}
+            ),
+        )
+        return redirect("purchase_order_detail", pk=purchase_order.pk)
+
+    if purchase_order.transaction.is_closed:
+        messages.error(
+            request,
+            "This trade is closed; supplier payments cannot be recorded.",
+        )
+        return redirect("purchase_order_detail", pk=purchase_order.pk)
+    _decorate_purchase_order_status(purchase_order)
+    _decorate_purchase_order_edit_lock(purchase_order)
+    if purchase_order.payment_entry_locked:
+        messages.error(request, purchase_order.edit_lock_message)
+        return redirect("purchase_order_detail", pk=purchase_order.pk)
+
+    if not purchase_order.is_split and purchase_order.split_purchase_orders.exists():
+        messages.warning(
+            request,
+            "This purchase order has supplier splits. Record supplier payments on the split purchase orders instead.",
+        )
+        return redirect("purchase_order_detail", pk=purchase_order.pk)
+
+    payments, total_paid, balance_due = _po_supplier_summary(purchase_order)
+    if balance_due <= Decimal("0.00"):
+        messages.info(
+            request,
+            "This supplier purchase order is fully paid. Additional supplier payments are disabled.",
+        )
+        _decorate_purchase_order_status(purchase_order, persist=True)
+        return redirect("purchase_order_detail", pk=purchase_order.pk)
+
+    if request.method == "POST":
+        form = SupplierPaymentForm(request.POST, request.FILES)
+        if form.is_valid():
+            payment = form.save(commit=False)
+            if payment.amount > balance_due:
+                form.add_error(
+                    "amount",
+                    f"Payment cannot exceed the remaining supplier balance of {balance_due}.",
+                )
+            else:
+                payment.purchase_order = purchase_order
+                if not payment.supplier_name:
+                    payment.supplier_name = purchase_order.supplier_name
+                payment.created_by = request.user
+                payment.save()
+                _decorate_purchase_order_status(purchase_order, persist=True)
+                if purchase_order.parent_po_id:
+                    _decorate_purchase_order_status(
+                        purchase_order.parent_po, persist=True
+                    )
+                log_audit(
+                    "supplier_payment",
+                    "create",
+                    payment.id,
+                    f"{purchase_order.po_number} {payment.amount} {payment.currency}",
+                    request.user,
+                )
+                _notify_roles(
+                    title="Supplier payment recorded",
+                    message=(
+                        f"{payment.amount} {payment.currency} paid to "
+                        f"{payment.supplier_name or purchase_order.supplier_name} "
+                        f"against {purchase_order.po_number}."
+                    ),
+                    link=f"/purchase-orders/{purchase_order.pk}/",
+                    category="trading",
+                    roles=["ADMIN", "DIRECTOR", "FINANCE", "PROCUREMENT"],
+                )
+                messages.success(request, "Supplier payment recorded.")
+                return redirect("purchase_order_detail", pk=purchase_order.pk)
+    else:
+        form = SupplierPaymentForm(
+            initial={
+                "supplier_name": purchase_order.supplier_name,
+                "currency": "USD",
+                "amount": balance_due,
+                "paid_at": timezone.now(),
+            }
+        )
+    form.fields["amount"].widget.attrs["max"] = balance_due
+
+    return render(
+        request,
+        "logistics/invoicing/supplier_payment_form.html",
+        {
+            "form": form,
+            "purchase_order": purchase_order,
+            "payments": payments,
+            "total_paid": total_paid,
+            "balance_due": balance_due,
+        },
+    )
+
+
+@login_required
+@role_required("ADMIN", "DIRECTOR", "FINANCE", "PROCUREMENT", "OFFICE_ADMIN")
+def supplier_payment_list(request):
+    qs = SupplierPayment.objects.select_related(
+        "purchase_order__transaction__customer", "created_by"
+    ).order_by("-paid_at", "-id")
+    search = (request.GET.get("search") or "").strip()
+    if search:
+        qs = qs.filter(
+            Q(purchase_order__po_number__icontains=search)
+            | Q(supplier_name__icontains=search)
+            | Q(reference__icontains=search)
+            | Q(purchase_order__transaction__transaction_id__icontains=search)
+        )
+    page_obj, query_string, page_range = paginate_queryset(request, qs)
+    totals = qs.aggregate(total=Sum("amount"))
+    return render(
+        request,
+        "logistics/invoicing/supplier_payment_list.html",
+        {
+            "payments": page_obj,
+            "page_obj": page_obj,
+            "query_string": query_string,
+            "page_range": page_range,
+            "search": search,
+            "grand_total": totals["total"] or Decimal("0.00"),
+        },
+    )
+
+
+@login_required
+@role_required("ADMIN", "DIRECTOR")
+def supplier_payment_delete(request, pk):
+    payment = get_object_or_404(
+        SupplierPayment.objects.select_related("purchase_order__parent_po"), pk=pk
+    )
+    purchase_order = payment.purchase_order
+    po_pk = payment.purchase_order_id
+    _decorate_purchase_order_status(purchase_order)
+    _decorate_purchase_order_edit_lock(purchase_order)
+    if purchase_order.edit_locked:
+        messages.error(
+            request,
+            "Supplier payments on a locked purchase order cannot be removed directly. Request Director approval for the correction.",
+        )
+        return redirect("purchase_order_detail", pk=po_pk)
+
+    if request.method == "POST":
+        log_audit(
+            "supplier_payment",
+            "delete",
+            payment.id,
+            f"{payment.purchase_order.po_number} {payment.amount}",
+            request.user,
+        )
+        payment.delete()
+        _decorate_purchase_order_status(purchase_order, persist=True)
+        if purchase_order.parent_po_id:
+            _decorate_purchase_order_status(purchase_order.parent_po, persist=True)
+        messages.success(request, "Supplier payment removed.")
+        return redirect("purchase_order_detail", pk=po_pk)
+    return render(
+        request,
+        "logistics/invoicing/supplier_payment_confirm_delete.html",
+        {"payment": payment},
+    )

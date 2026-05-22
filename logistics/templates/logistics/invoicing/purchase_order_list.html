@@ -1,0 +1,505 @@
+{% extends "logistics/base.html" %}
+{% load logistics_docs %}
+
+{% block title %}Purchase Orders - GMI TERRALINK Logistics Portal{% endblock %}
+
+{% block extra_css %}
+<style>
+.po-workspace {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.po-register-hero {
+    background: #1a1a1a;
+    border: 1px solid #d4af37;
+    border-radius: 8px;
+    color: #fff;
+    padding: 1rem;
+}
+
+.po-register-hero-grid {
+    align-items: stretch;
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: minmax(0, 1.7fr) minmax(320px, 1fr);
+}
+
+.po-register-eyebrow {
+    align-items: center;
+    color: #d4af37;
+    display: inline-flex;
+    font-size: 0.74rem;
+    font-weight: 800;
+    gap: 0.4rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.po-register-title {
+    font-size: 1.45rem;
+    font-weight: 800;
+    line-height: 1.2;
+    margin: 0.35rem 0 0.25rem;
+}
+
+.po-register-copy {
+    color: #d8d8d8;
+    margin: 0;
+    max-width: 760px;
+}
+
+.po-summary-grid {
+    display: grid;
+    gap: 0.55rem;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.po-summary-tile {
+    background: #f6f6f6;
+    border: 1px solid #d8d8d8;
+    border-radius: 8px;
+    color: #1a1a1a;
+    min-height: 74px;
+    padding: 0.7rem;
+}
+
+.po-summary-tile strong {
+    display: block;
+    font-size: 1.35rem;
+    line-height: 1;
+}
+
+.po-summary-tile span {
+    color: #666;
+    display: block;
+    font-size: 0.72rem;
+    font-weight: 800;
+    margin-top: 0.35rem;
+    text-transform: uppercase;
+}
+
+.po-panel {
+    background: #fff;
+    border: 1px solid #d8d8d8;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.po-filter-bar {
+    align-items: end;
+    background: #f6f6f6;
+    border-bottom: 1px solid #d8d8d8;
+    display: grid;
+    gap: 0.75rem;
+    grid-template-columns: minmax(220px, 1.4fr) repeat(3, minmax(140px, 0.65fr)) auto;
+    padding: 0.85rem;
+}
+
+.po-filter-bar label {
+    color: #666;
+    font-size: 0.68rem;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    margin-bottom: 0.25rem;
+    text-transform: uppercase;
+}
+
+.po-filter-actions {
+    display: flex;
+    gap: 0.45rem;
+    justify-content: flex-end;
+}
+
+.po-table {
+    min-width: 1120px;
+}
+
+.po-table thead th {
+    background: #fff;
+    border-bottom: 1px solid #d8d8d8;
+    color: #666;
+    font-size: 0.7rem;
+    font-weight: 800;
+    letter-spacing: 0.05em;
+    padding: 0.8rem 0.75rem;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.po-table tbody td {
+    border-color: #eeeeee;
+    padding: 0.85rem 0.75rem;
+    vertical-align: middle;
+}
+
+.po-table tbody tr:hover {
+    background: #fbfbfb;
+}
+
+.po-id-stack strong,
+.po-party-stack strong,
+.po-money-stack strong {
+    color: #1a1a1a;
+    display: block;
+    line-height: 1.2;
+}
+
+.po-id-stack span,
+.po-party-stack span,
+.po-money-stack span,
+.po-status-stack span {
+    color: #666;
+    display: block;
+    font-size: 0.78rem;
+    margin-top: 0.18rem;
+}
+
+.po-type-pill {
+    align-items: center;
+    border: 1px solid #d8d8d8;
+    border-radius: 999px;
+    color: #1a1a1a;
+    display: inline-flex;
+    font-size: 0.74rem;
+    font-weight: 800;
+    gap: 0.35rem;
+    padding: 0.25rem 0.55rem;
+}
+
+.po-type-pill.is-base {
+    background: #1a1a1a;
+    border-color: #1a1a1a;
+    color: #fff;
+}
+
+.po-type-pill.is-split {
+    background: #f6f6f6;
+}
+
+.po-badge-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.po-badge-stack .badge {
+    align-self: flex-start;
+}
+
+.po-panel .badge.bg-success,
+.po-panel .badge.bg-warning,
+.po-panel .badge.bg-info,
+.po-panel .badge.bg-primary {
+    background: #d4af37 !important;
+    color: #1a1a1a !important;
+}
+
+.po-panel .badge.bg-dark {
+    background: #1a1a1a !important;
+    color: #fff !important;
+}
+
+.po-panel .badge.bg-secondary {
+    background: #666 !important;
+    color: #fff !important;
+}
+
+.po-lock-note {
+    color: #666;
+    font-size: 0.74rem;
+    max-width: 180px;
+}
+
+.po-line-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    min-width: 190px;
+}
+
+.po-line-stack span {
+    color: #666;
+    font-size: 0.76rem;
+}
+
+.po-line-stack strong {
+    color: #1a1a1a;
+    font-size: 0.82rem;
+}
+
+.purchase-order-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    justify-content: flex-end;
+}
+
+.purchase-order-actions .btn {
+    min-width: 78px;
+}
+
+.po-empty-state {
+    padding: 2.4rem 1rem;
+    text-align: center;
+}
+
+.po-empty-state i {
+    color: #d4af37;
+    display: block;
+    font-size: 2rem;
+    margin-bottom: 0.5rem;
+}
+
+@media (max-width: 992px) {
+    .po-register-hero-grid,
+    .po-filter-bar {
+        grid-template-columns: 1fr;
+    }
+
+    .po-filter-actions,
+    .purchase-order-actions {
+        justify-content: flex-start;
+    }
+}
+
+@media (max-width: 576px) {
+    .po-summary-grid {
+        grid-template-columns: 1fr;
+    }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="po-workspace">
+    <section class="po-register-hero">
+        <div class="po-register-hero-grid">
+            <div>
+                <span class="po-register-eyebrow"><i class="bi bi-journal-bookmark-fill"></i> Purchase order control</span>
+                <h1 class="po-register-title">Supplier commitments, payment state and edit locks in one register.</h1>
+                <p class="po-register-copy">Track base and split POs, confirm which ones are paid or locked, and open the exact supplier record without scanning through repeated document numbers.</p>
+            </div>
+            <div class="po-summary-grid">
+                <div class="po-summary-tile">
+                    <strong>{{ summary.total }}</strong>
+                    <span>Visible POs</span>
+                </div>
+                <div class="po-summary-tile">
+                    <strong>{{ summary.locked }}</strong>
+                    <span>Locked</span>
+                </div>
+                <div class="po-summary-tile">
+                    <strong>{{ summary.base }}</strong>
+                    <span>Base POs</span>
+                </div>
+                <div class="po-summary-tile">
+                    <strong>{{ summary.split }}</strong>
+                    <span>Split POs</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <div class="po-panel">
+        <form method="get" class="po-filter-bar">
+            <div>
+                <label for="po-search">Search</label>
+                <input id="po-search" type="search" name="search" value="{{ search }}" class="form-control" placeholder="PO, supplier, customer, transaction or invoice">
+            </div>
+            <div>
+                <label for="po-type">Type</label>
+                <select id="po-type" name="type" class="form-select">
+                    <option value="">All types</option>
+                    <option value="base" {% if type_filter == 'base' %}selected{% endif %}>Base</option>
+                    <option value="split" {% if type_filter == 'split' %}selected{% endif %}>Split</option>
+                </select>
+            </div>
+            <div>
+                <label for="po-status">Status</label>
+                <select id="po-status" name="status" class="form-select">
+                    <option value="">All statuses</option>
+                    {% for value,label in status_choices %}
+                    <option value="{{ value }}" {% if status_filter == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="po-lock">Lock</label>
+                <select id="po-lock" name="lock" class="form-select">
+                    <option value="">All locks</option>
+                    <option value="open" {% if lock_filter == 'open' %}selected{% endif %}>Editable</option>
+                    <option value="locked" {% if lock_filter == 'locked' %}selected{% endif %}>Locked</option>
+                </select>
+            </div>
+            <div class="po-filter-actions">
+                <button type="submit" class="btn btn-dark"><i class="bi bi-funnel me-1"></i>Apply</button>
+                <a href="{% url 'purchase_order_list' %}" class="btn btn-outline-secondary"><i class="bi bi-arrow-counterclockwise me-1"></i>Reset</a>
+            </div>
+        </form>
+
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0 po-table">
+                <thead>
+                    <tr>
+                        <th>Purchase Order</th>
+                        <th>Type</th>
+                        <th>Parties</th>
+                        <th>Line Quantities</th>
+                        <th class="text-end">Value</th>
+                        <th>Supplier Payment</th>
+                        <th>Client Payment</th>
+                        <th>Fees</th>
+                        <th>Status</th>
+                        <th>Lock</th>
+                        <th class="text-end">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for po in purchase_orders %}
+                    <tr>
+                        <td>
+                            <div class="po-id-stack">
+                                <strong>{{ po.po_number }}</strong>
+                                <span>{% if po.final_invoice %}{{ po.final_invoice|doc_number:"FI" }}{% else %}No invoice link{% endif %} · {{ po.transaction.transaction_id }}</span>
+                            </div>
+                        </td>
+                        <td>
+                            {% if po.parent_po %}
+                            <span class="po-type-pill is-split"><i class="bi bi-diagram-3"></i> {% if po.split_mode == 'ITEMS' %}Item Split{% else %}Qty Split{% endif %}</span>
+                            {% else %}
+                            <span class="po-type-pill is-base"><i class="bi bi-layers"></i> Base</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="po-party-stack">
+                                <strong>{{ po.transaction.customer.name }}</strong>
+                                <span>{% if po.supplier_name %}{{ po.supplier_name }}{% else %}Supplier not assigned{% endif %}</span>
+                            </div>
+                        </td>
+                        <td>
+                            <div class="po-line-stack">
+                                {% for line in po.line_quantity_summary|slice:":3" %}
+                                <div>
+                                    <strong>Line {{ line.number }}: {{ line.description|truncatechars:32 }}</strong>
+                                    {% if po.parent_po %}
+                                    <span>{% if po.split_mode == 'ITEMS' %}Moved qty{% else %}Split qty{% endif %} {{ line.split_quantity|default:"0" }} of original {{ line.original_quantity|default:"0" }}</span>
+                                    {% else %}
+                                    <span>Main {{ line.remaining_quantity }} / Original {{ line.original_quantity }}{% if line.split_quantity %} · Split {{ line.split_quantity }}{% endif %}</span>
+                                    {% endif %}
+                                </div>
+                                {% empty %}
+                                <span>No line quantities</span>
+                                {% endfor %}
+                            </div>
+                        </td>
+                        <td class="text-end">
+                            <div class="po-money-stack">
+                                <strong>{{ po.subtotal }} USD</strong>
+                                <span>{{ po.created_at|date:"d M Y H:i" }}</span>
+                            </div>
+                        </td>
+                        <td>
+                            <div class="po-badge-stack">
+                                <span class="badge {{ po.supplier_payment_status_class|default:'bg-secondary' }}">{{ po.supplier_payment_status_label|default:'Unpaid' }}</span>
+                                <span>{% if po.supplier_payments_include_splits %}Split paid{% else %}Paid{% endif %}: {{ po.supplier_total_paid|default:'0.00' }} USD</span>
+                                <span>Balance {{ po.supplier_balance_due|default:po.subtotal }} USD</span>
+                            </div>
+                        </td>
+                        <td>
+                            <div class="po-badge-stack">
+                                {% if po.final_invoice %}
+                                <span class="badge {{ po.invoice_payment_status_class|default:'bg-secondary' }}">{{ po.invoice_payment_status_label|default:'Unpaid' }}</span>
+                                <span>{{ po.client_total_paid|default:'0.00' }} {{ po.final_invoice.currency }}</span>
+                                {% else %}
+                                <span class="text-muted">No invoice</span>
+                                {% endif %}
+                            </div>
+                        </td>
+                        <td>
+                            <div class="po-badge-stack">
+                                {% if po.final_invoice %}
+                                <span class="badge {{ po.fee_payment_status_class|default:'bg-secondary' }}">{{ po.fee_payment_status_label|default:'Fees Pending' }}</span>
+                                <span>Balance {{ po.client_fee_balance|default:'0.00' }} {{ po.final_invoice.currency }}</span>
+                                {% else %}
+                                <span class="text-muted">-</span>
+                                {% endif %}
+                            </div>
+                        </td>
+                        <td>
+                            <div class="po-status-stack">
+                                <span class="badge {% if po.effective_status == 'FULFILLED' %}bg-success{% elif po.effective_status == 'SENT' %}bg-dark{% else %}bg-warning text-dark{% endif %}">
+                                    {{ po.effective_status_display|default:po.get_status_display }}
+                                </span>
+                                <span>{% if po.parent_po %}Split of {{ po.parent_po.po_number }}{% else %}Base record{% endif %}</span>
+                            </div>
+                        </td>
+                        <td>
+                            {% if po.edit_locked %}
+                            <div class="po-badge-stack">
+                                <span class="badge bg-secondary"><i class="bi bi-lock-fill me-1"></i>Locked</span>
+                                <span class="po-lock-note">{{ po.edit_lock_reason|default:"Protected" }}</span>
+                            </div>
+                            {% else %}
+                            <span class="badge bg-warning text-dark"><i class="bi bi-unlock me-1"></i>Editable</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-end">
+                            <div class="purchase-order-actions">
+                                <a href="{% url 'purchase_order_detail' po.pk %}" class="btn btn-sm btn-outline-dark">
+                                    <i class="bi bi-eye me-1"></i>Open
+                                </a>
+                                <a href="{% url 'purchase_order_pdf' po.pk %}" class="btn btn-sm btn-outline-primary" target="_blank" rel="noopener noreferrer">
+                                    <i class="bi bi-file-pdf me-1"></i>PDF
+                                </a>
+                                {% if can_edit_purchase_orders and po.can_edit_purchase_order and not po.parent_po %}
+                                <a href="{% url 'purchase_order_update' po.pk %}" class="btn btn-sm btn-outline-secondary">
+                                    <i class="bi bi-pencil me-1"></i>Edit
+                                </a>
+                                {% elif can_manage_business_documents and po.edit_locked %}
+                                <span class="btn btn-sm btn-outline-secondary disabled">
+                                    <i class="bi bi-lock-fill me-1"></i>Locked
+                                </span>
+                                {% endif %}
+                                {% if can_manage_business_documents %}
+                                    {% if po.parent_po and po.split_mode != 'ITEMS' and not po.edit_locked %}
+                                    <a href="{% url 'purchase_order_split_quantity_update' po.pk %}" class="btn btn-sm btn-outline-dark">
+                                        <i class="bi bi-sliders me-1"></i>Split Qty
+                                    </a>
+                                    {% elif not po.parent_po and not po.edit_locked %}
+                                    <a href="{% url 'purchase_order_split_create' po.pk %}" class="btn btn-sm btn-outline-dark">
+                                        <i class="bi bi-diagram-3 me-1"></i>Split PO
+                                    </a>
+                                    {% endif %}
+                                {% endif %}
+                                {% if po.can_record_supplier_payment %}
+                                <a href="{% url 'record_supplier_payment' po.pk %}" class="btn btn-sm btn-success">
+                                    <i class="bi bi-cash-stack me-1"></i>Pay Supplier
+                                </a>
+                                {% elif po.can_request_supplier_payment %}
+                                <a href="{% url 'record_supplier_payment' po.pk %}" class="btn btn-sm btn-outline-primary">
+                                    <i class="bi bi-shield-check me-1"></i>Request Pay
+                                </a>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="11">
+                            <div class="po-empty-state">
+                                <i class="bi bi-journal-x"></i>
+                                <strong>No purchase orders match this view.</strong>
+                                <div class="text-muted mt-1">Adjust the filters or reset the register.</div>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% include "logistics/components/pagination.html" %}
+    </div>
+</div>
+{% endblock %}

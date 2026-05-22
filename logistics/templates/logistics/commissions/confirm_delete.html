@@ -1,0 +1,28 @@
+{% extends "logistics/base.html" %}
+
+{% block title %}Delete Commission - GMI TERRALINK{% endblock %}
+
+{% block content %}
+<div class="container py-4" style="max-width:560px;">
+    <div class="card" style="padding:1.1rem 1.2rem;">
+        <h1 style="font-size:1.05rem;font-weight:700;color:#c0322b;margin:0 0 0.4rem;">
+            <i class="bi bi-exclamation-triangle me-1"></i>Delete commission entry?
+        </h1>
+        <p style="font-size:0.85rem;color:#4f4a52;">
+            You are about to permanently delete the following commission record. This action cannot be undone.
+        </p>
+        <ul style="font-size:0.85rem;background:#fbf7e4;border:1px solid #ece7cd;border-radius:6px;padding:0.7rem 1rem;list-style:none;margin:0 0 0.9rem;">
+            <li><strong>Client:</strong> {{ commission.client.name }}</li>
+            <li><strong>Amount:</strong> {{ commission.amount }} {{ commission.currency }}</li>
+            <li><strong>Date:</strong> {{ commission.date }}</li>
+        </ul>
+        <form method="post">
+            {% csrf_token %}
+            <div class="d-flex justify-content-between">
+                <a href="{% url 'commission_list' %}" class="btn btn-sm btn-outline-secondary">Cancel</a>
+                <button type="submit" class="btn btn-sm btn-danger"><i class="bi bi-trash me-1"></i>Delete</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,580 @@
+{% extends "logistics/base.html" %}
+
+{% block title %}Reports - GMI TERRALINK Logistics Portal{% endblock %}
+
+{% block extra_css %}
+<style>
+    .reports-shell {
+        display: grid;
+        gap: 0.9rem;
+    }
+    .reports-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-end;
+        gap: 1rem;
+        padding: 0.45rem 0 0.85rem;
+        border-bottom: 1px solid #ddd7c9;
+    }
+    .reports-head h1 {
+        margin: 0.1rem 0 0.18rem;
+        color: #2d2930;
+        font-size: 1.28rem;
+        font-weight: 800;
+        letter-spacing: 0;
+    }
+    .reports-head p {
+        margin: 0;
+        color: #716a75;
+        font-size: 0.82rem;
+    }
+    .reports-eyebrow {
+        color: #8a6d1d;
+        font-size: 0.66rem;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+    }
+    .reports-actions {
+        display: flex;
+        gap: 0.45rem;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+    }
+    .reports-kpis {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 0.55rem;
+    }
+    .reports-kpi {
+        min-height: 82px;
+        padding: 0.72rem 0.78rem;
+        background: #fbfaf5;
+        border: 1px solid #ddd7c9;
+        border-left: 4px solid #544f5a;
+        border-radius: 4px;
+    }
+    .reports-kpi.gold {
+        border-left-color: #d4af37;
+        background: #fff9df;
+    }
+    .reports-kpi .label {
+        display: block;
+        margin-bottom: 0.28rem;
+        color: #746d78;
+        font-size: 0.65rem;
+        font-weight: 800;
+        letter-spacing: 0.07em;
+        text-transform: uppercase;
+    }
+    .reports-kpi .value {
+        display: block;
+        color: #27232a;
+        font-size: 1.08rem;
+        font-weight: 800;
+        line-height: 1.15;
+        font-variant-numeric: tabular-nums;
+    }
+    .reports-kpi .sub {
+        display: block;
+        margin-top: 0.18rem;
+        color: #807986;
+        font-size: 0.7rem;
+    }
+    .reports-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+        gap: 0.75rem;
+    }
+    .reports-grid.wide-left {
+        grid-template-columns: minmax(0, 1.3fr) minmax(0, 0.7fr);
+    }
+    .reports-panel {
+        min-width: 0;
+        background: #ffffff;
+        border: 1px solid #ddd7c9;
+        border-radius: 4px;
+        overflow: hidden;
+    }
+    .reports-panel-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem;
+        padding: 0.62rem 0.78rem;
+        background: #544f5a;
+        color: #ffffff;
+    }
+    .reports-panel-head h2 {
+        margin: 0;
+        font-size: 0.82rem;
+        font-weight: 800;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+    }
+    .reports-panel-body {
+        padding: 0.8rem;
+    }
+    .reports-mini-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 0.45rem;
+    }
+    .reports-mini {
+        padding: 0.55rem 0.62rem;
+        background: #f7f4ec;
+        border: 1px solid #e4ded0;
+        border-radius: 4px;
+    }
+    .reports-mini strong {
+        display: block;
+        color: #2d2930;
+        font-size: 0.98rem;
+        font-variant-numeric: tabular-nums;
+    }
+    .reports-mini span {
+        color: #766f7a;
+        font-size: 0.68rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+    .conversion-bar {
+        height: 26px;
+        overflow: hidden;
+        background: #ebe6d8;
+        border: 1px solid #ddd7c9;
+        border-radius: 4px;
+    }
+    .conversion-fill {
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        min-width: 2.2rem;
+        padding-right: 0.55rem;
+        background: linear-gradient(90deg, #544f5a, #d4af37);
+        color: #ffffff;
+        font-size: 0.75rem;
+        font-weight: 800;
+    }
+    .reports-table {
+        margin: 0;
+        font-size: 0.82rem;
+    }
+    .reports-table thead th {
+        background: #f7f4ec;
+        color: #5d5662;
+        border-bottom: 1px solid #ddd7c9;
+        font-size: 0.66rem;
+        font-weight: 800;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        white-space: nowrap;
+    }
+    .reports-table tbody td {
+        border-color: #eee9dd;
+        color: #38333b;
+        vertical-align: middle;
+    }
+    .reports-badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 1.8rem;
+        padding: 0.18rem 0.46rem;
+        background: #544f5a;
+        color: #ffffff;
+        border-radius: 4px;
+        font-size: 0.72rem;
+        font-weight: 800;
+    }
+    .reports-badge.gold {
+        background: #d4af37;
+        color: #1f1c22;
+    }
+    .commission-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.45rem;
+    }
+    .commission-chip {
+        display: inline-flex;
+        align-items: baseline;
+        gap: 0.45rem;
+        padding: 0.46rem 0.65rem;
+        background: #fff9df;
+        border: 1px solid #e8d384;
+        border-radius: 4px;
+    }
+    .commission-chip .currency {
+        color: #8a6d1d;
+        font-size: 0.64rem;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+    }
+    .commission-chip .amount {
+        color: #26221e;
+        font-size: 1rem;
+        font-weight: 800;
+        font-variant-numeric: tabular-nums;
+    }
+    .commission-chip .entries {
+        color: #716a75;
+        font-size: 0.66rem;
+        font-weight: 700;
+    }
+    .chart-box {
+        height: 235px;
+    }
+    .chart-box canvas {
+        max-height: 100%;
+    }
+    .export-groups {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 0.65rem;
+    }
+    .export-group {
+        border: 1px solid #ddd7c9;
+        border-radius: 4px;
+        overflow: hidden;
+        background: #fbfaf5;
+    }
+    .export-group-title {
+        padding: 0.48rem 0.62rem;
+        background: #f0ebdd;
+        color: #4d4651;
+        font-size: 0.68rem;
+        font-weight: 800;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        border-bottom: 1px solid #ddd7c9;
+    }
+    .export-link-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0.35rem;
+        padding: 0.55rem;
+    }
+    .export-link {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.32rem;
+        min-height: 2rem;
+        padding: 0.34rem 0.4rem;
+        border: 1px solid #d8d2c4;
+        border-radius: 4px;
+        background: #ffffff;
+        color: #332f36;
+        font-size: 0.76rem;
+        font-weight: 800;
+    }
+    .export-link:hover,
+    .export-link:focus {
+        background: #fff7da;
+        border-color: #d4af37;
+    }
+    @media (max-width: 1199px) {
+        .reports-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+        .export-groups { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media (max-width: 991px) {
+        .reports-grid,
+        .reports-grid.wide-left { grid-template-columns: 1fr; }
+        .reports-head { align-items: flex-start; flex-direction: column; }
+        .reports-actions { justify-content: flex-start; }
+    }
+    @media (max-width: 640px) {
+        .reports-kpis,
+        .reports-mini-grid,
+        .export-groups { grid-template-columns: 1fr; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="reports-shell">
+    <header class="reports-head">
+        <div>
+            <span class="reports-eyebrow"><i class="bi bi-bar-chart-line-fill me-1"></i>Executive reporting</span>
+            <h1>Reports dashboard</h1>
+            <p>Commercial performance, client activity, trade pipeline and export records in one operational view.</p>
+        </div>
+        <div class="reports-actions">
+            <a href="{% url 'director_finance_summary' %}" class="btn btn-sm btn-dark"><i class="bi bi-bank me-1"></i>Finance summary</a>
+            {% if user.is_superuser or user.role in 'ADMIN,DIRECTOR' %}
+            <a href="{% url 'commission_list' %}" class="btn btn-sm btn-outline-dark"><i class="bi bi-cash-coin me-1"></i>Commissions</a>
+            {% endif %}
+        </div>
+    </header>
+
+    <section class="reports-kpis" aria-label="Report totals">
+        <article class="reports-kpi gold">
+            <span class="label">Collected revenue</span>
+            <span class="value">${{ total_revenue|floatformat:2 }}</span>
+            <span class="sub">Confirmed collections</span>
+        </article>
+        <article class="reports-kpi">
+            <span class="label">Outstanding</span>
+            <span class="value">${{ outstanding_balance|floatformat:2 }}</span>
+            <span class="sub">Open balances</span>
+        </article>
+        <article class="reports-kpi">
+            <span class="label">Profit estimate</span>
+            <span class="value">${{ profit_estimate|floatformat:2 }}</span>
+            <span class="sub">Current projection</span>
+        </article>
+        <article class="reports-kpi">
+            <span class="label">Conversion</span>
+            <span class="value">{{ conversion_rate }}%</span>
+            <span class="sub">{{ conversion_confirmed }} of {{ conversion_inquiries }}</span>
+        </article>
+        <article class="reports-kpi">
+            <span class="label">Active shipments</span>
+            <span class="value">{{ active_shipments }}</span>
+            <span class="sub">In movement</span>
+        </article>
+    </section>
+
+    {% if commission_totals %}
+    <section class="reports-panel">
+        <div class="reports-panel-head">
+            <h2><i class="bi bi-cash-coin me-1"></i>Commission earned</h2>
+            <a href="{% url 'commission_list' %}" class="btn btn-sm btn-light">Open ledger</a>
+        </div>
+        <div class="reports-panel-body">
+            <div class="commission-row">
+                {% for row in commission_totals %}
+                <span class="commission-chip">
+                    <span class="currency">{{ row.currency }}</span>
+                    <span class="amount">{{ row.total|floatformat:2 }}</span>
+                    <span class="entries">{{ row.entries }} entr{{ row.entries|pluralize:"y,ies" }}</span>
+                </span>
+                {% endfor %}
+            </div>
+        </div>
+    </section>
+    {% endif %}
+
+    <section class="reports-grid wide-left">
+        <article class="reports-panel">
+            <div class="reports-panel-head">
+                <h2><i class="bi bi-arrow-left-right me-1"></i>Inquiry to confirmed conversion</h2>
+                <span>{{ conversion_rate }}%</span>
+            </div>
+            <div class="reports-panel-body">
+                <div class="reports-mini-grid mb-3">
+                    <div class="reports-mini"><strong>{{ conversion_inquiries }}</strong><span>Inquiries</span></div>
+                    <div class="reports-mini"><strong>{{ conversion_confirmed }}</strong><span>Confirmed</span></div>
+                    <div class="reports-mini"><strong>{{ trade_summary.paid_transactions }}</strong><span>Paid trades</span></div>
+                </div>
+                <div class="conversion-bar">
+                    <div class="conversion-fill" style="width: {{ conversion_rate }}%;">{{ conversion_rate }}%</div>
+                </div>
+            </div>
+        </article>
+
+        <article class="reports-panel">
+            <div class="reports-panel-head">
+                <h2><i class="bi bi-diagram-3 me-1"></i>Trade summary</h2>
+            </div>
+            <div class="reports-panel-body">
+                <div class="reports-mini-grid">
+                    <div class="reports-mini"><strong>{{ trade_summary.sourcing_records }}</strong><span>Q-Worksheets</span></div>
+                    <div class="reports-mini"><strong>{{ trade_summary.proformas_sent }}</strong><span>Proformas</span></div>
+                    <div class="reports-mini"><strong>{{ trade_summary.purchase_orders }}</strong><span>POs</span></div>
+                    <div class="reports-mini"><strong>{{ trade_summary.final_invoices }}</strong><span>Invoices</span></div>
+                    <div class="reports-mini"><strong>{{ trade_summary.trade_payment_records }}</strong><span>Payments</span></div>
+                    <div class="reports-mini"><strong>{{ trade_summary.active_sourcing_transactions }}</strong><span>Active</span></div>
+                </div>
+            </div>
+        </article>
+    </section>
+
+    <section class="reports-grid">
+        <article class="reports-panel">
+            <div class="reports-panel-head">
+                <h2><i class="bi bi-trophy me-1"></i>Top clients</h2>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle reports-table">
+                    <thead>
+                        <tr>
+                            <th>Client</th>
+                            <th class="text-end">Transactions</th>
+                            <th class="text-end">Confirmed</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for c in top_clients %}
+                        <tr>
+                            <td class="fw-semibold">{{ c.customer__name }}</td>
+                            <td class="text-end">{{ c.total_transactions }}</td>
+                            <td class="text-end"><span class="reports-badge gold">{{ c.confirmed_orders }}</span></td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="3" class="text-center text-muted py-4">No client activity yet.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </article>
+
+        <article class="reports-panel">
+            <div class="reports-panel-head">
+                <h2><i class="bi bi-building-check me-1"></i>Supplier activity</h2>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle reports-table">
+                    <thead>
+                        <tr>
+                            <th>Supplier</th>
+                            <th class="text-end">Q-Worksheets</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for supplier in supplier_activity %}
+                        <tr>
+                            <td class="fw-semibold">{{ supplier.supplier_name }}</td>
+                            <td class="text-end"><span class="reports-badge">{{ supplier.total_records }}</span></td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="2" class="text-center text-muted py-4">No supplier activity yet.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </article>
+    </section>
+
+    <section class="reports-grid wide-left">
+        <article class="reports-panel">
+            <div class="reports-panel-head">
+                <h2><i class="bi bi-graph-up-arrow me-1"></i>Revenue trend</h2>
+            </div>
+            <div class="reports-panel-body chart-box">
+                <canvas id="revenueTrendChart"></canvas>
+            </div>
+        </article>
+        <article class="reports-panel">
+            <div class="reports-panel-head">
+                <h2><i class="bi bi-kanban me-1"></i>Trade pipeline</h2>
+            </div>
+            <div class="reports-panel-body chart-box">
+                <canvas id="tradePipelineChart"></canvas>
+            </div>
+        </article>
+    </section>
+
+    <section class="reports-panel">
+        <div class="reports-panel-head">
+            <h2><i class="bi bi-download me-1"></i>Exports</h2>
+            <span>CSV and PDF</span>
+        </div>
+        <div class="reports-panel-body">
+            <div class="export-groups">
+                <div class="export-group">
+                    <div class="export-group-title">Trade</div>
+                    <div class="export-link-grid">
+                        <a href="{% url 'export_transactions_csv' %}" class="export-link"><i class="bi bi-filetype-csv"></i>CSV</a>
+                        <a href="{% url 'export_transactions_pdf' %}" class="export-link"><i class="bi bi-filetype-pdf"></i>PDF</a>
+                        <a href="{% url 'export_trade_payments_csv' %}" class="export-link"><i class="bi bi-filetype-csv"></i>Payments</a>
+                        <a href="{% url 'export_trade_payments_pdf' %}" class="export-link"><i class="bi bi-filetype-pdf"></i>Payments</a>
+                    </div>
+                </div>
+                <div class="export-group">
+                    <div class="export-group-title">Sourcing</div>
+                    <div class="export-link-grid">
+                        <a href="{% url 'export_sourcing_csv' %}" class="export-link"><i class="bi bi-filetype-csv"></i>CSV</a>
+                        <a href="{% url 'export_sourcing_pdf' %}" class="export-link"><i class="bi bi-filetype-pdf"></i>PDF</a>
+                        <a href="{% url 'export_purchase_orders_csv' %}" class="export-link"><i class="bi bi-filetype-csv"></i>PO CSV</a>
+                        <a href="{% url 'export_purchase_orders_pdf' %}" class="export-link"><i class="bi bi-filetype-pdf"></i>PO PDF</a>
+                    </div>
+                </div>
+                <div class="export-group">
+                    <div class="export-group-title">Invoicing</div>
+                    <div class="export-link-grid">
+                        <a href="{% url 'export_proformas_csv' %}" class="export-link"><i class="bi bi-filetype-csv"></i>Proforma</a>
+                        <a href="{% url 'export_proformas_pdf' %}" class="export-link"><i class="bi bi-filetype-pdf"></i>Proforma</a>
+                        <a href="{% url 'export_final_invoices_csv' %}" class="export-link"><i class="bi bi-filetype-csv"></i>Invoice</a>
+                        <a href="{% url 'export_final_invoices_pdf' %}" class="export-link"><i class="bi bi-filetype-pdf"></i>Invoice</a>
+                    </div>
+                </div>
+                <div class="export-group">
+                    <div class="export-group-title">Logistics</div>
+                    <div class="export-link-grid">
+                        <a href="{% url 'export_shipments_csv' %}" class="export-link"><i class="bi bi-filetype-csv"></i>Shipments</a>
+                        <a href="{% url 'export_shipments_pdf' %}" class="export-link"><i class="bi bi-filetype-pdf"></i>Shipments</a>
+                        <a href="{% url 'export_payments_csv' %}" class="export-link"><i class="bi bi-filetype-csv"></i>Payments</a>
+                        <a href="{% url 'export_payments_pdf' %}" class="export-link"><i class="bi bi-filetype-pdf"></i>Payments</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+    const trendLabels = {{ trend_labels_json|safe }};
+    const trendValues = {{ trend_values_json|safe }};
+    const tradePipelineLabels = {{ trade_pipeline_labels_json|safe }};
+    const tradePipelineValues = {{ trade_pipeline_values_json|safe }};
+
+    const chartGrid = '#eee9dd';
+    const chartText = '#5d5662';
+
+    new Chart(document.getElementById('revenueTrendChart'), {
+        type: 'line',
+        data: {
+            labels: trendLabels,
+            datasets: [{
+                label: 'Revenue',
+                data: trendValues,
+                borderColor: '#544f5a',
+                backgroundColor: 'rgba(212, 175, 55, 0.22)',
+                pointBackgroundColor: '#d4af37',
+                pointBorderColor: '#544f5a',
+                tension: 0.32,
+                fill: true
+            }]
+        },
+        options: {
+            maintainAspectRatio: false,
+            responsive: true,
+            plugins: { legend: { display: false } },
+            scales: {
+                x: { grid: { color: chartGrid }, ticks: { color: chartText } },
+                y: { beginAtZero: true, grid: { color: chartGrid }, ticks: { color: chartText } }
+            }
+        }
+    });
+
+    new Chart(document.getElementById('tradePipelineChart'), {
+        type: 'bar',
+        data: {
+            labels: tradePipelineLabels,
+            datasets: [{
+                label: 'Transactions',
+                data: tradePipelineValues,
+                backgroundColor: ['#544f5a', '#d4af37', '#817b86', '#c5a14a', '#6a6470'],
+                borderRadius: 4
+            }]
+        },
+        options: {
+            maintainAspectRatio: false,
+            responsive: true,
+            plugins: { legend: { display: false } },
+            scales: {
+                x: { grid: { display: false }, ticks: { color: chartText } },
+                y: { beginAtZero: true, grid: { color: chartGrid }, ticks: { color: chartText, precision: 0 } }
+            }
+        }
+    });
+</script>
+{% endblock %}

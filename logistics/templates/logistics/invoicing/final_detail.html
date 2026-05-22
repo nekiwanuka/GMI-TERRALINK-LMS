@@ -1,0 +1,197 @@
+{% extends "logistics/base.html" %}
+{% load humanize static logistics_docs %}
+
+{% block title %}{% if invoice.loading %}Cargo Final Invoice{% else %}Sourcing Final Invoice{% endif %} {{ invoice|doc_number:"FI" }} | GMI TERRALINK{% endblock %}
+
+{% block extra_css %}
+{% include "logistics/components/document_print_styles.html" %}
+<style>
+.invoice-preview-shell {
+    max-width: 920px;
+}
+.invoice-toolbar .btn {
+    border-radius: 8px;
+}
+.invoice-summary .card {
+    border-radius: 12px;
+}
+.document-preview-frame {
+    width: 100%;
+    min-height: 1180px;
+    border: 1px solid #d7d7d7;
+    background: #fff;
+    box-shadow: 0 12px 34px rgba(0, 0, 0, 0.08);
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container no-print mt-3 mb-3 invoice-toolbar">
+    <div class="d-flex justify-content-between align-items-center">
+        <div>
+            <a href="{% if invoice.loading %}{% url 'logistics_final_invoice_list' %}{% else %}{% url 'sourcing_final_invoice_list' %}{% endif %}" class="btn btn-sm btn-outline-secondary me-1">
+                <i class="bi bi-arrow-left"></i> All Invoices
+            </a>
+            {% if invoice.loading %}
+            <a href="{% url 'loading_detail' invoice.loading.pk %}" class="btn btn-sm btn-outline-dark me-1">
+                <i class="bi bi-box-seam"></i> Open Cargo
+            </a>
+            {% endif %}
+            {% if can_edit_business_documents and can_edit_invoice %}
+            <a href="{% if invoice.loading %}{% url 'logistics_final_invoice_update' invoice.pk %}{% else %}{% url 'sourcing_final_invoice_update' invoice.pk %}{% endif %}" class="btn btn-sm btn-outline-primary me-1">
+                <i class="bi bi-pencil"></i> Edit
+            </a>
+            {% elif can_manage_business_documents %}
+            <button type="button" class="btn btn-sm btn-outline-secondary me-1" disabled title="Invoice has payment(s) and is locked from editing.">
+                <i class="bi bi-lock"></i> Locked
+            </button>
+            {% endif %}
+            <a href="{% if invoice.loading %}{% url 'logistics_final_invoice_html_preview' invoice.pk %}{% else %}{% url 'sourcing_final_invoice_html_preview' invoice.pk %}{% endif %}?download=1&amp;v={% now 'U' %}" class="btn btn-sm btn-outline-danger me-1" target="_blank">
+                <i class="bi bi-file-pdf"></i> Download PDF
+            </a>
+            {% if can_manage_business_documents %}
+            <a href="{% url 'final_invoice_sign' invoice.pk %}" class="btn btn-sm {% if document_signature %}btn-outline-success{% else %}btn-outline-dark{% endif %} me-1">
+                <i class="bi bi-pen"></i> {% if document_signature %}Signed{% else %}Sign{% endif %}
+            </a>
+            {% endif %}
+            {% if can_manage_business_documents and can_record_payment and can_record_payment_entry %}
+            <a href="{% if invoice.loading %}{% url 'payment_create_with_loading' invoice.loading.pk %}{% else %}{% url 'sourcing_payment_create_for' invoice.transaction.pk %}?invoice={{ invoice.pk }}{% endif %}" class="btn btn-sm btn-success me-1">
+                <i class="bi bi-cash-coin"></i> Record Payment
+            </a>
+            {% elif can_manage_business_documents and can_record_payment %}
+            <a href="{% if invoice.loading %}{% url 'payment_create_with_loading' invoice.loading.pk %}{% else %}{% url 'sourcing_payment_create_for' invoice.transaction.pk %}?invoice={{ invoice.pk }}{% endif %}" class="btn btn-sm btn-outline-success me-1">
+                <i class="bi bi-shield-check"></i> Request Finance Permission
+            </a>
+            {% elif can_manage_business_documents %}
+            <button type="button" class="btn btn-sm btn-outline-success me-1" disabled>
+                <i class="bi bi-check2-circle"></i> Paid in Full
+            </button>
+            {% endif %}
+        </div>
+        <div class="d-flex gap-2">
+            <a class="btn btn-sm btn-outline-secondary" href="{% if invoice.loading %}{% url 'logistics_final_invoice_html_preview' invoice.pk %}{% else %}{% url 'sourcing_final_invoice_html_preview' invoice.pk %}{% endif %}?v={% now 'U' %}" target="_blank">
+                <i class="bi bi-eye"></i> Print Preview
+            </a>
+            <button class="btn btn-sm btn-dark" type="button" onclick="printDocument()">
+                <i class="bi bi-printer"></i> Print Document
+            </button>
+        </div>
+    </div>
+</div>
+
+<div class="container no-print mb-3 invoice-summary">
+    <div class="row g-2 row-cols-2 {% if invoice.loading %}row-cols-md-4{% else %}row-cols-md-5{% endif %}">
+        <div class="col">
+            <div class="card border-0 bg-light h-100">
+                <div class="card-body py-2 px-3">
+                    <small class="text-muted d-block text-truncate">Subtotal</small>
+                    <strong class="text-nowrap">{{ invoice.subtotal|floatformat:2|intcomma }} {{ invoice.currency }}</strong>
+                </div>
+            </div>
+        </div>
+        {% if not invoice.loading %}
+        <div class="col">
+            <div class="card border-0 bg-light h-100">
+                <div class="card-body py-2 px-3">
+                    <small class="text-muted d-block text-truncate">Sourcing Fee</small>
+                    <strong class="text-nowrap">{{ invoice.sourcing_fee|floatformat:2|intcomma }} {{ invoice.currency }}</strong>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+        <div class="col">
+            <div class="card border-0 bg-light h-100">
+                <div class="card-body py-2 px-3">
+                    <small class="text-muted d-block text-truncate">Handling + Shipping</small>
+                    <strong class="text-nowrap">{{ invoice.service_fee|add:invoice.shipping_cost|floatformat:2|intcomma }} {{ invoice.currency }}</strong>
+                </div>
+            </div>
+        </div>
+        <div class="col">
+            <div class="card border-0 bg-light h-100">
+                <div class="card-body py-2 px-3">
+                    <small class="text-muted d-block text-truncate">Total Paid</small>
+                    <strong class="text-nowrap">{{ total_paid|floatformat:2|intcomma }} {{ invoice.currency }}</strong>
+                </div>
+            </div>
+        </div>
+        <div class="col">
+            <div class="card border-0 h-100 {% if balance > 0 %}bg-warning bg-opacity-25{% else %}bg-success bg-opacity-10{% endif %}">
+                <div class="card-body py-2 px-3">
+                    <small class="text-muted d-block text-truncate">Balance Due</small>
+                    <strong class="text-nowrap">{{ balance|floatformat:2|intcomma }} {{ invoice.currency }}</strong>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if purchase_order and not invoice.loading %}
+<div class="no-print" style="margin:16px 28px 0;">
+    <div class="alert alert-success d-flex justify-content-between align-items-center mb-0">
+        <div>
+            <strong>Purchase Order Ready:</strong> {{ purchase_order.po_number }}
+            <div class="small mt-1">
+                Linked to {{ invoice|doc_number:"FI" }} ({{ split_purchase_orders|length }} supplier split{{ split_purchase_orders|length|pluralize }}).
+                <span class="badge {{ purchase_order.invoice_payment_status_class|default:'bg-secondary' }} ms-1">{{ purchase_order.invoice_payment_status_label|default:payment_status_label }}</span>
+                <span class="badge {{ purchase_order.fee_payment_status_class|default:'bg-secondary' }} ms-1">{{ purchase_order.fee_payment_status_label|default:'Fees Status Pending' }}</span>
+            </div>
+        </div>
+        <div class="d-flex gap-2">
+            <a href="{% url 'purchase_order_split_create' purchase_order.pk %}" class="btn btn-sm btn-outline-dark">Split to Supplier</a>
+            <a href="{% url 'purchase_order_detail' purchase_order.pk %}" class="btn btn-sm btn-dark">Open PO</a>
+        </div>
+    </div>
+</div>
+{% elif can_generate_po %}
+<div class="no-print" style="margin:16px 28px 0;">
+    <div class="alert alert-info d-flex justify-content-between align-items-center mb-0">
+        <div>
+            <strong>{{ payment_status_label }} invoice.</strong> Convert this invoice into a purchase order for procurement.
+            {% if payment_snapshot.fee_balance > 0 %}
+            <div class="small mt-1">Post Pay balance still outstanding: {{ payment_snapshot.fee_balance|floatformat:2|intcomma }} {{ invoice.currency }}.</div>
+            {% endif %}
+        </div>
+        <div class="d-flex gap-2">
+            <a href="{% if invoice.loading %}{% url 'logistics_final_invoice_generate_po' invoice.pk %}{% else %}{% url 'sourcing_final_invoice_generate_po' invoice.pk %}{% endif %}" class="btn btn-sm btn-dark">Generate Purchase Order</a>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{% if split_purchase_orders and not invoice.loading %}
+<div class="no-print" style="margin:12px 28px 0;">
+    <div class="card border-0" style="background:#fafafa;border:1px solid #eee !important;">
+        <div class="card-body py-2 px-3">
+            <strong class="d-block mb-2">Supplier Split Orders (Same Invoice)</strong>
+            <div class="d-flex flex-wrap gap-2">
+                {% for split_po in split_purchase_orders %}
+                <a href="{% url 'purchase_order_detail' split_po.pk %}" class="btn btn-sm btn-outline-secondary">
+                    {{ split_po.po_number }} - {{ split_po.supplier_name }}
+                </a>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<div class="container pb-4 invoice-preview-shell">
+    <iframe
+        id="final-invoice-preview-frame"
+        class="document-preview-frame"
+        src="{% if invoice.loading %}{% url 'logistics_final_invoice_html_preview' invoice.pk %}{% else %}{% url 'sourcing_final_invoice_html_preview' invoice.pk %}{% endif %}?v={% now 'U' %}"
+        title="Final invoice preview {{ invoice|doc_number:"FI" }}">
+    </iframe>
+</div>
+
+<script>
+function printDocument() {
+    const frame = document.getElementById('final-invoice-preview-frame');
+    if (frame && frame.contentWindow) {
+        frame.contentWindow.focus();
+        frame.contentWindow.print();
+    }
+}
+</script>
+{% endblock %}

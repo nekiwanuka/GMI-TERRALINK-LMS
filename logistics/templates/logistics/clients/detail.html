@@ -1,0 +1,110 @@
+{% extends "logistics/base.html" %}
+
+{% block title %}{{ client.name }} - GMI TERRALINK Logistics Portal{% endblock %}
+
+{% block content %}
+<div class="workspace-stack">
+    <section class="workspace-hero">
+        <div class="workspace-hero-grid">
+            <div class="workspace-hero-copy">
+                <span class="eyebrow-label"><i class="bi bi-person-badge-fill"></i> Client account view</span>
+                <h1>{{ client.name }}</h1>
+                <p>Review the commercial identity, contact ownership and cargo relationship for this client before opening a new transaction or freight record.</p>
+            </div>
+            <div class="workspace-badge-row">
+                <div class="workspace-badge">
+                    <strong>{{ client.client_id }}</strong>
+                    <span>Client ID</span>
+                </div>
+                <div class="workspace-badge">
+                    <strong>{{ loadings.count }}</strong>
+                    <span>Linked cargo</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <div class="row g-4">
+        <div class="col-xl-8">
+            <section class="card workspace-card mb-0">
+                <div class="card-header">
+                    <div>
+                        <h3 class="mb-1">Account information</h3>
+                        <small class="text-white-50">Profile data used in downstream operations and documents.</small>
+                    </div>
+                    {% if user.is_superuser or user.role == 'ADMIN' or user.role == 'DIRECTOR' or user.role == 'superuser' %}
+                    <a href="{% url 'client_update' client.id %}" class="btn btn-warning btn-sm"><i class="bi bi-pencil me-1"></i>Edit</a>
+                    {% endif %}
+                </div>
+                <div class="card-body p-4">
+                    <div class="detail-grid">
+                        <div class="detail-item">
+                            <span class="label">Client ID</span>
+                            <span class="value">{{ client.client_id }}</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="label">Date Registered</span>
+                            <span class="value">{{ client.date_registered|date:"d M Y H:i" }}</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="label">Company</span>
+                            <span class="value">{{ client.company_name|default:'—' }}</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="label">Country</span>
+                            <span class="value">{{ client.get_country_display|default:'—' }}</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="label">Contact Person</span>
+                            <span class="value">{{ client.contact_person }}</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="label">Phone</span>
+                            <span class="value">{{ client.phone }}</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="label">Email</span>
+                            <span class="value">{% if client.email %}<a href="mailto:{{ client.email }}">{{ client.email }}</a>{% else %}—{% endif %}</span>
+                        </div>
+                        <div class="detail-item detail-item-wide">
+                            <span class="label">Address</span>
+                            <span class="value">{{ client.address }}</span>
+                        </div>
+                        {% if client.remarks %}
+                        <div class="detail-item detail-item-wide">
+                            <span class="label">Remarks</span>
+                            <span class="value">{{ client.remarks }}</span>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <div class="col-xl-4">
+            <section class="surface-panel h-100">
+                <div class="panel-header">
+                    <h3 class="panel-title"><i class="bi bi-box-seam me-2"></i>Associated cargo</h3>
+                    <a href="{% url 'loading_create' %}" class="btn btn-outline-primary btn-sm">Add Cargo</a>
+                </div>
+                {% if loadings %}
+                <div class="detail-sidebar-list">
+                    {% for loading in loadings %}
+                    <a href="{% url 'loading_detail' loading.id %}" class="detail-sidebar-link">
+                        <strong class="d-block mb-1">{{ loading.loading_id }}</strong>
+                        <span class="d-block text-muted small mb-1">{{ loading.destination }}</span>
+                        <span class="metric-pill"><i class="bi bi-box"></i>{{ loading.container_number|default:'Container pending' }}</span>
+                    </a>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="detail-item">
+                    <span class="label">Status</span>
+                    <span class="value">No cargo records are linked to this client yet.</span>
+                </div>
+                {% endif %}
+            </section>
+        </div>
+    </div>
+</div>
+{% endblock %}

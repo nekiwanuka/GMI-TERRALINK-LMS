@@ -1,0 +1,94 @@
+﻿{% extends "logistics/base.html" %}
+{% load static %}
+
+{% load logistics_docs %}
+{% block title %}Receipt {{ receipt|doc_number:"RCT" }} - GMI TERRALINK{% endblock %}
+
+{% block extra_css %}
+{% include "logistics/components/document_print_styles.html" %}
+<style>
+.receipt-page {
+    max-width: 920px;
+    margin: 0 auto;
+}
+.receipt-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem;
+}
+.receipt-toolbar-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+}
+.receipt-toolbar-actions .btn {
+    min-width: 148px;
+}
+.document-preview-frame {
+    width: 100%;
+    min-height: 1180px;
+    border: 1px solid #d7d7d7;
+    background: #fff;
+    box-shadow: 0 12px 34px rgba(0, 0, 0, 0.08);
+}
+
+@media (max-width: 768px) {
+    .receipt-toolbar,
+    .receipt-toolbar-actions {
+        display: grid;
+        grid-template-columns: 1fr;
+    }
+
+    .receipt-toolbar-actions .btn,
+    .receipt-toolbar > .btn {
+        width: 100%;
+    }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="receipt-page">
+    <section class="no-print receipt-toolbar mt-3 mb-3">
+        <a href="{% url 'receipt_list' %}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left"></i> Back to receipts
+        </a>
+        <div class="receipt-toolbar-actions">
+            <button onclick="printReceiptDocument()" class="btn btn-outline-dark">
+                <i class="bi bi-printer"></i> Print preview
+            </button>
+            <a href="{% url 'receipt_html_preview' receipt.pk %}?download=1&amp;v={% now 'U' %}" class="btn btn-primary" target="_blank">
+                <i class="bi bi-file-pdf"></i> Download PDF
+            </a>
+            <a href="{% url 'receipt_sign' receipt.pk %}" class="btn {% if document_signature %}btn-outline-success{% else %}btn-outline-dark{% endif %}">
+                <i class="bi bi-pen"></i> {% if document_signature %}Signed{% else %}Sign{% endif %}
+            </a>
+            {% if not receipt.is_reversed and can_reverse_receipt %}
+            <a href="{% url 'receipt_reverse' receipt.pk %}" class="btn btn-danger">
+                <i class="bi bi-x-circle"></i> Reverse / Refund
+            </a>
+            {% endif %}
+        </div>
+    </section>
+
+    <section class="receipt-print-area pb-4">
+        <iframe
+            id="receipt-preview-frame"
+            class="document-preview-frame"
+            src="{% url 'receipt_html_preview' receipt.pk %}?v={% now 'U' %}"
+            title="Receipt preview {{ receipt|doc_number:"RCT" }}">
+        </iframe>
+    </section>
+</div>
+<script>
+function printReceiptDocument() {
+    const frame = document.getElementById('receipt-preview-frame');
+    if (frame && frame.contentWindow) {
+        frame.contentWindow.focus();
+        frame.contentWindow.print();
+    }
+}
+</script>
+{% endblock %}

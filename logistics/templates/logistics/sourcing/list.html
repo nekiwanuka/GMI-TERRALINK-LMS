@@ -1,0 +1,64 @@
+{% extends "logistics/base.html" %}
+
+{% block title %}Q-Worksheets - GMI TERRALINK Logistics Portal{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="mb-1"><i class="bi bi-table"></i> Q-Worksheets</h1>
+            <p class="text-muted mb-0">Manual or document-based sourcing worksheets attached to customer entries.</p>
+        </div>
+        <a href="{% url 'sourcing_create' %}" class="btn btn-primary">New Blank Q-Worksheet</a>
+    </div>
+
+    <div class="card">
+        {% include "logistics/components/lane_switcher.html" %}
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Transaction</th>
+                        <th>Supplier</th>
+                        <th>Contact</th>
+                        <th>Status</th>
+                        <th>Created By</th>
+                        <th>Created</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for rec in records %}
+                    <tr>
+                        <td>
+                            <div class="fw-semibold">{{ rec.transaction.transaction_id }}</div>
+                            <div class="small text-muted">{{ rec.transaction.customer.name }}</div>
+                        </td>
+                        <td>{{ rec.supplier_name }}</td>
+                        <td>{{ rec.supplier_contact|default:'-' }}</td>
+                        <td>
+                            {% if rec.generated_proforma %}
+                            <span class="badge bg-success">Converted</span>
+                            {% else %}
+                            <span class="badge bg-warning text-dark">Worksheet</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ rec.created_by.username }}</td>
+                        <td>{{ rec.created_at|date:"Y-m-d" }}</td>
+                        <td class="text-end">
+                            <a class="btn btn-sm btn-warning" href="{% url 'sourcing_update' rec.id %}">Open</a>
+                            {% if rec.generated_proforma %}
+                            <a class="btn btn-sm btn-outline-dark" href="{% if rec.generated_proforma.loading %}{% url 'logistics_proforma_detail' rec.generated_proforma.pk %}{% else %}{% url 'sourcing_proforma_detail' rec.generated_proforma.pk %}{% endif %}">Proforma</a>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="7" class="text-center text-muted py-4">No Q-Worksheets</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% include "logistics/components/pagination.html" %}
+    </div>
+</div>
+{% endblock %}

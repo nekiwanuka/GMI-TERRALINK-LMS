@@ -1,0 +1,95 @@
+{% extends "logistics/base.html" %}
+{% load logistics_docs %}
+{% block title %}Payments for {{ transaction.transaction_id }} — GMI TERRALINK{% endblock %}
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="bi bi-cash-coin"></i> Payments — {{ transaction.transaction_id }}</h2>
+        {% if latest_invoice and payment_snapshot.can_record_payment and can_record_payment_entry %}
+        <a href="{% url 'sourcing_payment_create_for' transaction.pk %}" class="btn btn-primary">
+            <i class="bi bi-plus-lg"></i> Record Payment
+        </a>
+        {% elif latest_invoice and payment_snapshot.can_record_payment %}
+        <a href="{% url 'sourcing_payment_create_for' transaction.pk %}" class="btn btn-outline-primary">
+            <i class="bi bi-shield-check"></i> Request Finance Permission
+        </a>
+        {% elif latest_invoice %}
+        <span class="btn btn-outline-success disabled"><i class="bi bi-check2-circle"></i> Paid</span>
+        {% else %}
+        <span class="btn btn-outline-secondary disabled"><i class="bi bi-receipt"></i> Awaiting Invoice</span>
+        {% endif %}
+    </div>
+
+    <div class="card mb-3">
+        <div class="card-body">
+            <strong>Customer:</strong> {{ transaction.customer.name }} &nbsp;|&nbsp;
+            <strong>Status:</strong>
+            <span class="badge bg-secondary">{{ transaction.get_status_display }}</span>
+            {% if payment_snapshot %}
+            &nbsp;|&nbsp; <strong>Invoice Payment:</strong>
+            <span class="badge {{ payment_snapshot.invoice_class }}">{{ payment_snapshot.invoice_label }}</span>
+            {% if payment_snapshot.invoice_balance > 0 %}<span class="text-muted small">Balance: {{ payment_snapshot.invoice_balance }} {{ latest_invoice.currency }}</span>{% endif %}
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>Receipt #</th>
+                            <th>Type</th>
+                            <th>Amount Due</th>
+                            <th>Amount</th>
+                            <th>Cash In</th>
+                            <th>Change</th>
+                            <th>Balance</th>
+                            <th>Currency</th>
+                            <th>Method</th>
+                            <th>Reference</th>
+                            <th>Proof</th>
+                            <th>Date</th>
+                            <th>Invoice</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for record in records %}
+                        <tr>
+                            <td>
+                                {% if record.receipt %}
+                                <a href="{% url 'receipt_detail' record.receipt.pk %}">
+                                    {{ record.receipt|doc_number:"RCT" }}
+                                </a>
+                                {% else %}—{% endif %}
+                            </td>
+                            <td>{% if record.is_full_payment %}Full{% else %}Partial{% endif %}</td>
+                            <td>{{ record.amount_due_snapshot|floatformat:2 }}</td>
+                            <td>{{ record.amount|floatformat:2 }}</td>
+                            <td>{{ record.cash_received|default:"—" }}</td>
+                            <td>{{ record.change_given|floatformat:2 }}</td>
+                            <td>{{ record.balance_after|floatformat:2 }}</td>
+                            <td>{{ record.currency }}</td>
+                            <td>{{ record.get_payment_method_display }}</td>
+                            <td>{{ record.reference|default:"—" }}</td>
+                            <td>{% if record.proof_of_payment %}<a href="{% url 'protected_media' record.proof_of_payment.name %}" target="_blank">Open</a>{% else %}—{% endif %}</td>
+                            <td>{{ record.payment_date|date:"d M Y" }}</td>
+                            <td>
+                                {% if record.final_invoice %}
+                                    {{ record.final_invoice|doc_number:"FI" }}
+                                {% else %}—{% endif %}
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="13" class="text-center text-muted py-4">No payments recorded yet.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

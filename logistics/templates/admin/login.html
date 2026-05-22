@@ -1,0 +1,59 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block bodyclass %}{{ block.super }} login gmi-admin-login{% endblock %}
+
+{% block usertools %}{% endblock %}
+{% block nav-global %}{% endblock %}
+{% block nav-sidebar %}{% endblock %}
+{% block breadcrumbs %}{% endblock %}
+
+{% block content %}
+<div class="gmi-admin-login-shell">
+    <section class="gmi-admin-login-panel" aria-label="Admin sign in">
+        <div class="gmi-admin-login-brand">
+            <img src="{% static 'images/gmi_logo.png' %}" alt="GMI Terralink" class="gmi-admin-login-logo">
+            <div>
+                <span class="gmi-admin-kicker">Secure Access</span>
+                <h1>Admin Console</h1>
+            </div>
+        </div>
+
+        {% if form.errors and not form.non_field_errors %}
+        <p class="errornote">
+            {% blocktranslate count counter=form.errors.items|length %}Please correct the error below.{% plural %}Please correct the errors below.{% endblocktranslate %}
+        </p>
+        {% endif %}
+
+        {% if form.non_field_errors %}
+        {% for error in form.non_field_errors %}
+        <p class="errornote">{{ error }}</p>
+        {% endfor %}
+        {% endif %}
+
+        <form action="{{ app_path }}" method="post" id="login-form" class="gmi-admin-login-form">
+            {% csrf_token %}
+            <div class="form-row">
+                {{ form.username.errors }}
+                {{ form.username.label_tag }}
+                {{ form.username }}
+            </div>
+            <div class="form-row">
+                {{ form.password.errors }}
+                {{ form.password.label_tag }}
+                {{ form.password }}
+                <input type="hidden" name="next" value="{{ next }}">
+            </div>
+            {% url 'admin_password_reset' as password_reset_url %}
+            {% if password_reset_url %}
+            <div class="password-reset-link">
+                <a href="{{ password_reset_url }}">{% translate 'Forgotten your password or username?' %}</a>
+            </div>
+            {% endif %}
+            <div class="submit-row">
+                <input type="submit" value="{% translate 'Log in' %}">
+            </div>
+        </form>
+    </section>
+</div>
+{% endblock %}

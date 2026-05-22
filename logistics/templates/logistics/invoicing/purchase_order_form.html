@@ -1,0 +1,184 @@
+{% extends "logistics/base.html" %}
+{% load humanize %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="container" style="max-width:980px;">
+    <div class="d-flex justify-content-between align-items-center mt-4 mb-3">
+        <div>
+            <h1 class="mb-0"><i class="bi bi-pencil-square"></i> Edit Purchase Order</h1>
+            <small class="text-muted">{{ purchase_order.po_number }} | Transaction {{ purchase_order.transaction.transaction_id }}</small>
+        </div>
+        <a href="{% url 'purchase_order_detail' purchase_order.pk %}" class="btn btn-outline-secondary">Back</a>
+    </div>
+
+    <div class="card shadow-sm">
+        <div class="card-body">
+            <div class="alert alert-light border">
+                <strong>Purpose:</strong> Use this to tailor each split PO for a specific supplier. You can change supplier, line items, subtotal, notes and status independently.
+            </div>
+
+            <form method="post" id="po-edit-form" novalidate>
+                {% csrf_token %}
+                <div class="row g-3 mb-3">
+                    <div class="col-md-4">
+                        <label class="form-label">Select Existing Supplier</label>
+                        <select name="supplier_id" id="supplier_id" class="form-control">
+                            <option value="">-- Keep / enter manually --</option>
+                            {% for supplier in suppliers %}
+                            <option value="{{ supplier.pk }}" data-name="{{ supplier.name|escape }}" data-address="{{ supplier.address|default:''|escape }}">{{ supplier.name }}</option>
+                            {% endfor %}
+                        </select>
+                        <small class="text-muted">Selecting a supplier auto-fills supplier name/address.</small>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Supplier Name</label>
+                        <input type="text" name="supplier_name" id="supplier_name" class="form-control" value="{{ purchase_order.supplier_name }}" required>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Status</label>
+                        <select name="status" class="form-control">
+                            {% for value,label in purchase_order.STATUS_CHOICES %}
+                            <option value="{{ value }}" {% if purchase_order.status == value %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label">Supplier Address</label>
+                        <textarea name="supplier_address" id="supplier_address" rows="2" class="form-control">{{ purchase_order.supplier_address }}</textarea>
+                    </div>
+                </div>
+
+                <div class="table-responsive">
+                    <table class="table table-bordered align-middle" id="po-items-table">
+                        <thead class="table-light">
+                            <tr>
+                                <th style="width:42%;">Description</th>
+                                <th style="width:14%;">Quantity</th>
+                                <th style="width:18%;">Unit Price</th>
+                                <th style="width:18%;">Line Total</th>
+                                <th style="width:8%;"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in purchase_order.items %}
+                            <tr>
+                                <td><input type="text" name="item_desc[]" class="form-control" value="{{ item.description|default:'' }}" required></td>
+                                <td><input type="number" step="0.01" min="0" name="item_qty[]" class="form-control po-qty" value="{{ item.quantity|default:'1' }}"></td>
+                                <td><input type="number" step="0.01" min="0" name="item_unit_price[]" class="form-control po-unit" value="{% firstof item.unit_price item.amount item.total '0' %}"></td>
+                                <td><input type="text" class="form-control po-total" readonly></td>
+                                <td class="text-center"><button type="button" class="btn btn-sm btn-outline-danger po-remove">x</button></td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td><input type="text" name="item_desc[]" class="form-control" required></td>
+                                <td><input type="number" step="0.01" min="0" name="item_qty[]" class="form-control po-qty" value="1"></td>
+                                <td><input type="number" step="0.01" min="0" name="item_unit_price[]" class="form-control po-unit" value="0"></td>
+                                <td><input type="text" class="form-control po-total" readonly></td>
+                                <td class="text-center"><button type="button" class="btn btn-sm btn-outline-danger po-remove">x</button></td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                        <tfoot>
+                            <tr class="table-light">
+                                <td colspan="3" class="text-end"><strong>Subtotal</strong></td>
+                                <td><input type="text" id="po-subtotal-preview" class="form-control" readonly></td>
+                                <td></td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+
+                <div class="mb-3">
+                    <button type="button" id="add-po-row" class="btn btn-outline-dark btn-sm">+ Add Item</button>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Notes</label>
+                    <textarea name="notes" rows="3" class="form-control">{{ purchase_order.notes }}</textarea>
+                </div>
+
+                <div class="d-flex justify-content-end gap-2">
+                    <a href="{% url 'purchase_order_detail' purchase_order.pk %}" class="btn btn-outline-secondary">Cancel</a>
+                    <button type="submit" class="btn btn-dark">Save PO Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    const table = document.getElementById('po-items-table');
+    const tbody = table.querySelector('tbody');
+    const subtotalPreview = document.getElementById('po-subtotal-preview');
+    const addRowButton = document.getElementById('add-po-row');
+    const supplierSelect = document.getElementById('supplier_id');
+    const supplierName = document.getElementById('supplier_name');
+    const supplierAddress = document.getElementById('supplier_address');
+
+    function toNum(value) {
+        const n = parseFloat(value);
+        return Number.isFinite(n) ? n : 0;
+    }
+
+    function recalc() {
+        let subtotal = 0;
+        tbody.querySelectorAll('tr').forEach((row) => {
+            const qty = toNum(row.querySelector('.po-qty')?.value || 0);
+            const unit = toNum(row.querySelector('.po-unit')?.value || 0);
+            const total = qty * unit;
+            const totalField = row.querySelector('.po-total');
+            if (totalField) totalField.value = total.toFixed(2);
+            subtotal += total;
+        });
+        subtotalPreview.value = subtotal.toFixed(2);
+    }
+
+    function bindRow(row) {
+        row.querySelectorAll('.po-qty, .po-unit').forEach((input) => {
+            input.addEventListener('input', recalc);
+            input.addEventListener('change', recalc);
+        });
+        const removeButton = row.querySelector('.po-remove');
+        if (removeButton) {
+            removeButton.addEventListener('click', () => {
+                if (tbody.querySelectorAll('tr').length > 1) {
+                    row.remove();
+                    recalc();
+                }
+            });
+        }
+    }
+
+    if (supplierSelect) {
+        supplierSelect.addEventListener('change', () => {
+            const option = supplierSelect.options[supplierSelect.selectedIndex];
+            if (!option || !option.value) return;
+            supplierName.value = option.getAttribute('data-name') || supplierName.value;
+            supplierAddress.value = option.getAttribute('data-address') || supplierAddress.value;
+        });
+    }
+
+    addRowButton.addEventListener('click', () => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td><input type="text" name="item_desc[]" class="form-control" required></td>
+            <td><input type="number" step="0.01" min="0" name="item_qty[]" class="form-control po-qty" value="1"></td>
+            <td><input type="number" step="0.01" min="0" name="item_unit_price[]" class="form-control po-unit" value="0"></td>
+            <td><input type="text" class="form-control po-total" readonly></td>
+            <td class="text-center"><button type="button" class="btn btn-sm btn-outline-danger po-remove">x</button></td>
+        `;
+        tbody.appendChild(row);
+        bindRow(row);
+        recalc();
+    });
+
+    tbody.querySelectorAll('tr').forEach(bindRow);
+    recalc();
+})();
+</script>
+{% endblock %}

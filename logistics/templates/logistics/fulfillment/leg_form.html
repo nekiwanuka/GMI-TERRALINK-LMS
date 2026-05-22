@@ -1,0 +1,40 @@
+{% extends "logistics/base.html" %}
+
+{% block title %}{{ title }} - GMI TERRALINK Logistics Portal{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-lg-9">
+            <div class="card shadow-sm">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h4 class="mb-0">{{ title }}</h4>
+                    <span class="text-muted small">{{ transaction.transaction_id }} | {{ transaction.customer.name }}</span>
+                </div>
+                <div class="card-body">
+                    <form method="post">
+                        {% csrf_token %}
+                        <div class="row g-3">
+                            <div class="col-md-2"><label class="form-label">Sequence</label>{{ form.sequence }}</div>
+                            <div class="col-md-5"><label class="form-label">Leg Type</label>{{ form.leg_type }}</div>
+                            <div class="col-md-5"><label class="form-label">Status</label>{{ form.status }}</div>
+                            <div class="col-md-6"><label class="form-label">Origin</label>{{ form.origin }}</div>
+                            <div class="col-md-6"><label class="form-label">Destination</label>{{ form.destination }}</div>
+                            <div class="col-md-6"><label class="form-label">Carrier</label>{{ form.carrier }}</div>
+                            <div class="col-md-6"><label class="form-label">Vehicle Or Vessel</label>{{ form.vehicle_or_vessel }}</div>
+                            <div class="col-md-4"><label class="form-label">Departure Date</label>{{ form.departure_date }}</div>
+                            <div class="col-md-4"><label class="form-label">Arrival ETA</label>{{ form.arrival_eta }}</div>
+                            <div class="col-md-4"><label class="form-label">Actual Arrival</label>{{ form.actual_arrival }}</div>
+                            <div class="col-12"><label class="form-label">Notes</label>{{ form.notes }}</div>
+                        </div>
+                        <div class="d-flex justify-content-end gap-2 mt-4">
+                            <a href="{% url 'transaction_detail' transaction.pk %}" class="btn btn-secondary">Back</a>
+                            <button class="btn btn-primary" type="submit">Save Shipment Leg</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

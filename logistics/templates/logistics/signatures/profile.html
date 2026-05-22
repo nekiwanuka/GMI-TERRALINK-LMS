@@ -1,0 +1,60 @@
+{% extends "logistics/base.html" %}
+
+{% block title %}Signature Profile - GMI TERRALINK{% endblock %}
+
+{% block content %}
+<div class="workspace-stack">
+    <section class="workspace-hero">
+        <div class="workspace-hero-grid">
+            <div class="workspace-hero-copy">
+                <span class="eyebrow-label"><i class="bi bi-pen"></i> Signature profile</span>
+                <h1>Upload your official document signature.</h1>
+                <p>This signature is used when you sign invoices and other company documents online.</p>
+            </div>
+        </div>
+    </section>
+
+    <section class="surface-panel">
+        <form method="post" enctype="multipart/form-data" class="row g-4">
+            {% csrf_token %}
+            {% if next_url %}<input type="hidden" name="next" value="{{ next_url }}">{% endif %}
+            <div class="col-lg-7">
+                <label for="{{ form.signature_image.id_for_label }}" class="form-label fw-semibold">Signature image</label>
+                {{ form.signature_image }}
+                <div class="form-text">Use a transparent PNG where possible. JPG, JPEG, PNG, and WEBP are accepted up to 2 MB.</div>
+                {% if form.signature_image.errors %}<div class="text-danger small mt-1">{{ form.signature_image.errors|join:" " }}</div>{% endif %}
+
+                <label for="{{ form.title.id_for_label }}" class="form-label fw-semibold mt-3">Signing title</label>
+                {{ form.title }}
+                {% if form.title.errors %}<div class="text-danger small mt-1">{{ form.title.errors|join:" " }}</div>{% endif %}
+
+                <div class="form-check mt-3">
+                    {{ form.is_active }}
+                    <label class="form-check-label" for="{{ form.is_active.id_for_label }}">Allow this signature to be used on documents</label>
+                </div>
+                {% if form.is_active.errors %}<div class="text-danger small mt-1">{{ form.is_active.errors|join:" " }}</div>{% endif %}
+
+                <div class="d-flex gap-2 mt-4">
+                    <button type="submit" class="btn btn-dark"><i class="bi bi-save me-1"></i>Save Signature</button>
+                    {% if next_url %}<a href="{{ next_url }}" class="btn btn-outline-secondary">Back to Document</a>{% endif %}
+                </div>
+            </div>
+            <div class="col-lg-5">
+                <div class="p-3 border rounded-2 bg-light h-100">
+                    <div class="small text-uppercase text-muted fw-bold mb-2">Current signature</div>
+                    {% if profile.signature_image %}
+                    <div class="bg-white border rounded-2 p-3 mb-3 text-center">
+                        <img src="{% url 'protected_media' profile.signature_image.name %}" alt="Uploaded signature" style="max-width:100%;max-height:120px;object-fit:contain;">
+                    </div>
+                    <div class="fw-semibold">{{ profile.display_name }}</div>
+                    <div class="text-muted small">{{ profile.title }}</div>
+                    <span class="badge {% if profile.is_active %}bg-success{% else %}bg-secondary{% endif %} mt-2">{% if profile.is_active %}Active{% else %}Inactive{% endif %}</span>
+                    {% else %}
+                    <div class="text-muted">No signature image uploaded yet.</div>
+                    {% endif %}
+                </div>
+            </div>
+        </form>
+    </section>
+</div>
+{% endblock %}

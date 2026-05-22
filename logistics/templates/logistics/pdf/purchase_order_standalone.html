@@ -1,0 +1,92 @@
+{% load humanize static logistics_docs %}<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Purchase Order {{ document_number }}</title>
+<style>
+@page { size: A4 portrait; margin: 10mm 14mm 18mm; }
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; background: #ffffff; }
+body { font-family: Arial, Helvetica, sans-serif; font-size: 9.2px; line-height: 1.35; color: #161616; }
+table { border-collapse: collapse; width: 100%; }
+td, th { padding: 0; text-align: left; vertical-align: top; }
+.document { width: 100%; min-height: 269mm; border: 1px solid #d8d8d8; border-radius: 8px; background: #ffffff; overflow: hidden; position: relative; }
+.top-ledger { border-top: 5px solid #101010; border-bottom: 3px solid #d4af37; background: #ffffff; }
+.logo-cell { width: 126px; padding: 10px 12px 9px 14px; }
+.logo-card { border: 1px solid #d4af37; border-radius: 7px; padding: 6px 8px; background: #ffffff; }
+.logo { width: 94px; display: block; }
+.brand-cell { padding: 12px 10px 9px 0; vertical-align: middle; }
+.brand-name { font-size: 20px; font-weight: bold; color: #101010; }
+.brand-line { margin-top: 4px; font-size: 8px; color: #8a6d1d; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; }
+.doc-cell { width: 220px; padding: 10px 14px 9px 8px; text-align: right; vertical-align: middle; }
+.doc-title { font-size: 18px; font-weight: bold; text-transform: uppercase; color: #101010; }
+.doc-number { display: inline-block; margin-top: 5px; background: #101010; color: #ffffff; border-right: 18px solid #d4af37; padding: 5px 8px; font-size: 12.5px; font-weight: bold; }
+.doc-meta { margin-top: 4px; font-size: 8.2px; color: #555555; text-transform: uppercase; }
+.address-strip { background: #f7f4ea; border-bottom: 1px solid #e5d8ac; }
+.address-strip td { width: 50%; padding: 7px 14px; }
+.address-strip td + td { border-left: 1px solid #e5d8ac; }
+.addr-title { font-size: 8px; font-weight: bold; color: #8a6d1d; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 3px; }
+.addr-line { font-size: 8.6px; color: #262626; margin-bottom: 2px; }
+.addr-phone { font-size: 9px; font-weight: bold; color: #101010; }
+.status-ribbon { padding: 8px 14px; background: #2b2b2b; color: #ffffff; border-bottom: 3px solid #d4af37; font-weight: bold; text-transform: uppercase; letter-spacing: 0.8px; }
+.status-ribbon .right { float: right; color: #d4af37; }
+.body-pad { padding: 16px 14px 0 14px; }
+.meta-wrap { margin-bottom: 12px; }
+.panel-cell { width: 50%; }
+.panel-cell.left { padding-right: 7px; }
+.panel-cell.right { padding-left: 7px; }
+.info-card { min-height: 120px; border: 1px solid #d8d8d8; border-radius: 8px; background: #ffffff; padding: 10px 11px; }
+.info-card.gold-card { background: #fffdf8; border-color: #e5d8ac; }
+.section-label { font-size: 8.3px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.9px; color: #8a6d1d; border-bottom: 1px solid #d4af37; padding-bottom: 3px; margin-bottom: 8px; }
+.name-line { font-size: 14px; font-weight: bold; color: #101010; margin-bottom: 4px; }
+.detail-line { font-size: 8.8px; color: #3f3f3f; margin-bottom: 2px; }
+.fact-table td { padding: 5px 0; border-bottom: 1px solid #eeeeee; font-size: 8.7px; }
+.fact-table .k { color: #666666; width: 42%; }
+.fact-table .v { width: 58%; text-align: right; font-weight: bold; color: #101010; }
+.table-card { border: 1px solid #d8d8d8; border-radius: 8px; overflow: hidden; background: #ffffff; margin-top: 12px; }
+.items-table th { background: #2b2b2b; color: #ffffff; padding: 7px 8px; font-size: 8.7px; font-weight: bold; text-transform: uppercase; border-bottom: 1.5pt solid #d4af37; }
+.items-table th.center, .items-table td.center { text-align: center; }
+.items-table th.right, .items-table td.right { text-align: right; }
+.items-table td { padding: 7px 8px; border-bottom: 0.5pt solid #dcdcdc; font-size: 8.8px; color: #222222; }
+.items-table tr.alt td { background: #fafafa; }
+.items-table .desc { line-height: 1.35; }
+.muted { color: #777777; }
+.totals-wrap { margin-top: 9px; }
+.totals-spacer { width: 58%; }
+.totals-box { border: 0.5pt solid #cfcfcf; border-top: 1.5pt solid #d4af37; border-radius: 7px; overflow: hidden; }
+.totals-box td { padding: 6px 9px; border-bottom: 0.5pt solid #dfdfdf; font-size: 9px; }
+.totals-box .k { width: 58%; color: #333333; }
+.totals-box .v { width: 42%; text-align: right; font-weight: bold; color: #101010; }
+.totals-grand td { background: #d4af37; color: #101010; border-bottom: 0; font-weight: bold; font-size: 10.5px; padding: 8px 9px; }
+.notes-box { margin-top: 12px; border: 1px solid #e5d8ac; border-radius: 8px; background: #fffdf8; padding: 10px 11px; min-height: 44px; font-size: 8.8px; color: #333333; }
+.lower-table { margin-top: 22mm; break-inside: avoid; page-break-inside: avoid; }
+.terms-cell { width: 62%; padding-right: 15px; }
+.sign-cell { width: 38%; text-align: center; }
+.panel-title { font-size: 8.5px; font-weight: bold; color: #8a6d1d; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 5px; }
+.terms-box { border: 1px solid #e5d8ac; border-radius: 8px; background: #f7f4ea; padding: 9px 10px; font-size: 8.2px; color: #333333; line-height: 1.45; }
+.sign-box { border: 1px solid #d8d8d8; border-top: 3px solid #d4af37; border-radius: 8px; padding: 9px 10px 8px; background: #ffffff; }
+.sign-line { width: 170px; margin: 28px auto 0 auto; border-top: 1px solid #101010; padding-top: 4px; font-size: 9px; font-weight: bold; color: #101010; }
+.sign-title { font-size: 8px; color: #555555; margin-top: 2px; }
+.footer { position: absolute; left: 14px; right: 14px; bottom: 10px; padding-top: 8px; border-top: 1px solid #d8d8d8; font-size: 7.5px; color: #555555; }
+.service-strip { margin-top: 6px; background: #d4af37; color: #101010; border-top: 1px solid #101010; border-bottom: 1px solid #101010; padding: 5px 8px; text-align: center; font-size: 7.4px; }
+@media screen { html { background: #e9e9e9; } body { width: 210mm; min-height: 297mm; margin: 0 auto; padding: 10mm 14mm; background: #ffffff; } }
+@media print { * { -webkit-print-color-adjust: exact; print-color-adjust: exact; } .items-table tr, .totals-wrap, .lower-table { break-inside: avoid; page-break-inside: avoid; } thead { display: table-header-group; } }
+</style>
+</head>
+<body>
+<div class="document">
+    <table class="top-ledger"><tr><td class="logo-cell"><div class="logo-card"><img class="logo" src="{% static 'images/gmi_logo.png' %}" alt="GMI Terralink"></div></td><td class="brand-cell"><div class="brand-name">GMI TERRALINK</div><div class="brand-line">Procurement | Supplier Dispatch | Trade Fulfillment</div></td><td class="doc-cell"><div class="doc-title">Purchase Order</div><div class="doc-number">{{ document_number }}</div><div class="doc-meta">{{ purchase_order.transaction.transaction_id }}</div></td></tr></table>
+    <table class="address-strip"><tr><td><div class="addr-title">China Branch | Guangzhou</div><div class="addr-line">B239B (ECAT), Jinsha Block B 2F, Baiyun</div><div class="addr-phone">+86 177 0195 4464</div></td><td><div class="addr-title">Uganda Branch | Kampala</div><div class="addr-line">Plot 10/12, Hamdeen Lwanga Close, Muyenga</div><div class="addr-phone">+256 768 049 940</div><div class="addr-line">gmiterralinkinfo@gmail.com | www.gmi-terralink.com</div></td></tr></table>
+    <div class="status-ribbon">Procurement Instruction <span class="right">{{ purchase_order.effective_status_display|default:purchase_order.get_status_display }}</span></div>
+    <div class="body-pad">
+        <table class="meta-wrap"><tr><td class="panel-cell left"><div class="info-card gold-card"><div class="section-label">Supplier</div><div class="name-line">{{ purchase_order.supplier_name }}</div>{% if purchase_order.supplier_address %}<div class="detail-line">{{ purchase_order.supplier_address|linebreaksbr }}</div>{% else %}<div class="detail-line muted">Supplier address not recorded.</div>{% endif %}</div></td><td class="panel-cell right"><div class="info-card"><div class="section-label">Order Details</div><table class="fact-table"><tr><td class="k">PO No.</td><td class="v">{{ purchase_order.po_number }}</td></tr><tr><td class="k">Transaction</td><td class="v">{{ purchase_order.transaction.transaction_id }}</td></tr><tr><td class="k">Customer</td><td class="v">{{ purchase_order.transaction.customer.name }}</td></tr>{% if purchase_order.final_invoice %}<tr><td class="k">Invoice</td><td class="v">{{ purchase_order.final_invoice|doc_number:"FI" }}</td></tr>{% endif %}<tr><td class="k">Issue Date</td><td class="v">{{ purchase_order.created_at|date:"d M Y" }}</td></tr></table></div></td></tr></table>
+        <div class="table-card"><table class="items-table"><thead><tr><th style="width:32px;" class="center">No</th><th>Item Description</th><th style="width:80px;" class="center">Quantity</th><th style="width:105px;" class="right">Amount</th></tr></thead><tbody>{% for item in purchase_order.items %}<tr{% if forloop.counter|divisibleby:2 %} class="alt"{% endif %}><td class="center">{{ forloop.counter }}</td><td class="desc">{% if item.description %}{{ item.description }}{% elif item.name %}{{ item.name }}{% else %}<span class="muted">Item description not recorded</span>{% endif %}</td><td class="center">{{ item.quantity|default:"1" }}{% if item.unit %} {{ item.unit }}{% endif %}</td><td class="right">{% if item.total %}USD {{ item.total|floatformat:2|intcomma }}{% elif item.amount %}USD {{ item.amount|floatformat:2|intcomma }}{% elif item.unit_price %}USD {{ item.unit_price|floatformat:2|intcomma }}{% else %}<span class="muted">-</span>{% endif %}</td></tr>{% empty %}<tr><td colspan="4" class="center muted" style="padding:18px;">No line items.</td></tr>{% endfor %}</tbody></table></div>
+        <table class="totals-wrap"><tr><td class="totals-spacer"></td><td><table class="totals-box"><tr class="totals-grand"><td class="k">PO Subtotal</td><td class="v">USD {{ purchase_order.subtotal|floatformat:2|intcomma }}</td></tr></table></td></tr></table>
+        {% if purchase_order.notes %}<div class="notes-box"><div class="section-label">Notes</div>{{ purchase_order.notes|linebreaksbr }}</div>{% endif %}
+        <table class="lower-table"><tr><td class="terms-cell"><div class="panel-title">Purchase Order Terms</div><div class="terms-box">This purchase order authorises supplier procurement for the listed goods only. Supplier must confirm availability, pricing, delivery timing, and any changes in writing before dispatch. Quote <b>{{ purchase_order.po_number }}</b> and <b>{{ purchase_order.transaction.transaction_id }}</b> on all supplier correspondence.</div></td><td class="sign-cell"><div class="panel-title">Authorised Signatory</div><div class="sign-box"><div class="sign-line">For GMI Terralink Ltd</div><div class="sign-title">Authorised Signature</div></div></td></tr></table>
+    </div>
+    <div class="footer">GMI TERRALINK LTD | Guangzhou, China | Kampala, Uganda | gmiterralinkinfo@gmail.com | +256 768 049 940<div class="service-strip">Procurement | Supplier Coordination | Logistics | Documentation | Trade Support</div></div>
+</div>
+{% if auto_print_pdf %}<script>window.addEventListener('load', function () { setTimeout(function () { window.focus(); window.print(); }, 350); });</script>{% endif %}
+</body>
+</html>

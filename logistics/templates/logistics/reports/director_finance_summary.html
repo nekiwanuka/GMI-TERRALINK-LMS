@@ -1,0 +1,677 @@
+{% extends "logistics/base.html" %}
+{% load humanize logistics_docs %}
+
+{% block title %}Finance Summary - GMI TERRALINK Logistics Portal{% endblock %}
+
+{% block extra_css %}
+<style>
+.finance-sheet-workspace {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.finance-sheet-header {
+    background: #1a1a1a;
+    border: 1px solid #d4af37;
+    border-radius: 8px;
+    color: #fff;
+    padding: 1rem;
+}
+
+.finance-sheet-eyebrow {
+    align-items: center;
+    color: #d4af37;
+    display: inline-flex;
+    font-size: 0.74rem;
+    font-weight: 800;
+    gap: 0.4rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.finance-sheet-title {
+    font-size: 1.45rem;
+    font-weight: 800;
+    line-height: 1.2;
+    margin: 0.35rem 0 0.25rem;
+}
+
+.finance-sheet-copy {
+    color: #d8d8d8;
+    margin: 0;
+    max-width: 860px;
+}
+
+.finance-summary-links {
+    display: grid;
+    gap: 0.75rem;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.finance-summary-link {
+    background: #fff;
+    border: 1px solid #d8d8d8;
+    border-radius: 8px;
+    color: #1a1a1a;
+    display: block;
+    padding: 0.85rem;
+    text-decoration: none;
+}
+
+.finance-summary-link:hover {
+    border-color: #d4af37;
+    color: #1a1a1a;
+}
+
+.finance-summary-link .label {
+    color: #666;
+    display: block;
+    font-size: 0.68rem;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.finance-summary-link .value {
+    color: #1a1a1a;
+    display: block;
+    font-size: 1.18rem;
+    font-weight: 800;
+    line-height: 1.1;
+    margin-top: 0.25rem;
+}
+
+.finance-summary-link .hint {
+    color: #666;
+    display: block;
+    font-size: 0.78rem;
+    margin-top: 0.35rem;
+}
+
+.finance-period-controls {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.finance-period-controls .btn.active {
+    background: #1a1a1a;
+    border-color: #1a1a1a;
+    color: #fff;
+}
+
+.finance-sheet-panel {
+    background: #fff;
+    border: 1px solid #d8d8d8;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.finance-sheet-panel-header {
+    align-items: center;
+    background: #f6f6f6;
+    border-bottom: 1px solid #d8d8d8;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    justify-content: space-between;
+    padding: 0.75rem 0.9rem;
+}
+
+.finance-sheet-panel-title {
+    color: #1a1a1a;
+    font-size: 0.98rem;
+    font-weight: 800;
+    margin: 0;
+}
+
+.finance-sheet-panel-meta {
+    color: #666;
+    font-size: 0.78rem;
+    font-weight: 700;
+}
+
+.finance-sheet-table {
+    margin-bottom: 0;
+    min-width: 880px;
+}
+
+.finance-sheet-table thead th {
+    background: #fff;
+    border-bottom: 1px solid #d8d8d8;
+    color: #666;
+    font-size: 0.68rem;
+    font-weight: 800;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.finance-sheet-table tbody td,
+.finance-sheet-table tfoot td {
+    border-color: #eeeeee;
+    vertical-align: middle;
+}
+
+.finance-sheet-table tfoot td {
+    background: #fbf7e4;
+    font-weight: 800;
+}
+
+.finance-sheet-table tbody tr:hover {
+    background: #fbfbfb;
+}
+
+.finance-row-in {
+    color: #1a1a1a;
+    font-weight: 800;
+}
+
+.finance-row-out {
+    color: #666;
+    font-weight: 800;
+}
+
+.finance-section-pager {
+    align-items: center;
+    background: #fff;
+    border-top: 1px solid #eeeeee;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    justify-content: space-between;
+    padding: 0.65rem 0.9rem;
+}
+
+.finance-section-pager .pagination {
+    margin-bottom: 0;
+}
+
+.finance-section-pager .page-link {
+    color: #1a1a1a;
+}
+
+.finance-section-pager .page-item.active .page-link {
+    background: #1a1a1a;
+    border-color: #1a1a1a;
+    color: #fff;
+}
+
+.finance-mini-grid {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.badge.bg-success,
+.badge.bg-warning,
+.badge.bg-primary,
+.badge.bg-info {
+    background: #d4af37 !important;
+    color: #1a1a1a !important;
+}
+
+.badge.bg-dark {
+    background: #1a1a1a !important;
+    color: #fff !important;
+}
+
+.badge.bg-secondary {
+    background: #666 !important;
+    color: #fff !important;
+}
+
+@media (max-width: 1100px) {
+    .finance-summary-links,
+    .finance-mini-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 620px) {
+    .finance-summary-links,
+    .finance-mini-grid {
+        grid-template-columns: 1fr;
+    }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="finance-sheet-workspace">
+    <section class="finance-sheet-header">
+        <span class="finance-sheet-eyebrow"><i class="bi bi-bank2"></i> Director finance</span>
+        <h1 class="finance-sheet-title">Finance summary as spreadsheet sections.</h1>
+        <p class="finance-sheet-copy">Use the buttons below to jump to each sheet: additions, subtractions, money movements, invoice status, clients, and transaction counts.</p>
+    </section>
+
+    <div class="finance-period-controls">
+        <span class="finance-sheet-panel-meta">Period view:</span>
+        <a href="?period=weekly#sheet-period" class="btn btn-sm btn-outline-dark {% if period_mode == 'weekly' %}active{% endif %}">Weekly</a>
+        <a href="?period=monthly#sheet-period" class="btn btn-sm btn-outline-dark {% if period_mode == 'monthly' %}active{% endif %}">Monthly</a>
+    </div>
+
+    <nav class="finance-summary-links" aria-label="Finance summary sections">
+        <a class="finance-summary-link" href="#sheet-period">
+            <span class="label">{{ period_label }} View</span>
+            <span class="value">{{ period_page.paginator.count }}</span>
+            <span class="hint">Dated money periods</span>
+        </a>
+        <a class="finance-summary-link" href="#sheet-additions">
+            <span class="label">Additions</span>
+            <span class="value">USD {{ total_additions|floatformat:2|intcomma }}</span>
+            <span class="hint">Collections and commission</span>
+        </a>
+        <a class="finance-summary-link" href="#sheet-subtractions">
+            <span class="label">Subtractions</span>
+            <span class="value">USD {{ total_subtractions|floatformat:2|intcomma }}</span>
+            <span class="hint">Supplier payouts and change</span>
+        </a>
+        <a class="finance-summary-link" href="#sheet-movements">
+            <span class="label">Operating Net</span>
+            <span class="value">USD {{ net_cash_position|floatformat:2|intcomma }}</span>
+            <span class="hint">Additions less subtractions</span>
+        </a>
+        <a class="finance-summary-link" href="#sheet-invoices">
+            <span class="label">Invoice Value</span>
+            <span class="value">USD {{ total_billed|floatformat:2|intcomma }}</span>
+            <span class="hint">{{ collection_rate|floatformat:2 }}% collected</span>
+        </a>
+        <a class="finance-summary-link" href="#sheet-invoices">
+            <span class="label">Outstanding</span>
+            <span class="value">USD {{ outstanding_balance|floatformat:2|intcomma }}</span>
+            <span class="hint">Unpaid invoice balance</span>
+        </a>
+        <a class="finance-summary-link" href="#sheet-components">
+            <span class="label">Invoice Components</span>
+            <span class="value">USD {{ total_billed|floatformat:2|intcomma }}</span>
+            <span class="hint">Items, fees and shipping</span>
+        </a>
+        <a class="finance-summary-link" href="#sheet-clients">
+            <span class="label">Clients</span>
+            <span class="value">{{ clients_page.paginator.count }}</span>
+            <span class="hint">Ranked activity</span>
+        </a>
+        <a class="finance-summary-link" href="#sheet-statuses">
+            <span class="label">Statuses</span>
+            <span class="value">{{ status_total_records }}</span>
+            <span class="hint">Trade record counts</span>
+        </a>
+        <a class="finance-summary-link" href="#sheet-commission">
+            <span class="label">Commission</span>
+            <span class="value">{{ commission_page.paginator.count }}</span>
+            <span class="hint">Dated ledger entries</span>
+        </a>
+    </nav>
+
+    <section class="finance-sheet-panel" id="sheet-period">
+        <div class="finance-sheet-panel-header">
+            <h2 class="finance-sheet-panel-title"><i class="bi bi-calendar-week me-2"></i>{{ period_label }} Finance Sheet</h2>
+            <span class="finance-sheet-panel-meta">Additions, subtractions and net by {{ period_mode }} period</span>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover finance-sheet-table">
+                <thead>
+                    <tr>
+                        <th>Period Date</th>
+                        <th>Period</th>
+                        <th>Currency</th>
+                        <th class="text-end">Transactions</th>
+                        <th class="text-end">Additions</th>
+                        <th class="text-end">Subtractions</th>
+                        <th class="text-end">Net</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in period_page %}
+                    <tr>
+                        <td>{{ row.period_start|date:"d M Y" }}</td>
+                        <td class="fw-semibold">{{ row.period }}</td>
+                        <td>{{ row.currency }}</td>
+                        <td class="text-end">{{ row.count }}</td>
+                        <td class="text-end finance-row-in">{{ row.currency }} {{ row.additions|floatformat:2|intcomma }}</td>
+                        <td class="text-end finance-row-out">{{ row.currency }} {{ row.subtractions|floatformat:2|intcomma }}</td>
+                        <td class="text-end fw-semibold">{{ row.currency }} {{ row.net|floatformat:2|intcomma }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="7" class="text-center text-muted py-4">No dated finance movements yet.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% if period_page.paginator.num_pages > 1 %}
+        <div class="finance-section-pager">
+            <small class="text-muted">Showing {{ period_page.start_index }}-{{ period_page.end_index }} of {{ period_page.paginator.count }} rows</small>
+            <ul class="pagination pagination-sm">
+                {% if period_page.has_previous %}<li class="page-item"><a class="page-link" href="?{{ period_query_string }}period_page={{ period_page.previous_page_number }}#sheet-period">Previous</a></li>{% else %}<li class="page-item disabled"><span class="page-link">Previous</span></li>{% endif %}
+                {% for page_num in period_page_range %}{% if page_num == period_page.number %}<li class="page-item active"><span class="page-link">{{ page_num }}</span></li>{% elif page_num == '…' %}<li class="page-item disabled"><span class="page-link">&hellip;</span></li>{% else %}<li class="page-item"><a class="page-link" href="?{{ period_query_string }}period_page={{ page_num }}#sheet-period">{{ page_num }}</a></li>{% endif %}{% endfor %}
+                {% if period_page.has_next %}<li class="page-item"><a class="page-link" href="?{{ period_query_string }}period_page={{ period_page.next_page_number }}#sheet-period">Next</a></li>{% else %}<li class="page-item disabled"><span class="page-link">Next</span></li>{% endif %}
+            </ul>
+        </div>
+        {% endif %}
+    </section>
+
+    <section class="finance-sheet-panel" id="sheet-additions">
+        <div class="finance-sheet-panel-header">
+            <h2 class="finance-sheet-panel-title"><i class="bi bi-plus-circle me-2"></i>Additions Sheet</h2>
+            <span class="finance-sheet-panel-meta">Money coming in or earned</span>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover finance-sheet-table">
+                <thead>
+                    <tr>
+                        <th>Date Basis</th>
+                        <th>Line</th>
+                        <th>Description</th>
+                        <th class="text-end">Entries</th>
+                        <th>Currency</th>
+                        <th class="text-end">Addition</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in additions_page %}
+                    <tr>
+                        <td>All dated records</td>
+                        <td class="fw-semibold">{{ row.label }}</td>
+                        <td>{{ row.description }}</td>
+                        <td class="text-end">{{ row.count }}</td>
+                        <td>{{ row.currency }}</td>
+                        <td class="text-end finance-row-in">+ {{ row.currency }} {{ row.amount|floatformat:2|intcomma }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="6" class="text-center text-muted py-4">No additions recorded yet.</td></tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <td colspan="5">USD additions used in operating net</td>
+                        <td class="text-end">USD {{ total_additions|floatformat:2|intcomma }}</td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+        {% if additions_page.paginator.num_pages > 1 %}
+        <div class="finance-section-pager">
+            <small class="text-muted">Showing {{ additions_page.start_index }}-{{ additions_page.end_index }} of {{ additions_page.paginator.count }} rows</small>
+            <ul class="pagination pagination-sm">
+                {% if additions_page.has_previous %}<li class="page-item"><a class="page-link" href="?{{ additions_query_string }}additions_page={{ additions_page.previous_page_number }}#sheet-additions">Previous</a></li>{% else %}<li class="page-item disabled"><span class="page-link">Previous</span></li>{% endif %}
+                {% for page_num in additions_page_range %}{% if page_num == additions_page.number %}<li class="page-item active"><span class="page-link">{{ page_num }}</span></li>{% elif page_num == '…' %}<li class="page-item disabled"><span class="page-link">&hellip;</span></li>{% else %}<li class="page-item"><a class="page-link" href="?{{ additions_query_string }}additions_page={{ page_num }}#sheet-additions">{{ page_num }}</a></li>{% endif %}{% endfor %}
+                {% if additions_page.has_next %}<li class="page-item"><a class="page-link" href="?{{ additions_query_string }}additions_page={{ additions_page.next_page_number }}#sheet-additions">Next</a></li>{% else %}<li class="page-item disabled"><span class="page-link">Next</span></li>{% endif %}
+            </ul>
+        </div>
+        {% endif %}
+    </section>
+
+    <section class="finance-sheet-panel" id="sheet-subtractions">
+        <div class="finance-sheet-panel-header">
+            <h2 class="finance-sheet-panel-title"><i class="bi bi-dash-circle me-2"></i>Subtractions Sheet</h2>
+            <span class="finance-sheet-panel-meta">Money paid out or returned</span>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover finance-sheet-table">
+                <thead>
+                    <tr>
+                        <th>Date Basis</th>
+                        <th>Line</th>
+                        <th>Description</th>
+                        <th class="text-end">Entries</th>
+                        <th>Currency</th>
+                        <th class="text-end">Subtraction</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in subtractions_page %}
+                    <tr>
+                        <td>All dated records</td>
+                        <td class="fw-semibold">{{ row.label }}</td>
+                        <td>{{ row.description }}</td>
+                        <td class="text-end">{{ row.count }}</td>
+                        <td>{{ row.currency }}</td>
+                        <td class="text-end finance-row-out">- {{ row.currency }} {{ row.amount|floatformat:2|intcomma }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="6" class="text-center text-muted py-4">No subtractions recorded yet.</td></tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <td colspan="5">USD subtractions used in operating net</td>
+                        <td class="text-end">USD {{ total_subtractions|floatformat:2|intcomma }}</td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+        {% if subtractions_page.paginator.num_pages > 1 %}
+        <div class="finance-section-pager">
+            <small class="text-muted">Showing {{ subtractions_page.start_index }}-{{ subtractions_page.end_index }} of {{ subtractions_page.paginator.count }} rows</small>
+            <ul class="pagination pagination-sm">
+                {% if subtractions_page.has_previous %}<li class="page-item"><a class="page-link" href="?{{ subtractions_query_string }}subtractions_page={{ subtractions_page.previous_page_number }}#sheet-subtractions">Previous</a></li>{% else %}<li class="page-item disabled"><span class="page-link">Previous</span></li>{% endif %}
+                {% for page_num in subtractions_page_range %}{% if page_num == subtractions_page.number %}<li class="page-item active"><span class="page-link">{{ page_num }}</span></li>{% elif page_num == '…' %}<li class="page-item disabled"><span class="page-link">&hellip;</span></li>{% else %}<li class="page-item"><a class="page-link" href="?{{ subtractions_query_string }}subtractions_page={{ page_num }}#sheet-subtractions">{{ page_num }}</a></li>{% endif %}{% endfor %}
+                {% if subtractions_page.has_next %}<li class="page-item"><a class="page-link" href="?{{ subtractions_query_string }}subtractions_page={{ subtractions_page.next_page_number }}#sheet-subtractions">Next</a></li>{% else %}<li class="page-item disabled"><span class="page-link">Next</span></li>{% endif %}
+            </ul>
+        </div>
+        {% endif %}
+    </section>
+
+    <section class="finance-sheet-panel" id="sheet-movements">
+        <div class="finance-sheet-panel-header">
+            <h2 class="finance-sheet-panel-title"><i class="bi bi-arrow-left-right me-2"></i>Money Movements Sheet</h2>
+            <span class="finance-sheet-panel-meta">Every recent addition and subtraction source</span>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover finance-sheet-table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Movement</th>
+                        <th>Source</th>
+                        <th>Party</th>
+                        <th>Reference</th>
+                        <th class="text-end">Addition</th>
+                        <th class="text-end">Subtraction</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for movement in movements_page %}
+                    <tr>
+                        <td>{{ movement.date|date:"d M Y H:i" }}</td>
+                        <td>{% if movement.direction == 'in' %}<span class="badge bg-dark">Addition</span>{% else %}<span class="badge bg-secondary">Subtraction</span>{% endif %}</td>
+                        <td>{{ movement.label }}</td>
+                        <td>{{ movement.party|default:"-" }}</td>
+                        <td>{{ movement.reference|default:"-" }}</td>
+                        <td class="text-end finance-row-in">{% if movement.direction == 'in' %}{{ movement.currency }} {{ movement.amount|floatformat:2|intcomma }}{% else %}-{% endif %}</td>
+                        <td class="text-end finance-row-out">{% if movement.direction == 'out' %}{{ movement.currency }} {{ movement.amount|floatformat:2|intcomma }}{% else %}-{% endif %}</td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="7" class="text-center text-muted py-4">No finance movements yet.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% if movements_page.paginator.num_pages > 1 %}
+        <div class="finance-section-pager">
+            <small class="text-muted">Showing {{ movements_page.start_index }}-{{ movements_page.end_index }} of {{ movements_page.paginator.count }} rows</small>
+            <ul class="pagination pagination-sm">
+                {% if movements_page.has_previous %}<li class="page-item"><a class="page-link" href="?{{ movements_query_string }}movements_page={{ movements_page.previous_page_number }}#sheet-movements">Previous</a></li>{% else %}<li class="page-item disabled"><span class="page-link">Previous</span></li>{% endif %}
+                {% for page_num in movements_page_range %}{% if page_num == movements_page.number %}<li class="page-item active"><span class="page-link">{{ page_num }}</span></li>{% elif page_num == '…' %}<li class="page-item disabled"><span class="page-link">&hellip;</span></li>{% else %}<li class="page-item"><a class="page-link" href="?{{ movements_query_string }}movements_page={{ page_num }}#sheet-movements">{{ page_num }}</a></li>{% endif %}{% endfor %}
+                {% if movements_page.has_next %}<li class="page-item"><a class="page-link" href="?{{ movements_query_string }}movements_page={{ movements_page.next_page_number }}#sheet-movements">Next</a></li>{% else %}<li class="page-item disabled"><span class="page-link">Next</span></li>{% endif %}
+            </ul>
+        </div>
+        {% endif %}
+    </section>
+
+    <section class="finance-sheet-panel" id="sheet-components">
+        <div class="finance-sheet-panel-header">
+            <h2 class="finance-sheet-panel-title"><i class="bi bi-receipt-cutoff me-2"></i>Invoice Components Sheet</h2>
+            <span class="finance-sheet-panel-meta">What makes up the billed value</span>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover finance-sheet-table">
+                <thead>
+                    <tr>
+                        <th>Component</th>
+                        <th>Date Basis</th>
+                        <th>Description</th>
+                        <th class="text-end">Amount</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><td class="fw-semibold">Items Subtotal</td><td>All invoice dates</td><td>Goods or service lines billed on final invoices.</td><td class="text-end">USD {{ invoice_components.items|floatformat:2|intcomma }}</td></tr>
+                    <tr><td class="fw-semibold">Sourcing Fees</td><td>All invoice dates</td><td>Trading/sourcing fee components.</td><td class="text-end">USD {{ invoice_components.sourcing_fees|floatformat:2|intcomma }}</td></tr>
+                    <tr><td class="fw-semibold">Shipping Costs</td><td>All invoice dates</td><td>Shipping components charged through final invoices.</td><td class="text-end">USD {{ invoice_components.shipping_costs|floatformat:2|intcomma }}</td></tr>
+                    <tr><td class="fw-semibold">Service Fees</td><td>All invoice dates</td><td>Additional service fees on final invoices.</td><td class="text-end">USD {{ invoice_components.service_fees|floatformat:2|intcomma }}</td></tr>
+                </tbody>
+                <tfoot>
+                    <tr><td colspan="3">Total invoice value</td><td class="text-end">USD {{ total_billed|floatformat:2|intcomma }}</td></tr>
+                </tfoot>
+            </table>
+        </div>
+    </section>
+
+    <section class="finance-sheet-panel" id="sheet-invoices">
+        <div class="finance-sheet-panel-header">
+            <h2 class="finance-sheet-panel-title"><i class="bi bi-file-earmark-spreadsheet me-2"></i>Final Invoices Sheet</h2>
+            <span class="finance-sheet-panel-meta">Billed, paid, balance and status</span>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover finance-sheet-table">
+                <thead>
+                    <tr>
+                        <th>Invoice</th>
+                        <th>Date</th>
+                        <th>Client</th>
+                        <th>Transaction</th>
+                        <th class="text-end">Total</th>
+                        <th class="text-end">Paid</th>
+                        <th class="text-end">Balance</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for invoice in invoices_page %}
+                    <tr>
+                        <td class="fw-semibold"><a href="{% if invoice.loading %}{% url 'logistics_final_invoice_detail' invoice.pk %}{% else %}{% url 'sourcing_final_invoice_detail' invoice.pk %}{% endif %}" class="text-decoration-none">{{ invoice|doc_number:"FI" }}</a></td>
+                        <td>{{ invoice.created_at|date:"d M Y H:i" }}</td>
+                        <td>{{ invoice.transaction.customer.name }}</td>
+                        <td>{{ invoice.transaction.transaction_id }}</td>
+                        <td class="text-end">{{ invoice.total_amount|floatformat:2|intcomma }} {{ invoice.currency }}</td>
+                        <td class="text-end">{{ invoice.total_paid_for_display|floatformat:2|intcomma }} {{ invoice.currency }}</td>
+                        <td class="text-end">{{ invoice.balance_for_display|floatformat:2|intcomma }} {{ invoice.currency }}</td>
+                        <td><span class="badge {{ invoice.payment_status_class }}">{{ invoice.payment_status_label }}</span></td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="8" class="text-center text-muted py-4">No final invoices yet.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% if invoices_page.paginator.num_pages > 1 %}
+        <div class="finance-section-pager">
+            <small class="text-muted">Showing {{ invoices_page.start_index }}-{{ invoices_page.end_index }} of {{ invoices_page.paginator.count }} rows</small>
+            <ul class="pagination pagination-sm">
+                {% if invoices_page.has_previous %}<li class="page-item"><a class="page-link" href="?{{ invoices_query_string }}invoices_page={{ invoices_page.previous_page_number }}#sheet-invoices">Previous</a></li>{% else %}<li class="page-item disabled"><span class="page-link">Previous</span></li>{% endif %}
+                {% for page_num in invoices_page_range %}{% if page_num == invoices_page.number %}<li class="page-item active"><span class="page-link">{{ page_num }}</span></li>{% elif page_num == '…' %}<li class="page-item disabled"><span class="page-link">&hellip;</span></li>{% else %}<li class="page-item"><a class="page-link" href="?{{ invoices_query_string }}invoices_page={{ page_num }}#sheet-invoices">{{ page_num }}</a></li>{% endif %}{% endfor %}
+                {% if invoices_page.has_next %}<li class="page-item"><a class="page-link" href="?{{ invoices_query_string }}invoices_page={{ invoices_page.next_page_number }}#sheet-invoices">Next</a></li>{% else %}<li class="page-item disabled"><span class="page-link">Next</span></li>{% endif %}
+            </ul>
+        </div>
+        {% endif %}
+    </section>
+
+    <div class="finance-mini-grid">
+        <section class="finance-sheet-panel" id="sheet-clients">
+            <div class="finance-sheet-panel-header">
+                <h2 class="finance-sheet-panel-title"><i class="bi bi-people me-2"></i>Clients Sheet</h2>
+                <span class="finance-sheet-panel-meta">Activity ranking</span>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover finance-sheet-table">
+                    <thead><tr><th>Client</th><th>Date Basis</th><th class="text-end">Transactions</th><th class="text-end">Confirmed</th></tr></thead>
+                    <tbody>
+                        {% for client in clients_page %}
+                        <tr><td class="fw-semibold">{{ client.customer__name }}</td><td>All transaction dates</td><td class="text-end">{{ client.total_transactions }}</td><td class="text-end">{{ client.confirmed_orders }}</td></tr>
+                        {% empty %}
+                        <tr><td colspan="4" class="text-center text-muted py-4">No client activity yet.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% if clients_page.paginator.num_pages > 1 %}
+            <div class="finance-section-pager">
+                <small class="text-muted">Showing {{ clients_page.start_index }}-{{ clients_page.end_index }} of {{ clients_page.paginator.count }} rows</small>
+                <ul class="pagination pagination-sm">
+                    {% if clients_page.has_previous %}<li class="page-item"><a class="page-link" href="?{{ clients_query_string }}clients_page={{ clients_page.previous_page_number }}#sheet-clients">Previous</a></li>{% else %}<li class="page-item disabled"><span class="page-link">Previous</span></li>{% endif %}
+                    {% for page_num in clients_page_range %}{% if page_num == clients_page.number %}<li class="page-item active"><span class="page-link">{{ page_num }}</span></li>{% elif page_num == '…' %}<li class="page-item disabled"><span class="page-link">&hellip;</span></li>{% else %}<li class="page-item"><a class="page-link" href="?{{ clients_query_string }}clients_page={{ page_num }}#sheet-clients">{{ page_num }}</a></li>{% endif %}{% endfor %}
+                    {% if clients_page.has_next %}<li class="page-item"><a class="page-link" href="?{{ clients_query_string }}clients_page={{ clients_page.next_page_number }}#sheet-clients">Next</a></li>{% else %}<li class="page-item disabled"><span class="page-link">Next</span></li>{% endif %}
+                </ul>
+            </div>
+            {% endif %}
+        </section>
+
+        <section class="finance-sheet-panel" id="sheet-statuses">
+            <div class="finance-sheet-panel-header">
+                <h2 class="finance-sheet-panel-title"><i class="bi bi-list-check me-2"></i>Status Sheet</h2>
+                <span class="finance-sheet-panel-meta">Transaction counts</span>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover finance-sheet-table">
+                    <thead><tr><th>Status</th><th>Date Basis</th><th class="text-end">Records</th></tr></thead>
+                    <tbody>
+                        {% for row in statuses_page %}
+                        <tr><td class="fw-semibold">{{ row.status|title }}</td><td>All transaction dates</td><td class="text-end">{{ row.total }}</td></tr>
+                        {% empty %}
+                        <tr><td colspan="3" class="text-center text-muted py-4">No transaction records yet.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% if statuses_page.paginator.num_pages > 1 %}
+            <div class="finance-section-pager">
+                <small class="text-muted">Showing {{ statuses_page.start_index }}-{{ statuses_page.end_index }} of {{ statuses_page.paginator.count }} rows</small>
+                <ul class="pagination pagination-sm">
+                    {% if statuses_page.has_previous %}<li class="page-item"><a class="page-link" href="?{{ statuses_query_string }}statuses_page={{ statuses_page.previous_page_number }}#sheet-statuses">Previous</a></li>{% else %}<li class="page-item disabled"><span class="page-link">Previous</span></li>{% endif %}
+                    {% for page_num in statuses_page_range %}{% if page_num == statuses_page.number %}<li class="page-item active"><span class="page-link">{{ page_num }}</span></li>{% elif page_num == '…' %}<li class="page-item disabled"><span class="page-link">&hellip;</span></li>{% else %}<li class="page-item"><a class="page-link" href="?{{ statuses_query_string }}statuses_page={{ page_num }}#sheet-statuses">{{ page_num }}</a></li>{% endif %}{% endfor %}
+                    {% if statuses_page.has_next %}<li class="page-item"><a class="page-link" href="?{{ statuses_query_string }}statuses_page={{ statuses_page.next_page_number }}#sheet-statuses">Next</a></li>{% else %}<li class="page-item disabled"><span class="page-link">Next</span></li>{% endif %}
+                </ul>
+            </div>
+            {% endif %}
+        </section>
+    </div>
+
+    <section class="finance-sheet-panel" id="sheet-commission">
+        <div class="finance-sheet-panel-header">
+            <h2 class="finance-sheet-panel-title"><i class="bi bi-cash-coin me-2"></i>Commission Sheet</h2>
+            <a href="{% url 'commission_list' %}" class="btn btn-sm btn-outline-dark">Open Ledger</a>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover finance-sheet-table">
+                <thead><tr><th>Date</th><th>Client</th><th>Notes</th><th>Currency</th><th class="text-end">Addition</th></tr></thead>
+                <tbody>
+                    {% for commission in commission_page %}
+                    <tr>
+                        <td>{{ commission.date|date:"d M Y" }}</td>
+                        <td class="fw-semibold">{{ commission.client.name }}</td>
+                        <td>{{ commission.notes|default:"-" }}</td>
+                        <td>{{ commission.currency }}</td>
+                        <td class="text-end finance-row-in">+ {{ commission.currency }} {{ commission.amount|floatformat:2|intcomma }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="5" class="text-center text-muted py-4">No commission entries recorded yet.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% if commission_page.paginator.num_pages > 1 %}
+        <div class="finance-section-pager">
+            <small class="text-muted">Showing {{ commission_page.start_index }}-{{ commission_page.end_index }} of {{ commission_page.paginator.count }} rows</small>
+            <ul class="pagination pagination-sm">
+                {% if commission_page.has_previous %}<li class="page-item"><a class="page-link" href="?{{ commission_query_string }}commission_page={{ commission_page.previous_page_number }}#sheet-commission">Previous</a></li>{% else %}<li class="page-item disabled"><span class="page-link">Previous</span></li>{% endif %}
+                {% for page_num in commission_page_range %}{% if page_num == commission_page.number %}<li class="page-item active"><span class="page-link">{{ page_num }}</span></li>{% elif page_num == '…' %}<li class="page-item disabled"><span class="page-link">&hellip;</span></li>{% else %}<li class="page-item"><a class="page-link" href="?{{ commission_query_string }}commission_page={{ page_num }}#sheet-commission">{{ page_num }}</a></li>{% endif %}{% endfor %}
+                {% if commission_page.has_next %}<li class="page-item"><a class="page-link" href="?{{ commission_query_string }}commission_page={{ commission_page.next_page_number }}#sheet-commission">Next</a></li>{% else %}<li class="page-item disabled"><span class="page-link">Next</span></li>{% endif %}
+            </ul>
+        </div>
+        {% endif %}
+    </section>
+</div>
+{% endblock %}

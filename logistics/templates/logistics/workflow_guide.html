@@ -1,0 +1,366 @@
+{% extends "logistics/base.html" %}
+
+{% block title %}LCL and FCL Operational Workflow - GMI TERRALINK{% endblock %}
+
+{% block extra_css %}
+<style>
+  .ops-hero {
+    background: linear-gradient(120deg, #0f2f52 0%, #1d4f74 55%, #2a7b66 100%);
+    color: #fff;
+    border-radius: 14px;
+    padding: 1.3rem 1.3rem 1rem;
+    box-shadow: 0 8px 24px rgba(15, 47, 82, 0.2);
+  }
+  .ops-hero p { color: rgba(255, 255, 255, 0.87); }
+  .ops-section-card {
+    border: 0;
+    border-radius: 12px;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
+  }
+  .ops-section-title {
+    font-size: 1rem;
+    font-weight: 700;
+    margin-bottom: 0.85rem;
+  }
+  .ops-pill {
+    display: inline-block;
+    border-radius: 999px;
+    padding: 0.28rem 0.68rem;
+    font-size: 0.73rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    margin-right: 0.32rem;
+    margin-bottom: 0.32rem;
+  }
+  .ops-pill-status { background: #e8f6ef; color: #0f5132; }
+  .ops-pill-step { background: #edf4ff; color: #0b3d77; }
+  .ops-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1rem;
+  }
+  .ops-mini-card {
+    border: 1px solid #e6ebf1;
+    border-radius: 10px;
+    padding: 0.95rem;
+    background: #fff;
+  }
+  .ops-mini-card h6 {
+    font-size: 0.95rem;
+    font-weight: 700;
+    margin-bottom: 0.58rem;
+  }
+  .ops-mini-card ul {
+    margin: 0;
+    padding-left: 1rem;
+    font-size: 0.86rem;
+  }
+  .ops-mini-card li { margin-bottom: 0.22rem; }
+  .ops-step-label {
+    font-weight: 700;
+    color: #0f2f52;
+    margin-right: 0.45rem;
+  }
+  .ops-table th { white-space: nowrap; }
+  .ops-legend {
+    background: #f7fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 0.8rem;
+    font-size: 0.86rem;
+  }
+  .ops-legend span { margin-right: 0.5rem; }
+  @media print {
+    .sidebar, .navbar, .footer, .print-btn { display: none !important; }
+    .main-content { margin: 0 !important; }
+    .ops-section-card { box-shadow: none !important; border: 1px solid #d2dce8 !important; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
+  <h3 class="mb-0"><i class="bi bi-diagram-3 me-2"></i>LCL and FCL Procedures</h3>
+  <div class="ms-auto d-flex gap-2 print-btn">
+    <a class="btn btn-sm btn-outline-secondary" href="?download=1" download>
+      <i class="bi bi-download"></i> Download (HTML)
+    </a>
+    <button class="btn btn-sm btn-outline-secondary" onclick="window.print()">
+      <i class="bi bi-file-earmark-pdf"></i> Save as PDF / Print
+    </button>
+  </div>
+</div>
+
+<div class="ops-hero mb-4">
+  <h5 class="mb-2">Operational blueprint for Groupage (LCL) and Full Container (FCL)</h5>
+  <p class="mb-0" style="font-size:.9rem;">
+    This UI guide reflects the full procedures for receiving, verification, shipment planning, loading, transit, arrival, delivery, and billing. It also standardizes shared status, movement logging, inventory transitions, and finance integration rules.
+  </p>
+</div>
+
+<div class="ops-legend mb-4">
+  <strong>Status Engine:</strong>
+  <span class="ops-pill ops-pill-status">RECEIVED</span>
+  <span class="ops-pill ops-pill-status">VERIFIED</span>
+  <span class="ops-pill ops-pill-status">ALLOCATED / BOOKED</span>
+  <span class="ops-pill ops-pill-status">LOADED</span>
+  <span class="ops-pill ops-pill-status">IN TRANSIT</span>
+  <span class="ops-pill ops-pill-status">ARRIVED</span>
+  <span class="ops-pill ops-pill-status">DELIVERED / COMPLETED</span>
+</div>
+
+<div class="card ops-section-card mb-4">
+  <div class="card-body">
+    <div class="ops-section-title"><i class="bi bi-box-seam me-2"></i>1. Groupage (LCL) Procedures</div>
+    <div class="ops-grid">
+      <div class="ops-mini-card">
+        <h6><span class="ops-step-label">A.</span>Cargo Receiving (Inbound to Warehouse)</h6>
+        <ul>
+          <li>Capture Entry Number, Client, Cargo Description, Packages, Weight, CBM, and Condition (Damaged or OK).</li>
+          <li>Assign temporary warehouse location (rack or shelf).</li>
+          <li>Set status to RECEIVED.</li>
+        </ul>
+      </div>
+      <div class="ops-mini-card">
+        <h6><span class="ops-step-label">B.</span>Cargo Verification and Measurement</h6>
+        <ul>
+          <li>Re-weigh and re-measure CBM to avoid disputes.</li>
+          <li>Confirm chargeable unit as max(weight, volume).</li>
+          <li>Set status to VERIFIED.</li>
+        </ul>
+      </div>
+      <div class="ops-mini-card">
+        <h6><span class="ops-step-label">C.</span>Cargo Consolidation Planning</h6>
+        <ul>
+          <li>Create or select a Groupage Shipment.</li>
+          <li>Define destination, cut-off date, and container capacity (CBM and weight limits).</li>
+        </ul>
+      </div>
+      <div class="ops-mini-card">
+        <h6><span class="ops-step-label">D.</span>Cargo Allocation to Shipment</h6>
+        <ul>
+          <li>Assign multiple cargo entries to one shipment.</li>
+          <li>Auto-sum total weight and CBM.</li>
+          <li>Prevent overloading using capacity validation.</li>
+          <li>Set status to ALLOCATED.</li>
+        </ul>
+      </div>
+      <div class="ops-mini-card">
+        <h6><span class="ops-step-label">E.</span>Packing and Container Loading</h6>
+        <ul>
+          <li>Record loading date, container number, and loader.</li>
+          <li>Update all cargo items to LOADED.</li>
+        </ul>
+      </div>
+      <div class="ops-mini-card">
+        <h6><span class="ops-step-label">F.</span>Manifest Generation</h6>
+        <ul>
+          <li>Auto-generate shipment manifest for all cargo entries.</li>
+          <li>Include Entry Number, Client, Description, and Weight or CBM totals.</li>
+        </ul>
+      </div>
+      <div class="ops-mini-card">
+        <h6><span class="ops-step-label">G.</span>Dispatch and Transit</h6>
+        <ul>
+          <li>Update shipment departure date and driver or transport details.</li>
+          <li>Set Shipment status to IN TRANSIT.</li>
+          <li>Set Cargo status to IN TRANSIT.</li>
+        </ul>
+      </div>
+      <div class="ops-mini-card">
+        <h6><span class="ops-step-label">H.</span>Arrival and Deconsolidation</h6>
+        <ul>
+          <li>At destination warehouse, mark shipment as ARRIVED.</li>
+          <li>Break down and separate cargo per client.</li>
+          <li>Set cargo status to READY FOR DELIVERY.</li>
+        </ul>
+      </div>
+      <div class="ops-mini-card">
+        <h6><span class="ops-step-label">I.</span>Delivery to Client</h6>
+        <ul>
+          <li>Capture receiver name, date, and proof of delivery.</li>
+          <li>Set status to DELIVERED.</li>
+        </ul>
+      </div>
+      <div class="ops-mini-card">
+        <h6><span class="ops-step-label">J.</span>Billing (Critical)</h6>
+        <ul>
+          <li>Per cargo item: chargeable weight or CBM, rate, and storage if delayed.</li>
+          <li>Generate invoice per client.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card ops-section-card mb-4">
+  <div class="card-body">
+    <div class="ops-section-title"><i class="bi bi-truck me-2"></i>2. Full Container Load (FCL) Procedures</div>
+    <p class="text-muted mb-3" style="font-size:.88rem;">FCL is simpler because one client uses one container.</p>
+    <div class="ops-grid">
+      <div class="ops-mini-card">
+        <h6><span class="ops-step-label">A.</span>Booking and Order Creation</h6>
+        <ul>
+          <li>Capture client, container type (20ft or 40ft), cargo type, origin, and destination.</li>
+          <li>Set status to BOOKED.</li>
+        </ul>
+      </div>
+      <div class="ops-mini-card">
+        <h6><span class="ops-step-label">B.</span>Container Assignment</h6>
+        <ul>
+          <li>Assign container number and seal number.</li>
+          <li>Link container to client shipment.</li>
+        </ul>
+      </div>
+      <div class="ops-mini-card">
+        <h6><span class="ops-step-label">C.</span>Cargo Loading (Direct or Warehouse)</h6>
+        <ul>
+          <li>Support direct stuffing (client premises) and warehouse stuffing.</li>
+          <li>Capture loading date, supervisor, and cargo summary.</li>
+          <li>Set status to LOADED.</li>
+        </ul>
+      </div>
+      <div class="ops-mini-card">
+        <h6><span class="ops-step-label">D.</span>Documentation</h6>
+        <ul>
+          <li>Commercial invoice</li>
+          <li>Packing list</li>
+          <li>Bill of lading</li>
+        </ul>
+      </div>
+      <div class="ops-mini-card">
+        <h6><span class="ops-step-label">E.</span>Dispatch and Shipping</h6>
+        <ul>
+          <li>Record vessel or truck and departure date.</li>
+          <li>Set status to IN TRANSIT.</li>
+        </ul>
+      </div>
+      <div class="ops-mini-card">
+        <h6><span class="ops-step-label">F.</span>Tracking</h6>
+        <ul>
+          <li>Update milestones: port arrival, customs clearance, inland movement.</li>
+        </ul>
+      </div>
+      <div class="ops-mini-card">
+        <h6><span class="ops-step-label">G.</span>Delivery and Container Release</h6>
+        <ul>
+          <li>At destination, clear container and deliver to client or yard.</li>
+          <li>Capture return of empty container.</li>
+          <li>Set status to COMPLETED.</li>
+        </ul>
+      </div>
+      <div class="ops-mini-card">
+        <h6><span class="ops-step-label">H.</span>Billing</h6>
+        <ul>
+          <li>Freight</li>
+          <li>Container handling</li>
+          <li>Port charges</li>
+          <li>Demurrage when delayed</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card ops-section-card mb-4">
+  <div class="card-body">
+    <div class="ops-section-title"><i class="bi bi-layers me-2"></i>3. Shared Components (LCL and FCL)</div>
+    <div class="row g-3">
+      <div class="col-md-6">
+        <div class="ops-mini-card h-100">
+          <h6>A. Status Engine (Important)</h6>
+          <p class="mb-2" style="font-size:.85rem;">Standardized statuses across the system:</p>
+          <div>
+            <span class="ops-pill ops-pill-step">RECEIVED</span>
+            <span class="ops-pill ops-pill-step">VERIFIED</span>
+            <span class="ops-pill ops-pill-step">ALLOCATED / BOOKED</span>
+            <span class="ops-pill ops-pill-step">LOADED</span>
+            <span class="ops-pill ops-pill-step">IN TRANSIT</span>
+            <span class="ops-pill ops-pill-step">ARRIVED</span>
+            <span class="ops-pill ops-pill-step">DELIVERED / COMPLETED</span>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="ops-mini-card h-100">
+          <h6>B. Movement Log (Audit Trail)</h6>
+          <ul>
+            <li>Every action records Cargo ID or Shipment ID.</li>
+            <li>From location to location transition.</li>
+            <li>Timestamp and user.</li>
+          </ul>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="ops-mini-card h-100">
+          <h6>C. Inventory Logic</h6>
+          <ul>
+            <li>Before shipment: Warehouse stock.</li>
+            <li>After allocation: Reserved stock.</li>
+            <li>After loading: In transit stock.</li>
+            <li>After delivery: Out of system.</li>
+          </ul>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="ops-mini-card h-100">
+          <h6>D. Financial Integration</h6>
+          <ul>
+            <li>Link cargo to charges to invoice.</li>
+            <li>LCL billing is per cargo item.</li>
+            <li>FCL billing is per shipment.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card ops-section-card mb-3">
+  <div class="card-body">
+    <div class="ops-section-title"><i class="bi bi-columns-gap me-2"></i>4. Key Design Difference (LCL vs FCL)</div>
+    <div class="table-responsive">
+      <table class="table table-sm table-bordered align-middle ops-table mb-0">
+        <thead class="table-dark">
+          <tr>
+            <th>Feature</th>
+            <th>LCL (Groupage)</th>
+            <th>FCL (Full Container)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Ownership</strong></td>
+            <td>Multiple clients</td>
+            <td>Single client</td>
+          </tr>
+          <tr>
+            <td><strong>Billing</strong></td>
+            <td>Per cargo item</td>
+            <td>Per container</td>
+          </tr>
+          <tr>
+            <td><strong>Complexity</strong></td>
+            <td>High</td>
+            <td>Moderate</td>
+          </tr>
+          <tr>
+            <td><strong>Tracking</strong></td>
+            <td>Item-level plus shipment-level</td>
+            <td>Shipment-level</td>
+          </tr>
+          <tr>
+            <td><strong>Warehouse Need</strong></td>
+            <td>Required</td>
+            <td>Optional</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="alert alert-info" role="alert" style="font-size:.88rem;">
+  Use this page as the operational reference for process design, user training, and implementation checkpoints in the Logistics modules.
+</div>
+{% endblock %}
