@@ -13,7 +13,7 @@ from io import BytesIO
 from urllib.parse import quote
 
 from django.contrib import messages
-from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth import authenticate, login, logout, update_session_auth_hash
 from django.contrib.auth.decorators import login_required
 from django.conf import settings
 from django.contrib.contenttypes.models import ContentType
@@ -167,6 +167,7 @@ from .forms import (
     ProofOfDeliveryForm,
     ShipmentLegForm,
     SignatureProfileForm,
+    AdminUserEditForm,
     SourcingForm,
     SupplierForm,
     SupplierPaymentForm,
@@ -1583,6 +1584,79 @@ def user_list(request):
             "role_choices": role_choices,
             "settings_mode": request.resolver_match.url_name == "settings",
         },
+    )
+
+
+@login_required
+def user_edit(request, pk):
+    """Allow System Admins to update staff names/contact details and reset passwords."""
+    if not request.user.is_superuser and request.user.role not in {
+        "ADMIN",
+        "superuser",
+    }:
+        messages.error(request, "Permission denied")
+        return redirect("dashboard")
+
+    target = get_object_or_404(CustomUser, pk=pk)
+    if (
+        (target.is_superuser or target.role == "ADMIN")
+        and not request.user.is_superuser
+        and target.pk != request.user.pk
+    ):
+        messages.error(
+            request,
+            "Only the system owner can edit another System Admin account.",
+        )
+        return redirect("settings")
+
+    if request.method == "POST":
+        old_values = {
+            "first_name": target.first_name,
+            "last_name": target.last_name,
+            "email": target.email,
+            "phone": target.phone,
+            "is_active": target.is_active,
+        }
+        form = AdminUserEditForm(
+            request.POST,
+            instance=target,
+            request_user=request.user,
+        )
+        if form.is_valid():
+            updated_user = form.save()
+            if updated_user.pk == request.user.pk and form.password_changed:
+                update_session_auth_hash(request, updated_user)
+
+            changes = {}
+            for field_name, old_value in old_values.items():
+                new_value = getattr(updated_user, field_name)
+                if old_value != new_value:
+                    changes[field_name] = {"from": old_value, "to": new_value}
+            if form.password_changed:
+                changes["password"] = "changed by System Admin"
+            if changes:
+                log_audit(
+                    "user",
+                    "update",
+                    updated_user.id,
+                    str(updated_user),
+                    request.user,
+                    changes=changes,
+                )
+                messages.success(
+                    request,
+                    f"Updated {updated_user.username}'s account details.",
+                )
+            else:
+                messages.info(request, "No account changes were needed.")
+            return redirect("settings")
+    else:
+        form = AdminUserEditForm(instance=target, request_user=request.user)
+
+    return render(
+        request,
+        "logistics/users/edit.html",
+        {"form": form, "target_user": target},
     )
 
 

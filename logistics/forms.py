@@ -4,6 +4,7 @@ Django forms for the logistics management system
 
 from django import forms
 from django.contrib.auth.forms import UserCreationForm
+from django.contrib.auth.password_validation import validate_password
 from django.db.models import Sum
 from decimal import Decimal, InvalidOperation
 import ast
@@ -541,6 +542,80 @@ class UserRegistrationForm(NormalizedTextMixin, UserCreationForm):
                 "Accounts cannot be promoted to System Admin here."
             )
         return role
+
+
+class AdminUserEditForm(NormalizedTextMixin, forms.ModelForm):
+    """Allow System Admins to update staff identity details and reset passwords."""
+
+    password1 = forms.CharField(
+        label="New Password",
+        required=False,
+        widget=forms.PasswordInput(
+            attrs={
+                "class": "form-control",
+                "placeholder": "Leave blank to keep current password",
+                "autocomplete": "new-password",
+            }
+        ),
+        help_text="Leave both password fields blank if the password should not change.",
+    )
+    password2 = forms.CharField(
+        label="Confirm New Password",
+        required=False,
+        widget=forms.PasswordInput(
+            attrs={
+                "class": "form-control",
+                "placeholder": "Confirm new password",
+                "autocomplete": "new-password",
+            }
+        ),
+    )
+
+    class Meta:
+        model = CustomUser
+        fields = ("first_name", "last_name", "email", "phone", "is_active")
+        widgets = {
+            "first_name": forms.TextInput(
+                attrs={"class": "form-control", "placeholder": "First name"}
+            ),
+            "last_name": forms.TextInput(
+                attrs={"class": "form-control", "placeholder": "Last name"}
+            ),
+            "email": forms.EmailInput(
+                attrs={"class": "form-control", "placeholder": "user@example.com"}
+            ),
+            "phone": forms.TextInput(
+                attrs={"class": "form-control", "placeholder": "Phone number"}
+            ),
+            "is_active": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        self.request_user = kwargs.pop("request_user", None)
+        super().__init__(*args, **kwargs)
+        self.fields["email"].required = True
+        self.fields["phone"].required = False
+
+    def clean(self):
+        cleaned_data = super().clean()
+        password1 = cleaned_data.get("password1")
+        password2 = cleaned_data.get("password2")
+        if password1 or password2:
+            if password1 != password2:
+                self.add_error("password2", "The two password fields do not match.")
+            else:
+                validate_password(password1, self.instance)
+        return cleaned_data
+
+    def save(self, commit=True):
+        user = super().save(commit=False)
+        password = self.cleaned_data.get("password1")
+        if password:
+            user.set_password(password)
+        if commit:
+            user.save()
+        self.password_changed = bool(password)
+        return user
 
 
 class SignatureProfileForm(NormalizedTextMixin, forms.ModelForm):
