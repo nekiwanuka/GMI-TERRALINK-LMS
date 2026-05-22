@@ -159,6 +159,25 @@ else:
         "'postgres' for deployment."
     )
 
+DB_CONN_MAX_AGE = config("DB_CONN_MAX_AGE", default=(0 if DEBUG else 60), cast=int)
+DB_CONN_HEALTH_CHECKS = config(
+    "DB_CONN_HEALTH_CHECKS", default=not DEBUG, cast=bool
+)
+for database_config in DATABASES.values():
+    database_config.setdefault("CONN_MAX_AGE", DB_CONN_MAX_AGE)
+    database_config.setdefault("CONN_HEALTH_CHECKS", DB_CONN_HEALTH_CHECKS)
+
+CACHES = {
+    "default": {
+        "BACKEND": config(
+            "CACHE_BACKEND",
+            default="django.core.cache.backends.locmem.LocMemCache",
+        ),
+        "LOCATION": config("CACHE_LOCATION", default="gmi-terralink-default"),
+        "TIMEOUT": config("CACHE_TIMEOUT", default=300, cast=int),
+    }
+}
+
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
     {

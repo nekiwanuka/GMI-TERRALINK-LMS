@@ -736,6 +736,8 @@ def _final_invoice_total_paid(invoice):
     """Return paid total for a final invoice across current and legacy ledgers."""
     if not invoice:
         return Decimal("0.00")
+    if hasattr(invoice, "_prefetched_total_paid"):
+        return invoice._prefetched_total_paid
 
     invoice_record_total = invoice.payment_records.aggregate(total=Sum("amount"))[
         "total"
@@ -6380,12 +6382,14 @@ def purchase_order_list(request):
         purchase_orders = purchase_orders.filter(parent_po__isnull=False)
 
     decorated_purchase_orders = list(purchase_orders)
+    _prime_purchase_order_payment_metrics(decorated_purchase_orders)
     for purchase_order in decorated_purchase_orders:
         _decorate_purchase_order_status(purchase_order)
         _decorate_purchase_order_invoice_payment(purchase_order)
         _decorate_purchase_order_edit_lock(purchase_order)
-        _decorate_purchase_order_line_quantities(purchase_order)
-        _decorate_purchase_order_supplier_payment(purchase_order, request.user)
+        _decorate_purchase_order_supplier_payment(
+            purchase_order, request.user, has_supplier_splits=False
+        )
 
     valid_statuses = {choice[0] for choice in PurchaseOrder.STATUS_CHOICES}
     if status_filter in valid_statuses:
@@ -9883,10 +9887,108 @@ def _po_supplier_summary(purchase_order):
         "created_by", "purchase_order"
     )
     payments = payments.order_by("-paid_at", "-id")
-    total_paid = payments.aggregate(total=Sum("amount"))["total"] or Decimal("0.00")
+    total_paid = getattr(purchase_order, "_supplier_total_paid", None)
+    if total_paid is None:
+        total_paid = payments.aggregate(total=Sum("amount"))["total"] or Decimal("0.00")
     subtotal = purchase_order.subtotal or Decimal("0.00")
     balance_due = max(subtotal - total_paid, Decimal("0.00"))
     return payments, total_paid, balance_due
+
+
+def _prime_purchase_order_payment_metrics(purchase_orders):
+    """Attach payment aggregates used by PO list decorators in bulk."""
+    purchase_orders = list(purchase_orders)
+    if not purchase_orders:
+        return
+
+    po_ids = [purchase_order.pk for purchase_order in purchase_orders]
+    transaction_ids = {
+        purchase_order.transaction_id for purchase_order in purchase_orders
+    }
+    invoice_ids = {
+        purchase_order.final_invoice_id
+        for purchase_order in purchase_orders
+        if purchase_order.final_invoice_id
+    }
+
+    supplier_payment_totals = {
+        row["purchase_order_id"]: row
+        for row in SupplierPayment.objects.filter(purchase_order_id__in=po_ids)
+        .values("purchase_order_id")
+        .annotate(total=Sum("amount"), count=Count("id"))
+    }
+    transaction_supplier_totals = {
+        row["purchase_order__transaction_id"]: row["total"] or Decimal("0.00")
+        for row in SupplierPayment.objects.filter(
+            purchase_order__transaction_id__in=transaction_ids
+        )
+        .values("purchase_order__transaction_id")
+        .annotate(total=Sum("amount"))
+    }
+    transaction_payment_totals = {
+        row["transaction_id"]: row["total"] or Decimal("0.00")
+        for row in TransactionPaymentRecord.objects.filter(
+            transaction_id__in=transaction_ids,
+        )
+        .values("transaction_id")
+        .annotate(total=Sum("amount"))
+    }
+    final_invoice_counts = {
+        row["transaction_id"]: row["count"] or 0
+        for row in FinalInvoice.objects.filter(transaction_id__in=transaction_ids)
+        .values("transaction_id")
+        .annotate(count=Count("id"))
+    }
+    invoice_record_totals = {
+        row["final_invoice_id"]: row["total"] or Decimal("0.00")
+        for row in TransactionPaymentRecord.objects.filter(
+            final_invoice_id__in=invoice_ids
+        )
+        .values("final_invoice_id")
+        .annotate(total=Sum("amount"))
+    }
+    legacy_invoice_totals = {
+        row["final_invoice_id"]: row["total"] or Decimal("0.00")
+        for row in Payment.objects.filter(final_invoice_id__in=invoice_ids)
+        .values("final_invoice_id")
+        .annotate(total=Sum("amount_paid"))
+    }
+
+    for purchase_order in purchase_orders:
+        supplier_row = supplier_payment_totals.get(purchase_order.pk, {})
+        purchase_order._supplier_total_paid = supplier_row.get(
+            "total", Decimal("0.00")
+        ) or Decimal("0.00")
+        purchase_order._supplier_payment_count = supplier_row.get("count", 0) or 0
+        purchase_order._transaction_supplier_total_paid = (
+            transaction_supplier_totals.get(
+                purchase_order.transaction_id, Decimal("0.00")
+            )
+            or Decimal("0.00")
+        )
+        if purchase_order.final_invoice_id and purchase_order.final_invoice:
+            invoice_record_total = invoice_record_totals.get(
+                purchase_order.final_invoice_id, Decimal("0.00")
+            )
+            transaction_record_total = Decimal("0.00")
+            if invoice_record_total <= 0 and final_invoice_counts.get(
+                purchase_order.transaction_id, 0
+            ) <= 1:
+                transaction_record_total = transaction_payment_totals.get(
+                    purchase_order.transaction_id, Decimal("0.00")
+                )
+            invoice_total_paid = max(
+                invoice_record_total,
+                transaction_record_total,
+                legacy_invoice_totals.get(
+                    purchase_order.final_invoice_id, Decimal("0.00")
+                ),
+            )
+            purchase_order.final_invoice._prefetched_total_paid = invoice_total_paid
+        elif not purchase_order.final_invoice_id:
+            purchase_order._client_deposit = transaction_payment_totals.get(
+                purchase_order.transaction_id, Decimal("0.00")
+            ) or Decimal("0.00")
 
 
 def _po_family_supplier_summary(base_po):
@@ -9916,19 +10018,27 @@ def _decorate_purchase_order_supplier_payment(
         )
     payments_include_splits = False
 
-    client_deposit = Decimal("0.00")
-    if purchase_order.final_invoice:
+    client_deposit = getattr(purchase_order, "_client_deposit", None)
+    if client_deposit is not None:
+        client_deposit = Decimal(str(client_deposit or "0.00"))
+    elif purchase_order.final_invoice:
         client_deposit = _final_invoice_total_paid(purchase_order.final_invoice)
     else:
         client_deposit = purchase_order.transaction.payment_records.aggregate(
             total=Sum("amount")
         )["total"] or Decimal("0.00")
 
-    recorded_supplier_paid_total = SupplierPayment.objects.filter(
-        purchase_order__transaction=purchase_order.transaction
-    ).aggregate(total=Sum("amount"))["total"] or Decimal("0.00")
+    recorded_supplier_paid_total = getattr(
+        purchase_order, "_transaction_supplier_total_paid", None
+    )
+    if recorded_supplier_paid_total is None:
+        recorded_supplier_paid_total = SupplierPayment.objects.filter(
+            purchase_order__transaction=purchase_order.transaction
+        ).aggregate(total=Sum("amount"))["total"] or Decimal("0.00")
 
-    client_deposit_room = max(client_deposit - recorded_supplier_paid_total, Decimal("0.00"))
+    client_deposit_room = max(
+        client_deposit - recorded_supplier_paid_total, Decimal("0.00")
+    )
 
     can_attempt_payment = (
         not purchase_order.transaction.is_closed
@@ -10023,7 +10133,12 @@ def _decorate_purchase_order_edit_lock(purchase_order):
     purchase_order.can_record_more_supplier_payment = not payment_entry_locked
     purchase_order.supplier_total_paid_for_lock = total_paid
     purchase_order.supplier_balance_due_for_lock = balance_due
-    purchase_order.has_supplier_payments_for_lock = payments.exists()
+    supplier_payment_count = getattr(purchase_order, "_supplier_payment_count", None)
+    purchase_order.has_supplier_payments_for_lock = (
+        supplier_payment_count > 0
+        if supplier_payment_count is not None
+        else payments.exists()
+    )
     return purchase_order
 
 

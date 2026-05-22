@@ -1,8 +1,11 @@
 from django.db.models import Count, Q
+from django.conf import settings
+from django.core.cache import cache
 
 from logistics.models import FinalInvoice, Notification, ProformaInvoice
 
 SHELL_MODULE_BADGE_SCAN_LIMIT = 250
+SHELL_CONTEXT_CACHE_SECONDS = 15
 
 
 def _shell_resolve_lane(request):
@@ -23,6 +26,15 @@ def logistics_shell_context(request):
     if not getattr(request, "user", None) or not request.user.is_authenticated:
         return {}
 
+    session_lane = (request.session.get("active_lane") or "").lower()
+    cache_key = (
+        f"shell-context:v2:{request.user.pk}:{request.user.role}:"
+        f"{int(request.user.is_superuser)}:{session_lane}"
+    )
+    cached_context = cache.get(cache_key)
+    if cached_context is not None:
+        return cached_context
+
     notification_qs = request.user.notifications.all()
     notifications = list(
         notification_qs.only(
@@ -31,6 +43,7 @@ def logistics_shell_context(request):
     )
     unread_qs = notification_qs.filter(is_read=False)
     unread_count = unread_qs.count()
+    cache.set(f"notification-unread-count:{request.user.pk}", unread_count, 30)
 
     module_counts = {
         "transactions": 0,
@@ -111,7 +124,7 @@ def logistics_shell_context(request):
         logistics=Count("id", filter=Q(loading__isnull=False)),
         sourcing=Count("id", filter=Q(loading__isnull=True)),
     )
-    return {
+    context = {
         "shell_notifications": notifications,
         "shell_notifications_unread_count": unread_count,
         "shell_module_notification_counts": module_counts,
@@ -123,3 +136,9 @@ def logistics_shell_context(request):
         "shell_active_lane_label": _lane_label(active_lane),
         "shell_can_switch_lane": _can_switch_lane(request.user),
     }
+    cache.set(
+        cache_key,
+        context,
+        getattr(settings, "SHELL_CONTEXT_CACHE_SECONDS", SHELL_CONTEXT_CACHE_SECONDS),
+    )
+    return context

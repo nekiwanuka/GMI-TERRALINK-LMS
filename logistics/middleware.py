@@ -1,6 +1,7 @@
 """Authentication and role-based middleware guards."""
 
 from django.conf import settings
+from django.core.cache import cache
 from django.http import HttpResponseForbidden
 from django.http import JsonResponse
 from django.contrib.auth.views import redirect_to_login
@@ -194,6 +195,13 @@ class ModuleRoleMiddleware:
 class NotificationTargetReadMiddleware:
     """Clear unread notification badges when the linked target page is opened."""
 
+    SKIP_PREFIXES = (
+        "/administrator/",
+        "/api/",
+        "/static/",
+        "/media/",
+    )
+
     def __init__(self, get_response):
         self.get_response = get_response
 
@@ -202,6 +210,7 @@ class NotificationTargetReadMiddleware:
             request.user.is_authenticated
             and request.method in {"GET", "HEAD"}
             and not request.path.startswith("/notifications/")
+            and not request.path.startswith(self.SKIP_PREFIXES)
         ):
             self._mark_matching_notifications_read(request)
         return self.get_response(request)
@@ -212,11 +221,17 @@ class NotificationTargetReadMiddleware:
         ids_to_mark = []
         current_path = request.path
         current_full_path = request.get_full_path()
+        unread_count_cache_key = f"notification-unread-count:{request.user.pk}"
+        cached_unread_count = cache.get(unread_count_cache_key)
+        if cached_unread_count == 0:
+            return
         unread_notifications = Notification.objects.filter(
             recipient=request.user,
             is_read=False,
         ).only("id", "link")[:250]
+        checked_any = False
         for notification in unread_notifications:
+            checked_any = True
             link = (notification.link or "").strip()
             if not link:
                 continue
@@ -231,3 +246,6 @@ class NotificationTargetReadMiddleware:
                 ids_to_mark.append(notification.id)
         if ids_to_mark:
             Notification.objects.filter(id__in=ids_to_mark).update(is_read=True)
+            cache.delete(unread_count_cache_key)
+        elif not checked_any:
+            cache.set(unread_count_cache_key, 0, 30)
