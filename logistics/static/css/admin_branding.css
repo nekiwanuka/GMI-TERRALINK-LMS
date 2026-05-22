@@ -1,30 +1,32 @@
 :root {
-  --primary: #0f4c5c;
-  --secondary: #136f82;
-  --accent: #f2a541;
-  --primary-fg: #f7fbfc;
-  --body-fg: #13333b;
-  --body-bg: #eaf3f5;
-  --body-quiet-color: #557780;
-  --border-color: rgba(19, 111, 130, 0.18);
-  --link-fg: #0f4c5c;
-  --link-hover-color: #e58e21;
-  --button-bg: #0f4c5c;
-  --button-hover-bg: #0d404d;
-  --default-button-bg: #f2a541;
-  --default-button-hover-bg: #e58e21;
-  --delete-button-bg: #bf3f36;
-  --delete-button-hover-bg: #9e322b;
-  --gmi-shadow: 0 24px 60px rgba(8, 43, 52, 0.18);
-  --gmi-card-bg: rgba(255, 255, 255, 0.88);
+  --primary: #0f172a;
+  --primary-rgb: 15, 23, 42;
+  --secondary: #1e293b;
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --accent-light: rgba(37, 99, 235, 0.08);
+  --primary-fg: #f8fafc;
+  --body-fg: #334155;
+  --body-bg: #f8fafc;
+  --body-quiet-color: #64748b;
+  --border-color: #e2e8f0;
+  --link-fg: #2563eb;
+  --link-hover-color: #1d4ed8;
+  --button-bg: #1e293b;
+  --button-hover-bg: #0f172a;
+  --default-button-bg: #2563eb;
+  --default-button-hover-bg: #1d4ed8;
+  --delete-button-bg: #ef4444;
+  --delete-button-hover-bg: #dc2626;
+  --gmi-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px -1px rgba(0, 0, 0, 0.05), 0 0 0 1px rgba(0, 0, 0, 0.01);
+  --gmi-card-bg: #ffffff;
 }
 
 @keyframes gmi-fade-up {
   from {
     opacity: 0;
-    transform: translateY(12px);
+    transform: translateY(8px);
   }
-
   to {
     opacity: 1;
     transform: translateY(0);
@@ -32,26 +34,28 @@
 }
 
 body {
-  background:
-    radial-gradient(circle at 8% 12%, rgba(242, 165, 65, 0.28), transparent 34%),
-    radial-gradient(circle at 92% 4%, rgba(19, 111, 130, 0.22), transparent 32%),
-    linear-gradient(155deg, #f4fafb 0%, #eaf3f5 42%, #deedf1 100%);
+  background-color: #f8fafc;
+  background-image: 
+    radial-gradient(at 0% 0%, rgba(37, 99, 235, 0.02) 0px, transparent 50%),
+    radial-gradient(at 100% 100%, rgba(37, 99, 235, 0.01) 0px, transparent 50%);
   color: var(--body-fg);
-  font-family: "Trebuchet MS", "Segoe UI", Verdana, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 #header {
   align-items: center;
-  backdrop-filter: blur(14px);
-  background: rgba(255, 255, 255, 0.78);
+  backdrop-filter: blur(8px);
+  background: rgba(255, 255, 255, 0.9);
   border-bottom: 1px solid var(--border-color);
-  box-shadow: 0 8px 26px rgba(12, 68, 81, 0.11);
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
   color: var(--body-fg);
   display: grid;
   gap: 1rem;
   grid-template-columns: 1fr auto;
-  min-height: 72px;
-  padding: 0.65rem 1.25rem;
+  min-height: 64px;
+  padding: 0.75rem 1.75rem;
   position: sticky;
   top: 0;
   z-index: 100;
@@ -60,7 +64,7 @@ body {
 #branding h1,
 #branding h1 a:link,
 #branding h1 a:visited {
-  color: var(--body-fg);
+  color: var(--primary);
 }
 
 .gmi-admin-brand,
@@ -70,14 +74,13 @@ body {
 }
 
 .gmi-admin-brand-link {
-  color: var(--body-fg) !important;
-  gap: 0.9rem;
+  color: var(--primary) !important;
+  gap: 0.75rem;
   text-decoration: none;
 }
 
 .gmi-admin-logo {
-  filter: drop-shadow(0 5px 10px rgba(19, 111, 130, 0.24));
-  height: 40px;
+  height: 32px;
   object-fit: contain;
   width: auto;
 }
@@ -89,18 +92,18 @@ body {
 }
 
 .gmi-admin-brand-copy strong {
-  font-size: 0.98rem;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-size: 0.9rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--primary);
 }
 
 .gmi-admin-brand-copy small {
   color: var(--body-quiet-color);
-  font-size: 0.67rem;
-  font-weight: 700;
-  letter-spacing: 0.18em;
-  margin-top: 0.1rem;
+  font-size: 0.65rem;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  margin-top: 0.05rem;
   text-transform: uppercase;
 }
 
@@ -108,7 +111,8 @@ body {
 #user-tools a,
 #logout-form button {
   color: var(--body-fg);
-  font-weight: 700;
+  font-weight: 500;
+  font-size: 0.85rem;
 }
 
 #user-tools a:hover,
@@ -125,50 +129,57 @@ body {
 
 .gmi-admin-portal-link {
   align-self: center;
-  background: linear-gradient(120deg, rgba(15, 76, 92, 0.1), rgba(19, 111, 130, 0.05));
-  border: 1px solid rgba(19, 111, 130, 0.22);
-  border-radius: 999px;
+  background: #ffffff;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
   color: var(--body-fg) !important;
   display: inline-flex;
   font-size: 0.8rem;
-  font-weight: 800;
-  letter-spacing: 0.03em;
-  margin-right: 0.35rem;
-  padding: 0.45rem 0.9rem;
+  font-weight: 600;
+  padding: 0.4rem 0.8rem;
   text-decoration: none;
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
 }
 
 .gmi-admin-portal-link:hover {
-  background: rgba(19, 111, 130, 0.12);
+  background: #f1f5f9;
+  border-color: #cbd5e1;
 }
 
 .gmi-admin-status-pill {
-  background: rgba(242, 165, 65, 0.2);
-  border: 1px solid rgba(242, 165, 65, 0.45);
-  border-radius: 999px;
-  color: #7c4d12;
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  border-radius: 6px;
+  color: #059669;
   display: inline-flex;
   font-size: 0.72rem;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  padding: 0.42rem 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  padding: 0.4rem 0.75rem;
   text-transform: uppercase;
 }
 
 div.breadcrumbs {
-  background: linear-gradient(90deg, #0f4c5c, #136f82);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.16);
-  color: #f7fcfd;
-  font-weight: 600;
+  background: #1e293b;
+  border-bottom: 1px solid var(--border-color);
+  color: #cbd5e1;
+  font-weight: 500;
+  font-size: 0.8rem;
+  padding: 0.6rem 1.75rem;
 }
 
 div.breadcrumbs a {
-  color: #f7fcfd;
+  color: #f1f5f9;
+}
+
+div.breadcrumbs a:hover {
+  color: var(--accent);
 }
 
 #content {
   animation: gmi-fade-up 0.36s ease;
-  padding: 1.6rem 1.8rem;
+  padding: 2rem 2.2rem;
 }
 
 #content-main,
@@ -176,10 +187,10 @@ div.breadcrumbs a {
 .module,
 .inline-group,
 #changelist {
-  background: var(--gmi-card-bg);
+  background: #ffffff;
   border: 1px solid var(--border-color);
-  border-radius: 16px;
-  box-shadow: 0 14px 36px rgba(12, 63, 75, 0.09);
+  border-radius: 8px;
+  box-shadow: var(--gmi-shadow);
   overflow: hidden;
 }
 
@@ -188,36 +199,40 @@ div.breadcrumbs a {
 }
 
 #changelist-filter {
-  background: rgba(232, 246, 249, 0.85);
+  background: #f8fafc;
   border-left: 1px solid var(--border-color);
 }
 
 #changelist-filter h2,
 #changelist-filter h3 {
-  color: var(--body-fg);
-  font-weight: 800;
+  color: var(--primary);
+  font-weight: 600;
 }
 
 #changelist-filter li.selected a {
-  color: #0f4c5c !important;
-  font-weight: 800;
+  color: var(--accent) !important;
+  font-weight: 600;
 }
 
 #toolbar {
-  background: linear-gradient(180deg, rgba(252, 254, 255, 0.92), rgba(238, 248, 250, 0.92));
+  background: #ffffff;
   border-bottom: 1px solid var(--border-color);
   padding: 0.8rem 1rem;
 }
 
 .object-tools a,
 .object-tools button {
-  border-radius: 10px;
-  font-weight: 800;
+  border-radius: 6px;
+  font-weight: 600;
+  padding: 0.45rem 1rem;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
 }
 
 .actions {
   align-items: center;
-  background: rgba(242, 165, 65, 0.1);
+  background: #f8fafc;
   border-bottom: 1px solid var(--border-color);
   display: flex;
   flex-wrap: wrap;
@@ -235,9 +250,11 @@ form .aligned textarea,
 form .aligned select,
 .vTextField,
 .vLargeTextField {
-  border: 1px solid rgba(19, 111, 130, 0.28);
-  border-radius: 10px;
-  min-height: 36px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  min-height: 38px;
+  padding: 4px 10px;
+  box-sizing: border-box;
 }
 
 form .aligned input:focus,
@@ -249,7 +266,7 @@ form .aligned select:focus,
 .vTextField:focus,
 .vLargeTextField:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(242, 165, 65, 0.2);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
   outline: none;
 }
 
@@ -258,15 +275,15 @@ form .aligned select:focus,
 }
 
 .results tbody tr:nth-child(odd) {
-  background: rgba(255, 255, 255, 0.76);
+  background: #ffffff;
 }
 
 .results tbody tr:nth-child(even) {
-  background: rgba(241, 249, 251, 0.82);
+  background: #f8fafc;
 }
 
 .results tbody tr:hover {
-  background: rgba(242, 165, 65, 0.16);
+  background: #f1f5f9;
 }
 
 .results th,
@@ -277,20 +294,25 @@ form .aligned select:focus,
 .module h2,
 .module caption,
 .inline-group h2 {
-  background: linear-gradient(90deg, #0f4c5c, #136f82);
-  color: #f7fbfc;
-  font-weight: 700;
+  background: #1e293b;
+  color: #f8fafc;
+  font-weight: 600;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.75rem 1rem;
 }
 
 table thead th,
 .results thead th {
-  background: rgba(227, 243, 247, 0.94);
-  color: var(--body-fg);
+  background: #f1f5f9;
+  color: var(--primary);
+  font-weight: 600;
 }
 
 .aligned label {
   color: var(--body-fg);
-  font-weight: 800;
+  font-weight: 600;
 }
 
 .button,
@@ -298,28 +320,28 @@ input[type="submit"],
 input[type="button"],
 .submit-row input,
 a.button {
-  border-radius: 10px;
-  font-weight: 800;
+  border-radius: 6px;
+  font-weight: 600;
 }
 
 .submit-row {
-  background: rgba(255, 255, 255, 0.88);
+  background: #ffffff;
   border-top: 1px solid var(--border-color);
   bottom: 0;
-  box-shadow: 0 -8px 22px rgba(11, 66, 80, 0.12);
+  box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.03);
   position: sticky;
   z-index: 20;
 }
 
 .submit-row input.default,
 input[type="submit"].default {
-  background: linear-gradient(130deg, #f2a541, #f9b65f);
-  color: #4e300a;
+  background: var(--accent);
+  color: #ffffff;
 }
 
 .submit-row input.default:hover,
 input[type="submit"].default:hover {
-  background: linear-gradient(130deg, #e58e21, #f2a541);
+  background: var(--accent-hover);
 }
 
 .help,
@@ -355,23 +377,18 @@ p.help,
 }
 
 .gmi-admin-login-panel {
-  background: rgba(255, 255, 255, 0.9);
-  border: 1px solid rgba(19, 111, 130, 0.2);
-  border-radius: 20px;
-  box-shadow: var(--gmi-shadow);
-  max-width: 460px;
-  padding: 2rem;
+  background: #ffffff;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  max-width: 440px;
+  padding: 2.25rem;
   position: relative;
   width: 100%;
 }
 
 .gmi-admin-login-panel::before {
-  background: linear-gradient(120deg, rgba(19, 111, 130, 0.12), rgba(242, 165, 65, 0.15));
-  border-radius: 20px;
-  content: "";
-  inset: 0;
-  pointer-events: none;
-  position: absolute;
+  display: none;
 }
 
 .gmi-admin-login-brand,
@@ -385,68 +402,69 @@ p.help,
 .gmi-admin-login-brand {
   align-items: center;
   display: flex;
-  gap: 1rem;
-  margin-bottom: 1.3rem;
+  gap: 1.25rem;
+  margin-bottom: 2rem;
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 1.25rem;
 }
 
 .gmi-admin-login-logo {
-  filter: drop-shadow(0 6px 12px rgba(19, 111, 130, 0.22));
   height: auto;
   object-fit: contain;
-  width: 132px;
+  width: 120px;
 }
 
 .gmi-admin-kicker {
-  color: #da8318;
+  color: var(--accent);
   display: block;
-  font-size: 0.72rem;
-  font-weight: 800;
-  letter-spacing: 0.16em;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
 }
 
 .gmi-admin-login-brand h1 {
-  color: var(--body-fg);
-  font-size: 1.62rem;
-  margin: 0.1rem 0 0;
+  color: var(--primary);
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 0.15rem 0 0;
 }
 
 .gmi-admin-login-subtitle {
   color: var(--body-quiet-color);
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   line-height: 1.4;
-  margin: 0.45rem 0 0;
+  margin: 0.35rem 0 0;
 }
 
 .gmi-admin-login-form .form-row {
-  padding: 0 0 0.95rem;
+  padding: 0 0 1.25rem;
 }
 
 .gmi-admin-login-form label {
   color: var(--body-fg);
   display: block;
-  font-size: 0.76rem;
-  font-weight: 800;
-  letter-spacing: 0.09em;
-  margin-bottom: 0.45rem;
-  text-transform: uppercase;
+  font-size: 0.8rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
 }
 
 .gmi-admin-login-form input[type="text"],
 .gmi-admin-login-form input[type="password"] {
-  border: 1px solid rgba(19, 111, 130, 0.28);
-  border-radius: 11px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
   box-sizing: border-box;
-  font-size: 1rem;
-  min-height: 46px;
-  padding: 0.72rem 0.9rem;
+  font-size: 0.9rem;
+  min-height: 42px;
+  padding: 0.5rem 0.75rem;
   width: 100%;
+  transition: all 0.2s ease;
 }
 
 .gmi-admin-login-form input[type="text"]:focus,
 .gmi-admin-login-form input[type="password"]:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(242, 165, 65, 0.2);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
   outline: none;
 }
 
@@ -459,30 +477,42 @@ p.help,
 }
 
 .gmi-admin-login-form .submit-row input {
-  background: linear-gradient(115deg, #0f4c5c, #136f82);
-  border-radius: 11px;
-  font-size: 0.95rem;
-  letter-spacing: 0.03em;
-  min-height: 46px;
+  background: var(--accent);
+  border: none;
+  border-radius: 6px;
+  color: #ffffff;
+  font-size: 0.9rem;
+  font-weight: 600;
+  min-height: 42px;
   width: 100%;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
 }
 
 .gmi-admin-login-form .submit-row input:hover {
-  background: linear-gradient(115deg, #0d404d, #105f70);
+  background: var(--accent-hover);
 }
 
 .password-reset-link {
-  margin: -0.12rem 0 1rem;
+  margin: -0.25rem 0 1.5rem;
   text-align: right;
 }
 
 .password-reset-link a {
-  color: #0f4c5c;
-  font-weight: 700;
+  color: var(--accent);
+  font-size: 0.85rem;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.password-reset-link a:hover {
+  text-decoration: underline;
 }
 
 .errornote {
-  border-radius: 10px;
+  border-radius: 6px;
+  background-color: var(--delete-button-bg);
+  color: #ffffff;
 }
 
 @media (max-width: 860px) {
@@ -505,21 +535,20 @@ p.help,
   }
 
   .gmi-admin-login-panel {
-    border-radius: 16px;
-    padding: 1.35rem;
-  }
-
-  .gmi-admin-login-panel::before {
-    border-radius: 16px;
+    border-radius: 8px;
+    padding: 1.5rem;
   }
 
   .gmi-admin-login-brand {
     align-items: flex-start;
     flex-direction: column;
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+    padding-bottom: 1rem;
   }
 
   .gmi-admin-login-logo {
-    width: 120px;
+    width: 100px;
   }
 
   .gmi-admin-status-pill {
@@ -529,121 +558,152 @@ p.help,
 
 .gmi-admin-home {
   display: grid;
-  gap: 1.2rem;
+  gap: 1.5rem;
 }
 
 .gmi-admin-hero {
   align-items: center;
-  background: linear-gradient(140deg, rgba(15, 76, 92, 0.94), rgba(19, 111, 130, 0.93));
-  border: 1px solid rgba(255, 255, 255, 0.22);
-  border-radius: 18px;
-  box-shadow: 0 16px 38px rgba(8, 53, 64, 0.22);
-  color: #f5fbfc;
+  background: #ffffff;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: var(--gmi-shadow);
+  color: var(--body-fg);
   display: grid;
-  gap: 1rem;
+  gap: 1.5rem;
   grid-template-columns: 1fr auto;
-  padding: 1.35rem 1.5rem;
+  padding: 2rem 2.25rem;
 }
 
 .gmi-admin-eyebrow {
-  color: rgba(255, 255, 255, 0.8);
+  color: var(--accent);
   display: block;
-  font-size: 0.7rem;
-  font-weight: 800;
-  letter-spacing: 0.18em;
-  margin-bottom: 0.4rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.5rem;
   text-transform: uppercase;
 }
 
 .gmi-admin-hero h1 {
-  color: #ffffff;
-  font-size: 1.8rem;
+  color: var(--primary);
+  font-size: 2rem;
+  font-weight: 700;
   margin: 0;
 }
 
 .gmi-admin-hero p {
-  color: rgba(242, 250, 252, 0.86);
-  margin: 0.45rem 0 0;
+  color: var(--body-quiet-color);
+  margin: 0.5rem 0 0;
+  font-size: 0.95rem;
+  line-height: 1.5;
 }
 
 .gmi-admin-hero-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.55rem;
+  gap: 0.75rem;
   justify-content: flex-end;
 }
 
 .gmi-admin-hero-actions .button {
-  border: 0;
-  border-radius: 10px;
-  font-weight: 800;
-  min-height: 36px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  font-weight: 600;
+  min-height: 38px;
+  padding: 0.5rem 1rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.gmi-admin-hero-actions .button.default {
+  background: var(--accent);
+  color: #ffffff;
+  border-color: var(--accent);
+}
+
+.gmi-admin-hero-actions .button.default:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+.gmi-admin-hero-actions .button:not(.default) {
+  background: #ffffff;
+  color: var(--primary);
+}
+
+.gmi-admin-hero-actions .button:not(.default):hover {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
 }
 
 .gmi-admin-home-grid {
   display: grid;
-  gap: 1rem;
+  gap: 1.5rem;
   grid-template-columns: minmax(0, 1fr) minmax(280px, 320px);
 }
 
 .gmi-admin-apps,
 .gmi-admin-activity {
-  background: rgba(255, 255, 255, 0.85);
-  border: 1px solid rgba(19, 111, 130, 0.18);
-  border-radius: 16px;
-  box-shadow: 0 12px 30px rgba(11, 62, 74, 0.1);
-  padding: 1rem;
+  background: #ffffff;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: var(--gmi-shadow);
+  padding: 1.5rem;
 }
 
 .gmi-admin-apps > header,
 .gmi-admin-activity > h2 {
   align-items: baseline;
-  border-bottom: 1px solid rgba(19, 111, 130, 0.16);
+  border-bottom: 1px solid var(--border-color);
   display: flex;
   justify-content: space-between;
-  margin: 0 0 0.85rem;
-  padding-bottom: 0.7rem;
+  margin: 0 0 1.25rem;
+  padding-bottom: 0.75rem;
 }
 
 .gmi-admin-apps > header h2,
 .gmi-admin-activity > h2 {
-  font-size: 1.05rem;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--primary);
   margin: 0;
 }
 
 .gmi-admin-apps > header span {
-  color: #53757d;
-  font-size: 0.78rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
+  color: var(--body-quiet-color);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
 }
 
 .gmi-admin-app-grid {
   display: grid;
-  gap: 0.8rem;
+  gap: 1rem;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
 }
 
 .gmi-admin-app-card {
-  background: linear-gradient(165deg, rgba(248, 253, 254, 0.96), rgba(236, 247, 250, 0.98));
-  border: 1px solid rgba(19, 111, 130, 0.16);
-  border-radius: 14px;
-  padding: 0.85rem;
+  background: #ffffff;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 1.25rem;
 }
 
 .gmi-admin-app-card h3 {
-  font-size: 0.96rem;
-  margin: 0 0 0.55rem;
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0 0 0.75rem;
 }
 
 .gmi-admin-app-card h3 a {
-  color: #0f4c5c;
+  color: var(--primary);
   text-decoration: none;
 }
 
 .gmi-admin-app-card h3 a:hover {
-  color: #e58e21;
+  color: var(--accent);
 }
 
 .gmi-admin-app-card ul,
@@ -655,10 +715,10 @@ p.help,
 
 .gmi-admin-app-card li {
   align-items: center;
-  border-top: 1px dashed rgba(19, 111, 130, 0.2);
+  border-top: 1px dashed var(--border-color);
   display: flex;
   justify-content: space-between;
-  padding: 0.5rem 0;
+  padding: 0.65rem 0;
 }
 
 .gmi-admin-app-card li:first-child {
@@ -667,75 +727,76 @@ p.help,
 }
 
 .gmi-admin-model-name {
-  color: #254952;
-  font-size: 0.88rem;
-  font-weight: 700;
+  color: var(--body-fg);
+  font-size: 0.9rem;
+  font-weight: 500;
 }
 
 .gmi-admin-model-actions {
   display: inline-flex;
-  gap: 0.45rem;
+  gap: 0.5rem;
 }
 
 .gmi-admin-model-actions a {
-  background: rgba(19, 111, 130, 0.1);
-  border: 1px solid rgba(19, 111, 130, 0.2);
-  border-radius: 999px;
-  color: #0f4c5c;
-  font-size: 0.72rem;
-  font-weight: 800;
-  letter-spacing: 0.04em;
-  padding: 0.22rem 0.52rem;
+  background: #f1f5f9;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--body-fg);
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0.25rem 0.5rem;
   text-decoration: none;
   text-transform: uppercase;
+  transition: all 0.2s ease;
 }
 
 .gmi-admin-model-actions a:hover {
-  background: rgba(242, 165, 65, 0.2);
-  border-color: rgba(242, 165, 65, 0.5);
-  color: #8c5712;
+  background: var(--accent-light);
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .gmi-admin-activity-list li {
-  border-left: 4px solid rgba(19, 111, 130, 0.3);
-  border-radius: 8px;
-  margin-bottom: 0.55rem;
-  padding: 0.58rem 0.65rem;
+  border-left: 3px solid var(--border-color);
+  border-radius: 0 6px 6px 0;
+  margin-bottom: 0.75rem;
+  padding: 0.5rem 0.75rem;
 }
 
 .gmi-admin-activity-list li.is-add {
-  background: rgba(26, 165, 115, 0.12);
-  border-left-color: rgba(26, 165, 115, 0.6);
+  background: rgba(16, 185, 129, 0.04);
+  border-left-color: #10b981;
 }
 
 .gmi-admin-activity-list li.is-change {
-  background: rgba(19, 111, 130, 0.1);
-  border-left-color: rgba(19, 111, 130, 0.55);
+  background: rgba(59, 130, 246, 0.04);
+  border-left-color: #3b82f6;
 }
 
 .gmi-admin-activity-list li.is-delete {
-  background: rgba(191, 63, 54, 0.12);
-  border-left-color: rgba(191, 63, 54, 0.62);
+  background: rgba(239, 68, 68, 0.04);
+  border-left-color: #ef4444;
 }
 
 .gmi-admin-activity-action {
-  color: #1f4149;
+  color: var(--body-fg);
   display: block;
   font-size: 0.85rem;
-  font-weight: 700;
-  line-height: 1.35;
+  font-weight: 500;
+  line-height: 1.4;
 }
 
 .gmi-admin-activity-meta {
-  color: #5a7b83;
+  color: var(--body-quiet-color);
   display: block;
   font-size: 0.75rem;
-  margin-top: 0.24rem;
+  margin-top: 0.25rem;
 }
 
 .gmi-admin-empty {
-  color: #5d7e86;
+  color: var(--body-quiet-color);
   font-style: italic;
+  font-size: 0.9rem;
 }
 
 @media (max-width: 1024px) {
