@@ -1229,7 +1229,7 @@ def _start_login_otp(request, user, next_url, remember):
     _store_login_otp(request, user, code, next_url, remember)
     try:
         _send_login_otp(user, code)
-    except Exception:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001
         logger.exception(
             "Failed to send login OTP email via %s to %s using host %s:%s as %s",
             getattr(settings, "EMAIL_BACKEND", ""),
@@ -1239,6 +1239,12 @@ def _start_login_otp(request, user, next_url, remember):
             getattr(settings, "EMAIL_HOST_USER", ""),
         )
         _clear_login_otp(request)
+        if user.is_superuser or getattr(user, "role", "") == "ADMIN":
+            messages.error(
+                request,
+                f"OTP email failed: {exc.__class__.__name__}: {exc}",
+            )
+            return False
         messages.error(
             request,
             "We could not send the OTP email. Please contact the system administrator to check email settings.",
