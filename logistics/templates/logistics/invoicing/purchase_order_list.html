@@ -296,18 +296,94 @@
 }
 
 .purchase-order-actions.is-compact {
+    align-items: center;
     flex-wrap: nowrap;
-    gap: 0.35rem;
+    gap: 0.4rem;
 }
 
 .purchase-order-actions.is-compact .btn {
     align-items: center;
     display: inline-flex;
-    gap: 0.25rem;
+    gap: 0.32rem;
     justify-content: center;
-    min-height: 2rem;
-    padding-left: 0.55rem;
-    padding-right: 0.55rem;
+    min-height: 2.28rem;
+    padding-left: 0.68rem;
+    padding-right: 0.68rem;
+}
+
+.purchase-order-actions .po-action-primary {
+    background: #1d4ed8;
+    border-color: #1d4ed8;
+    color: #ffffff !important;
+    font-weight: 800;
+    min-width: 92px;
+}
+
+.purchase-order-actions .po-action-primary:hover,
+.purchase-order-actions .po-action-primary:focus {
+    background: #1e3a8a;
+    border-color: #1e3a8a;
+    color: #ffffff !important;
+}
+
+.purchase-order-actions .po-action-secondary,
+.purchase-order-actions .po-action-icon {
+    background: #ffffff;
+    border: 1px solid #d8d8d8;
+    color: #1a1a1a !important;
+}
+
+.purchase-order-actions .po-action-secondary:hover,
+.purchase-order-actions .po-action-secondary:focus,
+.purchase-order-actions .po-action-icon:hover,
+.purchase-order-actions .po-action-icon:focus {
+    background: #f4f7fb;
+    border-color: #9db7df;
+    color: #1d4ed8 !important;
+}
+
+.purchase-order-actions .po-action-icon,
+.purchase-order-actions .po-action-locked {
+    flex: 0 0 2.28rem;
+    padding-left: 0;
+    padding-right: 0;
+    width: 2.28rem;
+}
+
+.purchase-order-actions .po-action-locked {
+    background: #f6f6f6;
+    border-color: #e3e3e3;
+    color: #8a8a8a !important;
+}
+
+.purchase-order-actions .po-action-pay {
+    background: #198754;
+    border-color: #198754;
+    color: #ffffff !important;
+    font-weight: 800;
+    min-width: 72px;
+}
+
+.purchase-order-actions .po-action-pay:hover,
+.purchase-order-actions .po-action-pay:focus {
+    background: #146c43;
+    border-color: #146c43;
+    color: #ffffff !important;
+}
+
+.purchase-order-actions .po-action-request {
+    background: #fff7da;
+    border-color: #d4af37;
+    color: #1a1a1a !important;
+    font-weight: 800;
+    min-width: 88px;
+}
+
+.purchase-order-actions .po-action-request:hover,
+.purchase-order-actions .po-action-request:focus {
+    background: #f6df7c;
+    border-color: #b88f12;
+    color: #1a1a1a !important;
 }
 
 .po-payment-meter {
@@ -509,38 +585,38 @@
                         </td>
                         <td class="text-end">
                             <div class="purchase-order-actions is-compact">
-                                <a href="{% url 'purchase_order_detail' po.pk %}" class="btn btn-sm btn-dark">
+                                <a href="{% url 'purchase_order_detail' po.pk %}" class="btn btn-sm po-action-primary">
                                     <i class="bi bi-eye"></i>Details
                                 </a>
-                                <a href="{% url 'purchase_order_pdf' po.pk %}" class="btn btn-sm btn-outline-primary" target="_blank" rel="noopener noreferrer">
+                                <a href="{% url 'purchase_order_pdf' po.pk %}" class="btn btn-sm po-action-secondary" target="_blank" rel="noopener noreferrer">
                                     <i class="bi bi-file-pdf"></i>PDF
                                 </a>
                                 {% if can_edit_purchase_orders and po.can_edit_purchase_order and not po.parent_po %}
-                                <a href="{% url 'purchase_order_update' po.pk %}" class="btn btn-sm btn-outline-secondary" title="Edit purchase order">
+                                <a href="{% url 'purchase_order_update' po.pk %}" class="btn btn-sm po-action-icon" title="Edit purchase order" aria-label="Edit purchase order {{ po.po_number }}">
                                     <i class="bi bi-pencil"></i>
                                 </a>
                                 {% elif can_manage_business_documents and po.edit_locked %}
-                                <span class="btn btn-sm btn-outline-secondary disabled" title="Locked">
+                                <span class="btn btn-sm po-action-locked disabled" title="Locked" aria-label="Purchase order locked">
                                     <i class="bi bi-lock-fill"></i>
                                 </span>
                                 {% endif %}
                                 {% if can_manage_business_documents %}
                                     {% if po.parent_po and po.split_mode != 'ITEMS' and not po.edit_locked %}
-                                    <a href="{% url 'purchase_order_split_quantity_update' po.pk %}" class="btn btn-sm btn-outline-dark" title="Adjust split quantity">
+                                    <a href="{% url 'purchase_order_split_quantity_update' po.pk %}" class="btn btn-sm po-action-icon" title="Adjust split quantity" aria-label="Adjust split quantity for {{ po.po_number }}">
                                         <i class="bi bi-sliders"></i>
                                     </a>
                                     {% elif not po.parent_po and not po.edit_locked %}
-                                    <a href="{% url 'purchase_order_split_create' po.pk %}" class="btn btn-sm btn-outline-dark" title="Split purchase order">
+                                    <a href="{% url 'purchase_order_split_create' po.pk %}" class="btn btn-sm po-action-icon" title="Split purchase order" aria-label="Split purchase order {{ po.po_number }}">
                                         <i class="bi bi-diagram-3"></i>
                                     </a>
                                     {% endif %}
                                 {% endif %}
                                 {% if po.can_record_supplier_payment %}
-                                <a href="{% url 'record_supplier_payment' po.pk %}" class="btn btn-sm btn-success">
+                                <a href="{% url 'record_supplier_payment' po.pk %}" class="btn btn-sm po-action-pay">
                                     <i class="bi bi-cash-stack"></i>Pay
                                 </a>
                                 {% elif po.can_request_supplier_payment %}
-                                <a href="{% url 'record_supplier_payment' po.pk %}" class="btn btn-sm btn-outline-primary">
+                                <a href="{% url 'record_supplier_payment' po.pk %}" class="btn btn-sm po-action-request">
                                     <i class="bi bi-shield-check"></i>Request
                                 </a>
                                 {% endif %}
