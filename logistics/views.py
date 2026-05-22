@@ -2,6 +2,7 @@
 
 import csv
 import json
+import logging
 import mimetypes
 import os
 import secrets
@@ -36,6 +37,9 @@ from .pi_parser import (
     items_to_sourcing_lines,
     build_sourcing_notes,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 def _extract_text_from_file(file_obj):
@@ -1226,6 +1230,14 @@ def _start_login_otp(request, user, next_url, remember):
     try:
         _send_login_otp(user, code)
     except Exception:  # noqa: BLE001
+        logger.exception(
+            "Failed to send login OTP email via %s to %s using host %s:%s as %s",
+            getattr(settings, "EMAIL_BACKEND", ""),
+            _login_otp_recipient_email(),
+            getattr(settings, "EMAIL_HOST", ""),
+            getattr(settings, "EMAIL_PORT", ""),
+            getattr(settings, "EMAIL_HOST_USER", ""),
+        )
         _clear_login_otp(request)
         messages.error(
             request,
