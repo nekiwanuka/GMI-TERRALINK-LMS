@@ -569,6 +569,7 @@ def _can_directly_edit_purchase_orders(user):
         "ADMIN",
         "DIRECTOR",
         "FINANCE",
+        "PROCUREMENT",
         "OFFICE_ADMIN",
     }
 
@@ -6566,18 +6567,6 @@ def purchase_order_update(request, pk):
     )
     _decorate_purchase_order_status(purchase_order)
     _decorate_purchase_order_edit_lock(purchase_order)
-    if purchase_order.is_split:
-        if purchase_order.split_mode == "ITEMS":
-            messages.info(
-                request,
-                "Whole-item split purchase orders keep the selected item lines fixed. Open the main PO to create another split.",
-            )
-            return redirect("purchase_order_detail", pk=purchase_order.pk)
-        messages.info(
-            request,
-            "Split purchase orders only allow split quantity changes; supplier and line editing stays locked to the source PO line.",
-        )
-        return redirect("purchase_order_split_quantity_update", pk=purchase_order.pk)
     edit_guard = _guard_purchase_order_edit_permission(request, purchase_order)
     if edit_guard:
         return edit_guard
@@ -6586,6 +6575,8 @@ def purchase_order_update(request, pk):
         return redirect("purchase_order_detail", pk=purchase_order.pk)
 
     suppliers = Supplier.objects.all().order_by("name")
+    can_edit_line_items = not purchase_order.is_split
+    title = f"Edit Purchase Order {purchase_order.po_number}"
 
     if request.method == "POST":
         supplier_id = (request.POST.get("supplier_id") or "").strip()
@@ -6611,22 +6602,27 @@ def purchase_order_update(request, pk):
                 {
                     "purchase_order": purchase_order,
                     "suppliers": suppliers,
-                    "title": f"Edit Purchase Order {purchase_order.po_number}",
+                    "title": title,
+                    "can_edit_line_items": can_edit_line_items,
                 },
             )
 
-        items, subtotal = _parse_purchase_order_items(request.POST)
-        if not items:
-            messages.error(request, "Add at least one valid line item for this PO.")
-            return render(
-                request,
-                "logistics/invoicing/purchase_order_form.html",
-                {
-                    "purchase_order": purchase_order,
-                    "suppliers": suppliers,
-                    "title": f"Edit Purchase Order {purchase_order.po_number}",
-                },
-            )
+        items = purchase_order.items
+        subtotal = purchase_order.subtotal
+        if can_edit_line_items:
+            items, subtotal = _parse_purchase_order_items(request.POST)
+            if not items:
+                messages.error(request, "Add at least one valid line item for this PO.")
+                return render(
+                    request,
+                    "logistics/invoicing/purchase_order_form.html",
+                    {
+                        "purchase_order": purchase_order,
+                        "suppliers": suppliers,
+                        "title": title,
+                        "can_edit_line_items": can_edit_line_items,
+                    },
+                )
 
         valid_statuses = {choice[0] for choice in PurchaseOrder.STATUS_CHOICES}
         if status not in valid_statuses:
@@ -6661,7 +6657,8 @@ def purchase_order_update(request, pk):
         {
             "purchase_order": purchase_order,
             "suppliers": suppliers,
-            "title": f"Edit Purchase Order {purchase_order.po_number}",
+            "title": title,
+            "can_edit_line_items": can_edit_line_items,
         },
     )
 

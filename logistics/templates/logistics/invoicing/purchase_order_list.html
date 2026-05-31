@@ -591,7 +591,7 @@
                                 <a href="{% url 'purchase_order_pdf' po.pk %}" class="btn btn-sm po-action-secondary" target="_blank" rel="noopener noreferrer">
                                     <i class="bi bi-file-pdf"></i>PDF
                                 </a>
-                                {% if can_edit_purchase_orders and po.can_edit_purchase_order and not po.parent_po %}
+                                {% if can_edit_purchase_orders and po.can_edit_purchase_order %}
                                 <a href="{% url 'purchase_order_update' po.pk %}" class="btn btn-sm po-action-icon" title="Edit purchase order" aria-label="Edit purchase order {{ po.po_number }}">
                                     <i class="bi bi-pencil"></i>
                                 </a>

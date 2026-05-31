@@ -16,7 +16,11 @@
     <div class="card shadow-sm">
         <div class="card-body">
             <div class="alert alert-light border">
+                {% if can_edit_line_items %}
                 <strong>Purpose:</strong> Use this to tailor each split PO for a specific supplier. You can change supplier, line items, subtotal, notes and status independently.
+                {% else %}
+                <strong>Purpose:</strong> Use this to add or update the supplier on this split PO. Split line items and quantities stay fixed.
+                {% endif %}
             </div>
 
             <form method="post" id="po-edit-form" novalidate>
@@ -50,6 +54,7 @@
                     </div>
                 </div>
 
+                {% if can_edit_line_items %}
                 <div class="table-responsive">
                     <table class="table table-bordered align-middle" id="po-items-table">
                         <thead class="table-light">
@@ -93,6 +98,32 @@
                 <div class="mb-3">
                     <button type="button" id="add-po-row" class="btn btn-outline-dark btn-sm">+ Add Item</button>
                 </div>
+                {% else %}
+                <div class="table-responsive mb-3">
+                    <table class="table table-bordered align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Description</th>
+                                <th class="text-end">Quantity</th>
+                                <th class="text-end">Unit Price</th>
+                                <th class="text-end">Line Total</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in purchase_order.items %}
+                            <tr>
+                                <td>{{ item.description|default:'' }}</td>
+                                <td class="text-end">{{ item.quantity|default:'1' }}</td>
+                                <td class="text-end">{% firstof item.unit_price item.amount item.total '0' %}</td>
+                                <td class="text-end">{% firstof item.line_total item.total '0' %}</td>
+                            </tr>
+                            {% empty %}
+                            <tr><td colspan="4" class="text-center text-muted py-3">No line items recorded.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% endif %}
 
                 <div class="mb-3">
                     <label class="form-label">Notes</label>
@@ -113,6 +144,7 @@
 <script>
 (function () {
     const table = document.getElementById('po-items-table');
+    if (!table) return;
     const tbody = table.querySelector('tbody');
     const subtotalPreview = document.getElementById('po-subtotal-preview');
     const addRowButton = document.getElementById('add-po-row');
