@@ -78,3 +78,11 @@ from .proof_of_delivery import ProofOfDelivery  # noqa: F401
 
 # Reusable uploaded staff signatures and document signing audit trail.
 from .signatures import DocumentSignature, SignatureProfile  # noqa: F401
+
+# General quotations, invoices, payments, and receipts.
+from .general_documents import (  # noqa: F401
+    GeneralInvoice,
+    GeneralPayment,
+    GeneralQuotation,
+    GeneralReceipt,
+)

@@ -158,6 +158,9 @@ from .forms import (
     FinalInvoiceForm,
     FulfillmentLineForm,
     FulfillmentOrderForm,
+    GeneralInvoiceForm,
+    GeneralPaymentForm,
+    GeneralQuotationForm,
     InventoryItemForm,
     LoadingForm,
     NoticeboardTaskForm,
@@ -209,6 +212,10 @@ from .models import (
     FinalInvoice,
     FulfillmentLine,
     FulfillmentOrder,
+    GeneralInvoice,
+    GeneralPayment,
+    GeneralQuotation,
+    GeneralReceipt,
     InventoryItem,
     Loading,
     Notification,
@@ -345,6 +352,32 @@ def _can_record_supplier_payment_entry(user):
         user.is_authenticated
         and (user.is_superuser or getattr(user, "role", "") == "FINANCE")
     )
+
+
+def _can_collect_general_invoice_payment(user):
+    return bool(
+        user.is_authenticated
+        and (user.is_superuser or getattr(user, "role", "") == "FINANCE")
+    )
+
+
+def _can_manage_general_documents(user):
+    return bool(
+        user.is_authenticated
+        and (
+            user.is_superuser
+            or getattr(user, "role", "")
+            in {"ADMIN", "DIRECTOR", "FINANCE", "LOGISTICS", "PROCUREMENT"}
+        )
+    )
+
+
+def _can_edit_general_invoice(user, invoice):
+    if not _can_manage_general_documents(user):
+        return False
+    if invoice.status == "PAID" or invoice.balance <= 0:
+        return _can_collect_general_invoice_payment(user)
+    return True
 
 
 def _request_finance_payment_permission(request, *, payment_label, link=""):
@@ -767,15 +800,23 @@ def _final_invoice_payment_snapshot(invoice, total_paid=None):
     )
     total_paid = Decimal(str(total_paid or "0.00"))
     item_total = Decimal(str(invoice.subtotal or "0.00"))
-    fee_total = (
-        Decimal(str(invoice.sourcing_fee or "0.00"))
-        + Decimal(str(invoice.shipping_cost or "0.00"))
-        + Decimal(str(invoice.service_fee or "0.00"))
-    )
+    sourcing_fee = Decimal(str(invoice.sourcing_fee or "0.00"))
+    shipping_cost = Decimal(str(invoice.shipping_cost or "0.00"))
+    service_fee = Decimal(str(invoice.service_fee or "0.00"))
+    shipping_total = shipping_cost + (sourcing_fee if invoice.loading_id else Decimal("0.00"))
+    company_fee_total = service_fee + (Decimal("0.00") if invoice.loading_id else sourcing_fee)
+    fee_total = shipping_total + company_fee_total
     invoice_total = Decimal(str(invoice.total_amount or "0.00"))
     invoice_balance = max(invoice_total - total_paid, Decimal("0.00"))
     item_balance = max(item_total - total_paid, Decimal("0.00"))
-    fee_paid = min(max(total_paid - item_total, Decimal("0.00")), fee_total)
+    post_item_paid = max(total_paid - item_total, Decimal("0.00"))
+    shipping_paid = min(post_item_paid, shipping_total)
+    shipping_balance = max(shipping_total - shipping_paid, Decimal("0.00"))
+    company_fee_paid = min(
+        max(post_item_paid - shipping_total, Decimal("0.00")), company_fee_total
+    )
+    company_fee_balance = max(company_fee_total - company_fee_paid, Decimal("0.00"))
+    fee_paid = shipping_paid + company_fee_paid
     fee_balance = max(fee_total - fee_paid, Decimal("0.00"))
 
     item_funds_ready = item_total <= 0 or total_paid >= item_total
@@ -818,6 +859,32 @@ def _final_invoice_payment_snapshot(invoice, total_paid=None):
         fee_label = "Fees Not Paid"
         fee_class = "bg-secondary"
 
+    if shipping_total <= 0:
+        shipping_label = "No Shipping Due"
+        shipping_class = "bg-secondary"
+    elif shipping_balance <= 0:
+        shipping_label = "Shipping/Clearing Paid"
+        shipping_class = "bg-dark"
+    elif shipping_paid > 0:
+        shipping_label = "Shipping/Clearing Partial"
+        shipping_class = "bg-warning text-dark"
+    else:
+        shipping_label = "Shipping/Clearing Not Paid"
+        shipping_class = "bg-secondary"
+
+    if company_fee_total <= 0:
+        company_fee_label = "No Company Fees Due"
+        company_fee_class = "bg-secondary"
+    elif company_fee_balance <= 0:
+        company_fee_label = "Company Fees Paid"
+        company_fee_class = "bg-dark"
+    elif company_fee_paid > 0:
+        company_fee_label = "Company Fees Partial"
+        company_fee_class = "bg-warning text-dark"
+    else:
+        company_fee_label = "Company Fees Not Paid"
+        company_fee_class = "bg-secondary"
+
     return {
         "total_paid": total_paid,
         "invoice_total": invoice_total,
@@ -828,6 +895,16 @@ def _final_invoice_payment_snapshot(invoice, total_paid=None):
         "item_balance": item_balance,
         "item_label": item_label,
         "item_class": item_class,
+        "shipping_total": shipping_total,
+        "shipping_paid": shipping_paid,
+        "shipping_balance": shipping_balance,
+        "shipping_label": shipping_label,
+        "shipping_class": shipping_class,
+        "company_fee_total": company_fee_total,
+        "company_fee_paid": company_fee_paid,
+        "company_fee_balance": company_fee_balance,
+        "company_fee_label": company_fee_label,
+        "company_fee_class": company_fee_class,
         "fee_total": fee_total,
         "fee_paid": fee_paid,
         "fee_balance": fee_balance,
@@ -853,9 +930,15 @@ def _decorate_purchase_order_invoice_payment(purchase_order):
     purchase_order.item_funds_status_class = snapshot["item_class"]
     purchase_order.fee_payment_status_label = snapshot["fee_label"]
     purchase_order.fee_payment_status_class = snapshot["fee_class"]
+    purchase_order.shipping_payment_status_label = snapshot["shipping_label"]
+    purchase_order.shipping_payment_status_class = snapshot["shipping_class"]
+    purchase_order.company_fee_payment_status_label = snapshot["company_fee_label"]
+    purchase_order.company_fee_payment_status_class = snapshot["company_fee_class"]
     purchase_order.client_total_paid = snapshot["total_paid"]
     purchase_order.client_invoice_balance = snapshot["invoice_balance"]
     purchase_order.client_item_balance = snapshot["item_balance"]
+    purchase_order.client_shipping_balance = snapshot["shipping_balance"]
+    purchase_order.client_company_fee_balance = snapshot["company_fee_balance"]
     purchase_order.client_fee_balance = snapshot["fee_balance"]
     purchase_order.can_start_invoice_fulfillment = snapshot["procurement_ready"]
     return purchase_order
@@ -5660,16 +5743,10 @@ def final_invoice_html_preview(request, pk):
     if canonical:
         return canonical
     total_paid = _final_invoice_total_paid(invoice) or 0
-    balance = max((invoice.total_amount or 0) - total_paid, 0)
-    if total_paid > 0 and balance <= 0:
-        payment_status_label = "Paid"
-        payment_status_class = "bg-success"
-    elif total_paid > 0:
-        payment_status_label = "Partial Payment"
-        payment_status_class = "bg-warning text-dark"
-    else:
-        payment_status_label = "Unpaid"
-        payment_status_class = "bg-secondary"
+    payment_snapshot = _final_invoice_payment_snapshot(invoice, total_paid)
+    balance = payment_snapshot["invoice_balance"]
+    payment_status_label = payment_snapshot["invoice_label"]
+    payment_status_class = payment_snapshot["invoice_class"]
     response = render(
         request,
         "logistics/pdf/final_invoice_standalone.html",
@@ -5680,6 +5757,7 @@ def final_invoice_html_preview(request, pk):
             "balance": balance,
             "payment_status_label": payment_status_label,
             "payment_status_class": payment_status_class,
+            "payment_snapshot": payment_snapshot,
             "document_signature": _document_signature_for(invoice),
             "auto_print_pdf": request.GET.get("download") == "1",
         },
@@ -8631,6 +8709,354 @@ def receipt_list(request):
 
 
 @login_required
+def _general_document_item_rows(document=None):
+    rows = []
+    for item in getattr(document, "items", []) or []:
+        rows.append(
+            {
+                "description": item.get("description", ""),
+                "quantity": item.get("quantity", "1"),
+                "unit_price": item.get("unit_price", "0"),
+                "amount": item.get("amount", "0"),
+            }
+        )
+    return rows or [{"description": "", "quantity": "1", "unit_price": "0", "amount": "0"}]
+
+
+def _parse_general_document_items(request):
+    descriptions = request.POST.getlist("item_description")
+    quantities = request.POST.getlist("item_quantity")
+    unit_prices = request.POST.getlist("item_unit_price")
+    items = []
+    subtotal = Decimal("0.00")
+    for index, description in enumerate(descriptions):
+        description = normalize_text_entry(description)
+        if not description:
+            continue
+        try:
+            quantity = Decimal(str(quantities[index] or "1"))
+        except (IndexError, ValueError, ArithmeticError):
+            quantity = Decimal("1")
+        try:
+            unit_price = Decimal(str(unit_prices[index] or "0"))
+        except (IndexError, ValueError, ArithmeticError):
+            unit_price = Decimal("0")
+        quantity = max(quantity, Decimal("0"))
+        unit_price = max(unit_price, Decimal("0"))
+        amount = quantity * unit_price
+        subtotal += amount
+        items.append(
+            {
+                "description": description,
+                "quantity": str(quantity),
+                "unit_price": str(unit_price),
+                "amount": str(amount),
+            }
+        )
+    return items, subtotal
+
+
+def _save_general_document_form(request, form):
+    items, subtotal = _parse_general_document_items(request)
+    if not items:
+        form.add_error(None, "Add at least one document line item.")
+        return None
+    document = form.save(commit=False)
+    document.items = items
+    document.subtotal = subtotal
+    if document.pk is None:
+        document.created_by = request.user
+    document.save()
+    return document
+
+
+@login_required
+def general_quotation_list(request):
+    quotations = GeneralQuotation.objects.select_related("client", "created_by").order_by(
+        "-created_at"
+    )
+    return render(
+        request,
+        "logistics/general_documents/quotation_list.html",
+        {
+            "quotations": quotations,
+            "can_manage_general_documents": _can_manage_general_documents(request.user),
+        },
+    )
+
+
+@login_required
+def general_quotation_create(request):
+    if not _can_manage_general_documents(request.user):
+        messages.error(request, "You do not have permission to create general quotations.")
+        return redirect("general_quotation_list")
+    form = GeneralQuotationForm(request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        quotation = _save_general_document_form(request, form)
+        if quotation:
+            messages.success(request, "General quotation created.")
+            return redirect("general_quotation_detail", pk=quotation.pk)
+    return render(
+        request,
+        "logistics/general_documents/document_form.html",
+        {
+            "form": form,
+            "item_rows": _general_document_item_rows(),
+            "document_title": "General Quotation",
+            "submit_label": "Save Quotation",
+        },
+    )
+
+
+@login_required
+def general_quotation_detail(request, pk):
+    quotation = get_object_or_404(
+        GeneralQuotation.objects.select_related("client", "created_by"), pk=pk
+    )
+    return render(
+        request,
+        "logistics/general_documents/quotation_detail.html",
+        {
+            "quotation": quotation,
+            "can_manage_general_documents": _can_manage_general_documents(request.user),
+        },
+    )
+
+
+@login_required
+def general_quotation_update(request, pk):
+    quotation = get_object_or_404(GeneralQuotation, pk=pk)
+    if not _can_manage_general_documents(request.user):
+        messages.error(request, "You do not have permission to edit general quotations.")
+        return redirect("general_quotation_detail", pk=quotation.pk)
+    form = GeneralQuotationForm(request.POST or None, instance=quotation)
+    if request.method == "POST" and form.is_valid():
+        quotation = _save_general_document_form(request, form)
+        if quotation:
+            messages.success(request, "General quotation updated.")
+            return redirect("general_quotation_detail", pk=quotation.pk)
+    return render(
+        request,
+        "logistics/general_documents/document_form.html",
+        {
+            "form": form,
+            "item_rows": _general_document_item_rows(quotation),
+            "document_title": "General Quotation",
+            "submit_label": "Update Quotation",
+        },
+    )
+
+
+@login_required
+def general_quotation_convert_to_invoice(request, pk):
+    quotation = get_object_or_404(GeneralQuotation, pk=pk)
+    if not _can_manage_general_documents(request.user):
+        messages.error(request, "You do not have permission to create general invoices.")
+        return redirect("general_quotation_detail", pk=quotation.pk)
+    invoice = GeneralInvoice.objects.create(
+        quotation=quotation,
+        client=quotation.client,
+        transaction=quotation.transaction,
+        purpose=quotation.purpose,
+        custom_purpose=quotation.custom_purpose,
+        items=quotation.items,
+        subtotal=quotation.subtotal,
+        tax_amount=quotation.tax_amount,
+        discount_amount=quotation.discount_amount,
+        currency=quotation.currency,
+        notes=quotation.notes,
+        terms=quotation.terms,
+        status="ISSUED",
+        created_by=request.user,
+    )
+    quotation.status = "CONVERTED"
+    quotation.save(update_fields=["status", "updated_at"])
+    messages.success(request, "General invoice created from quotation.")
+    return redirect("general_invoice_detail", pk=invoice.pk)
+
+
+@login_required
+def general_invoice_list(request):
+    invoices = GeneralInvoice.objects.select_related("client", "created_by").order_by(
+        "-created_at"
+    )
+    return render(
+        request,
+        "logistics/general_documents/invoice_list.html",
+        {
+            "invoices": invoices,
+            "can_manage_general_documents": _can_manage_general_documents(request.user),
+            "can_collect_general_payment": _can_collect_general_invoice_payment(request.user),
+        },
+    )
+
+
+@login_required
+def general_invoice_create(request):
+    if not _can_manage_general_documents(request.user):
+        messages.error(request, "You do not have permission to create general invoices.")
+        return redirect("general_invoice_list")
+    form = GeneralInvoiceForm(request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        invoice = _save_general_document_form(request, form)
+        if invoice:
+            messages.success(request, "General invoice created.")
+            return redirect("general_invoice_detail", pk=invoice.pk)
+    return render(
+        request,
+        "logistics/general_documents/document_form.html",
+        {
+            "form": form,
+            "item_rows": _general_document_item_rows(),
+            "document_title": "General Invoice",
+            "submit_label": "Save Invoice",
+        },
+    )
+
+
+@login_required
+def general_invoice_detail(request, pk):
+    invoice = get_object_or_404(
+        GeneralInvoice.objects.select_related("client", "created_by", "quotation"), pk=pk
+    )
+    payments = invoice.payments.select_related("receipt", "created_by")
+    return render(
+        request,
+        "logistics/general_documents/invoice_detail.html",
+        {
+            "invoice": invoice,
+            "payments": payments,
+            "can_edit_invoice": _can_edit_general_invoice(request.user, invoice),
+            "can_collect_general_payment": _can_collect_general_invoice_payment(request.user)
+            and invoice.balance > 0,
+        },
+    )
+
+
+@login_required
+def general_invoice_update(request, pk):
+    invoice = get_object_or_404(GeneralInvoice, pk=pk)
+    if not _can_edit_general_invoice(request.user, invoice):
+        messages.error(
+            request,
+            "Only finance can edit a paid general invoice.",
+        )
+        return redirect("general_invoice_detail", pk=invoice.pk)
+    form = GeneralInvoiceForm(request.POST or None, instance=invoice)
+    if request.method == "POST" and form.is_valid():
+        invoice = _save_general_document_form(request, form)
+        if invoice:
+            messages.success(request, "General invoice updated.")
+            return redirect("general_invoice_detail", pk=invoice.pk)
+    return render(
+        request,
+        "logistics/general_documents/document_form.html",
+        {
+            "form": form,
+            "item_rows": _general_document_item_rows(invoice),
+            "document_title": "General Invoice",
+            "submit_label": "Update Invoice",
+        },
+    )
+
+
+@login_required
+def general_invoice_record_payment(request, pk):
+    invoice = get_object_or_404(GeneralInvoice, pk=pk)
+    if not _can_collect_general_invoice_payment(request.user):
+        messages.error(request, "Only finance can collect payments for general invoices.")
+        return redirect("general_invoice_detail", pk=invoice.pk)
+    if invoice.balance <= 0:
+        messages.info(request, "This general invoice is already fully paid.")
+        return redirect("general_invoice_detail", pk=invoice.pk)
+    form = GeneralPaymentForm(request.POST or None, request.FILES or None, invoice=invoice)
+    if request.method == "POST" and form.is_valid():
+        payment = form.save(commit=False)
+        payment.invoice = invoice
+        payment.created_by = request.user
+        payment.save()
+        messages.success(request, "Payment recorded and general receipt generated.")
+        return redirect("general_receipt_detail", pk=payment.receipt.pk)
+    return render(
+        request,
+        "logistics/general_documents/payment_form.html",
+        {"form": form, "invoice": invoice},
+    )
+
+
+@login_required
+def general_receipt_list(request):
+    receipts = GeneralReceipt.objects.select_related(
+        "payment", "payment__invoice", "payment__invoice__client"
+    ).order_by("-issued_at")
+    return render(
+        request,
+        "logistics/general_documents/receipt_list.html",
+        {"receipts": receipts},
+    )
+
+
+@login_required
+def general_receipt_detail(request, pk):
+    receipt = get_object_or_404(
+        GeneralReceipt.objects.select_related("payment", "payment__invoice", "payment__invoice__client"),
+        pk=pk,
+    )
+    return render(
+        request,
+        "logistics/general_documents/receipt_detail.html",
+        {"receipt": receipt},
+    )
+
+
+@login_required
+def general_quotation_html_preview(request, pk):
+    quotation = get_object_or_404(GeneralQuotation.objects.select_related("client"), pk=pk)
+    return render(
+        request,
+        "logistics/pdf/general_quotation_standalone.html",
+        {"quotation": quotation, "auto_print_pdf": request.GET.get("download") == "1"},
+    )
+
+
+@login_required
+def general_quotation_pdf(request, pk):
+    return redirect(f"{reverse('general_quotation_html_preview', kwargs={'pk': pk})}?download=1")
+
+
+@login_required
+def general_invoice_html_preview(request, pk):
+    invoice = get_object_or_404(GeneralInvoice.objects.select_related("client"), pk=pk)
+    return render(
+        request,
+        "logistics/pdf/general_invoice_standalone.html",
+        {"invoice": invoice, "auto_print_pdf": request.GET.get("download") == "1"},
+    )
+
+
+@login_required
+def general_invoice_pdf(request, pk):
+    return redirect(f"{reverse('general_invoice_html_preview', kwargs={'pk': pk})}?download=1")
+
+
+@login_required
+def general_receipt_html_preview(request, pk):
+    receipt = get_object_or_404(
+        GeneralReceipt.objects.select_related("payment", "payment__invoice", "payment__invoice__client"),
+        pk=pk,
+    )
+    return render(
+        request,
+        "logistics/pdf/general_receipt_standalone.html",
+        {"receipt": receipt, "auto_print_pdf": request.GET.get("download") == "1"},
+    )
+
+
+@login_required
+def general_receipt_pdf(request, pk):
+    return redirect(f"{reverse('general_receipt_html_preview', kwargs={'pk': pk})}?download=1")
+
+
 def receipt_detail(request, pk):
     """View a single receipt."""
     receipt = get_object_or_404(Receipt, pk=pk)

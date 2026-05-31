@@ -93,7 +93,7 @@
 }
 .po-payment-cards {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
     gap: 0.75rem;
     margin-bottom: 1rem;
 }
@@ -293,9 +293,14 @@
                     <span class="badge {{ purchase_order.invoice_payment_status_class|default:'bg-secondary' }} mt-2">{{ purchase_order.invoice_payment_status_label|default:'Unpaid' }}</span>
                 </div>
                 <div class="po-payment-card">
-                    <small>Item Funds</small>
+                    <small>Item Funds Paid</small>
                     <strong>{{ purchase_order.client_total_paid|default:'0.00' }} {{ purchase_order.final_invoice.currency }}</strong>
                     <span class="badge {{ purchase_order.item_funds_status_class|default:'bg-secondary' }} mt-2">{{ purchase_order.item_funds_status_label|default:'Item Funds Pending' }}</span>
+                </div>
+                <div class="po-payment-card">
+                    <small>Item Balance</small>
+                    <strong>{{ purchase_order.client_item_balance|default:'0.00' }} {{ purchase_order.final_invoice.currency }}</strong>
+                    <span class="badge {% if purchase_order.client_item_balance > 0 %}bg-warning text-dark{% else %}bg-success{% endif %} mt-2">{% if purchase_order.client_item_balance > 0 %}Items Not Fully Funded{% else %}Items Funded{% endif %}</span>
                 </div>
                 <div class="po-payment-card">
                     <small>Invoice Balance</small>
@@ -303,9 +308,14 @@
                     <span class="badge {% if purchase_order.client_invoice_balance > 0 %}bg-warning text-dark{% else %}bg-success{% endif %} mt-2">{% if purchase_order.client_invoice_balance > 0 %}Balance Due{% else %}Cleared{% endif %}</span>
                 </div>
                 <div class="po-payment-card">
-                    <small>Fees Balance</small>
-                    <strong>{{ purchase_order.client_fee_balance|default:'0.00' }} {{ purchase_order.final_invoice.currency }}</strong>
-                    <span class="badge {{ purchase_order.fee_payment_status_class|default:'bg-secondary' }} mt-2">{{ purchase_order.fee_payment_status_label|default:'Fees Status Pending' }}</span>
+                    <small>Shipping/Clearing Balance</small>
+                    <strong>{{ purchase_order.client_shipping_balance|default:'0.00' }} {{ purchase_order.final_invoice.currency }}</strong>
+                    <span class="badge {{ purchase_order.shipping_payment_status_class|default:'bg-secondary' }} mt-2">{{ purchase_order.shipping_payment_status_label|default:'Shipping Status Pending' }}</span>
+                </div>
+                <div class="po-payment-card">
+                    <small>Company Fees Balance</small>
+                    <strong>{{ purchase_order.client_company_fee_balance|default:'0.00' }} {{ purchase_order.final_invoice.currency }}</strong>
+                    <span class="badge {{ purchase_order.company_fee_payment_status_class|default:'bg-secondary' }} mt-2">{{ purchase_order.company_fee_payment_status_label|default:'Company Fees Pending' }}</span>
                 </div>
             </div>
             {% if purchase_order.client_deposit_room <= 0 and purchase_order.supplier_balance_due > 0 %}

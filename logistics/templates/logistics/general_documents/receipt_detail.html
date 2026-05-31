@@ -1,0 +1,22 @@
+{% extends "logistics/base.html" %}
+{% block title %}{{ receipt.receipt_number }} - General Receipt{% endblock %}
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1><i class="bi bi-receipt"></i> General Receipt {{ receipt.receipt_number }}</h1>
+        <div class="btn-group">
+            <a class="btn btn-outline-secondary" href="{% url 'general_receipt_list' %}">Back</a>
+            <a class="btn btn-outline-dark" href="{% url 'general_receipt_html_preview' receipt.pk %}" target="_blank"><i class="bi bi-eye"></i> Preview</a>
+            <a class="btn btn-outline-primary" href="{% url 'general_receipt_html_preview' receipt.pk %}?download=1" target="_blank"><i class="bi bi-printer"></i> Print</a>
+            <a class="btn btn-outline-danger" href="{% url 'general_receipt_pdf' receipt.pk %}"><i class="bi bi-download"></i> Download</a>
+        </div>
+    </div>
+    <div class="row g-3 mb-3">
+        <div class="col-md-3"><div class="card p-3"><div class="text-muted small">Issued To</div><strong>{{ receipt.issued_to }}</strong></div></div>
+        <div class="col-md-3"><div class="card p-3"><div class="text-muted small">Invoice</div><strong>{{ receipt.payment.invoice.invoice_number }}</strong></div></div>
+        <div class="col-md-3"><div class="card p-3"><div class="text-muted small">Amount</div><strong>{{ receipt.amount }} {{ receipt.currency }}</strong></div></div>
+        <div class="col-md-3"><div class="card p-3"><div class="text-muted small">Purpose</div><strong>{{ receipt.purpose }}</strong></div></div>
+    </div>
+    <iframe class="w-100 border rounded" style="height: 720px;" src="{% url 'general_receipt_html_preview' receipt.pk %}?v={% now 'U' %}"></iframe>
+</div>
+{% endblock %}

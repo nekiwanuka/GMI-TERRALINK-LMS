@@ -1,0 +1,30 @@
+<!doctype html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>{{ receipt.receipt_number }}</title>
+    <style>
+        body { font-family: Arial, sans-serif; color: #1f2933; margin: 32px; }
+        .header { display: flex; justify-content: space-between; border-bottom: 2px solid #111827; padding-bottom: 14px; margin-bottom: 28px; }
+        .brand { font-size: 22px; font-weight: 700; }
+        .doc-title { text-align: right; font-size: 18px; font-weight: 700; text-transform: uppercase; }
+        .receipt-box { border: 1px solid #d1d5db; padding: 18px; margin-top: 20px; }
+        .row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #eef2f7; }
+        .row:last-child { border-bottom: 0; }
+        .label { color: #6b7280; font-size: 12px; text-transform: uppercase; }
+        .amount { font-size: 24px; font-weight: 700; }
+        @media print { body { margin: 18mm; } }
+    </style>
+</head>
+<body>
+    <div class="header"><div><div class="brand">GMI TERRALINK</div><div>General Receipt</div></div><div class="doc-title">General Receipt<br>{{ receipt.receipt_number }}</div></div>
+    <div class="receipt-box">
+        <div class="row"><div><div class="label">Received From</div><strong>{{ receipt.issued_to }}</strong></div><div><div class="label">Issued At</div>{{ receipt.issued_at }}</div></div>
+        <div class="row"><div><div class="label">Invoice</div>{{ receipt.payment.invoice.invoice_number }}</div><div><div class="label">Payment Method</div>{{ receipt.payment.get_method_display }}</div></div>
+        <div class="row"><div><div class="label">Purpose</div>{{ receipt.purpose }}</div><div><div class="label">Reference</div>{{ receipt.payment.reference|default:"-" }}</div></div>
+        <div class="row"><div><div class="label">Amount Paid</div><div class="amount">{{ receipt.amount }} {{ receipt.currency }}</div></div></div>
+    </div>
+    {% if receipt.notes %}<h4>Notes</h4><p>{{ receipt.notes|linebreaksbr }}</p>{% endif %}
+    {% if auto_print_pdf %}<script>window.addEventListener('load', function () { setTimeout(function () { window.focus(); window.print(); }, 350); });</script>{% endif %}
+</body>
+</html>

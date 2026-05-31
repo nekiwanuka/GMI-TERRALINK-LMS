@@ -1,0 +1,42 @@
+{% extends "logistics/base.html" %}
+{% block title %}{{ invoice.invoice_number }} - General Invoice{% endblock %}
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1><i class="bi bi-receipt-cutoff"></i> General Invoice {{ invoice.invoice_number }}</h1>
+        <div class="btn-group">
+            <a class="btn btn-outline-secondary" href="{% url 'general_invoice_list' %}">Back</a>
+            <a class="btn btn-outline-dark" href="{% url 'general_invoice_html_preview' invoice.pk %}" target="_blank"><i class="bi bi-eye"></i> Preview</a>
+            <a class="btn btn-outline-primary" href="{% url 'general_invoice_html_preview' invoice.pk %}?download=1" target="_blank"><i class="bi bi-printer"></i> Print</a>
+            <a class="btn btn-outline-danger" href="{% url 'general_invoice_pdf' invoice.pk %}"><i class="bi bi-download"></i> Download</a>
+            {% if can_edit_invoice %}<a class="btn btn-warning" href="{% url 'general_invoice_update' invoice.pk %}">Edit</a>{% endif %}
+            {% if can_collect_general_payment %}<a class="btn btn-success" href="{% url 'general_invoice_record_payment' invoice.pk %}">Collect Payment</a>{% endif %}
+        </div>
+    </div>
+    <div class="row g-3 mb-3">
+        <div class="col-md-3"><div class="card p-3"><div class="text-muted small">Client</div><strong>{{ invoice.client.name }}</strong></div></div>
+        <div class="col-md-3"><div class="card p-3"><div class="text-muted small">Purpose</div><strong>{{ invoice.purpose_label }}</strong></div></div>
+        <div class="col-md-2"><div class="card p-3"><div class="text-muted small">Total</div><strong>{{ invoice.total_amount }} {{ invoice.currency }}</strong></div></div>
+        <div class="col-md-2"><div class="card p-3"><div class="text-muted small">Paid</div><strong>{{ invoice.amount_paid }}</strong></div></div>
+        <div class="col-md-2"><div class="card p-3"><div class="text-muted small">Balance</div><strong>{{ invoice.balance }}</strong></div></div>
+    </div>
+    <div class="card p-3 mb-3">
+        <div class="table-responsive">
+            <table class="table table-sm align-middle">
+                <thead><tr><th>Description</th><th>Qty</th><th>Unit Price</th><th class="text-end">Amount</th></tr></thead>
+                <tbody>{% for item in invoice.items %}<tr><td>{{ item.description }}</td><td>{{ item.quantity }}</td><td>{{ item.unit_price }}</td><td class="text-end">{{ item.amount }}</td></tr>{% endfor %}</tbody>
+            </table>
+        </div>
+    </div>
+    <div class="card p-3 mb-3">
+        <h5>Payments</h5>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle mb-0">
+                <thead><tr><th>Date</th><th>Amount</th><th>Method</th><th>Reference</th><th>Receipt</th></tr></thead>
+                <tbody>{% for payment in payments %}<tr><td>{{ payment.paid_at }}</td><td>{{ payment.amount }} {{ payment.currency }}</td><td>{{ payment.get_method_display }}</td><td>{{ payment.reference }}</td><td><a href="{% url 'general_receipt_detail' payment.receipt.pk %}">{{ payment.receipt.receipt_number }}</a></td></tr>{% empty %}<tr><td colspan="5" class="text-muted text-center py-3">No payments recorded</td></tr>{% endfor %}</tbody>
+            </table>
+        </div>
+    </div>
+    <iframe class="w-100 border rounded" style="height: 720px;" src="{% url 'general_invoice_html_preview' invoice.pk %}?v={% now 'U' %}"></iframe>
+</div>
+{% endblock %}

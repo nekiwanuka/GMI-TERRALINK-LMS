@@ -1,0 +1,32 @@
+{% extends "logistics/base.html" %}
+{% block title %}{{ quotation.quotation_number }} - General Quotation{% endblock %}
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1><i class="bi bi-file-earmark-text"></i> General Quotation {{ quotation.quotation_number }}</h1>
+        <div class="btn-group">
+            <a class="btn btn-outline-secondary" href="{% url 'general_quotation_list' %}">Back</a>
+            <a class="btn btn-outline-dark" href="{% url 'general_quotation_html_preview' quotation.pk %}" target="_blank"><i class="bi bi-eye"></i> Preview</a>
+            <a class="btn btn-outline-primary" href="{% url 'general_quotation_html_preview' quotation.pk %}?download=1" target="_blank"><i class="bi bi-printer"></i> Print</a>
+            <a class="btn btn-outline-danger" href="{% url 'general_quotation_pdf' quotation.pk %}"><i class="bi bi-download"></i> Download</a>
+            {% if can_manage_general_documents %}<a class="btn btn-warning" href="{% url 'general_quotation_update' quotation.pk %}">Edit</a><a class="btn btn-success" href="{% url 'general_quotation_convert_to_invoice' quotation.pk %}">Create Invoice</a>{% endif %}
+        </div>
+    </div>
+    <div class="row g-3 mb-3">
+        <div class="col-md-3"><div class="card p-3"><div class="text-muted small">Client</div><strong>{{ quotation.client.name }}</strong></div></div>
+        <div class="col-md-3"><div class="card p-3"><div class="text-muted small">Purpose</div><strong>{{ quotation.purpose_label }}</strong></div></div>
+        <div class="col-md-3"><div class="card p-3"><div class="text-muted small">Status</div><strong>{{ quotation.get_status_display }}</strong></div></div>
+        <div class="col-md-3"><div class="card p-3"><div class="text-muted small">Total</div><strong>{{ quotation.total_amount }} {{ quotation.currency }}</strong></div></div>
+    </div>
+    <div class="card p-3">
+        <div class="table-responsive">
+            <table class="table table-sm align-middle">
+                <thead><tr><th>Description</th><th>Qty</th><th>Unit Price</th><th class="text-end">Amount</th></tr></thead>
+                <tbody>{% for item in quotation.items %}<tr><td>{{ item.description }}</td><td>{{ item.quantity }}</td><td>{{ item.unit_price }}</td><td class="text-end">{{ item.amount }}</td></tr>{% endfor %}</tbody>
+            </table>
+        </div>
+        <div class="text-end"><div>Subtotal: {{ quotation.subtotal }}</div><div>Tax: {{ quotation.tax_amount }}</div><div>Discount: {{ quotation.discount_amount }}</div><h5>Total: {{ quotation.total_amount }} {{ quotation.currency }}</h5></div>
+    </div>
+    <iframe class="w-100 mt-3 border rounded" style="height: 720px;" src="{% url 'general_quotation_html_preview' quotation.pk %}?v={% now 'U' %}"></iframe>
+</div>
+{% endblock %}

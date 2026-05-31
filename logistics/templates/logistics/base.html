@@ -365,6 +365,9 @@
                                     <span class="sidebar-submenu-text"><i class="bi bi-file-earmark-check"></i> Invoice</span>
                                     <span class="sidebar-count-badge">{{ shell_final_invoice_count_logistics }}</span>
                                 </a>
+                                <a class="sidebar-submenu-link {% if 'general_' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'general_invoice_list' %}">
+                                    <span class="sidebar-submenu-text"><i class="bi bi-files"></i> General Documents</span>
+                                </a>
                             </div>
                         </div>
                     </li>
@@ -474,6 +477,9 @@
                                 <a class="sidebar-submenu-link {% if 'final_invoice' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'sourcing_final_invoice_list' %}">
                                     <span class="sidebar-submenu-text"><i class="bi bi-file-earmark-check"></i> Invoice</span>
                                     <span class="sidebar-count-badge">{{ shell_final_invoice_count_sourcing }}</span>
+                                </a>
+                                <a class="sidebar-submenu-link {% if 'general_' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'general_invoice_list' %}">
+                                    <span class="sidebar-submenu-text"><i class="bi bi-files"></i> General Documents</span>
                                 </a>
                             </div>
                         </div>

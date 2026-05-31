@@ -14,6 +14,10 @@ from .models import (
     FinalInvoice,
     FulfillmentLine,
     FulfillmentOrder,
+    GeneralInvoice,
+    GeneralPayment,
+    GeneralQuotation,
+    GeneralReceipt,
     InventoryItem,
     Loading,
     Payment,
@@ -606,6 +610,41 @@ class ProofOfDeliveryAdmin(admin.ModelAdmin):
     readonly_fields = ("pod_number", "created_at", "updated_at")
     date_hierarchy = "delivered_at"
     list_select_related = ("loading", "fulfillment_order", "created_by")
+
+
+@admin.register(GeneralQuotation)
+class GeneralQuotationAdmin(admin.ModelAdmin):
+    list_display = ("quotation_number", "client", "purpose", "status", "total_amount", "currency", "created_at")
+    list_filter = ("status", "purpose", "currency", "created_at")
+    search_fields = ("quotation_number", "client__name", "custom_purpose")
+    readonly_fields = ("quotation_number", "created_at", "updated_at")
+    raw_id_fields = ("client", "transaction", "created_by")
+
+
+@admin.register(GeneralInvoice)
+class GeneralInvoiceAdmin(admin.ModelAdmin):
+    list_display = ("invoice_number", "client", "purpose", "status", "total_amount", "amount_paid", "balance", "created_at")
+    list_filter = ("status", "purpose", "currency", "created_at")
+    search_fields = ("invoice_number", "client__name", "custom_purpose")
+    readonly_fields = ("invoice_number", "amount_paid", "balance", "created_at", "updated_at")
+    raw_id_fields = ("client", "transaction", "quotation", "created_by")
+
+
+@admin.register(GeneralPayment)
+class GeneralPaymentAdmin(admin.ModelAdmin):
+    list_display = ("invoice", "amount", "currency", "method", "reference", "paid_at", "created_by")
+    list_filter = ("method", "currency", "paid_at")
+    search_fields = ("invoice__invoice_number", "reference", "invoice__client__name")
+    raw_id_fields = ("invoice", "created_by")
+
+
+@admin.register(GeneralReceipt)
+class GeneralReceiptAdmin(admin.ModelAdmin):
+    list_display = ("receipt_number", "issued_to", "amount", "currency", "purpose", "issued_at")
+    list_filter = ("currency", "issued_at")
+    search_fields = ("receipt_number", "issued_to", "payment__invoice__invoice_number")
+    readonly_fields = ("receipt_number", "payment", "amount", "currency", "issued_to", "purpose", "issued_at")
+    raw_id_fields = ("payment",)
 
 
 @admin.register(ShipmentWorkflow)

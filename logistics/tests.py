@@ -26,7 +26,11 @@ from logistics.models import (
     SupplierPayment,
     Transaction,
 )
-from logistics.views import _extract_text_from_file, _has_extractable_document_text
+from logistics.views import (
+    _extract_text_from_file,
+    _final_invoice_payment_snapshot,
+    _has_extractable_document_text,
+)
 
 
 class AdminCoverageTests(SimpleTestCase):
@@ -601,6 +605,32 @@ class PurchaseOrderSplitTests(TestCase):
         payment = SupplierPayment.objects.get()
         self.assertEqual(payment.purchase_order_id, self.purchase_order.pk)
         self.assertContains(over_cap_response, "exceeds the allowed client deposit room")
+
+    def test_invoice_payment_snapshot_allocates_goods_shipping_then_company_fees(self):
+        invoice = FinalInvoice.objects.create(
+            transaction=self.transaction,
+            items=[],
+            subtotal=Decimal("2112.00"),
+            sourcing_fee=Decimal("400.00"),
+            shipping_cost=Decimal("300.00"),
+            service_fee=Decimal("180.00"),
+            created_by=self.user,
+        )
+
+        partial_snapshot = _final_invoice_payment_snapshot(
+            invoice, Decimal("1000.00")
+        )
+        shipping_snapshot = _final_invoice_payment_snapshot(
+            invoice, Decimal("2500.00")
+        )
+
+        self.assertEqual(partial_snapshot["item_balance"], Decimal("1112.00"))
+        self.assertEqual(partial_snapshot["shipping_balance"], Decimal("300.00"))
+        self.assertEqual(partial_snapshot["company_fee_balance"], Decimal("580.00"))
+        self.assertEqual(shipping_snapshot["item_balance"], Decimal("0.00"))
+        self.assertEqual(shipping_snapshot["shipping_balance"], Decimal("0.00"))
+        self.assertEqual(shipping_snapshot["company_fee_paid"], Decimal("88.00"))
+        self.assertEqual(shipping_snapshot["company_fee_balance"], Decimal("492.00"))
 
     def test_quantity_splits_use_sequence_numbers_and_supplier_cost(self):
         first_response = self.client.post(

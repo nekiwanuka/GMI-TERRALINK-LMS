@@ -460,6 +460,9 @@ from .models import (
     FinalInvoice,
     FulfillmentLine,
     FulfillmentOrder,
+    GeneralInvoice,
+    GeneralPayment,
+    GeneralQuotation,
     InventoryItem,
     Loading,
     Payment,
@@ -2268,6 +2271,141 @@ class TransactionPaymentRecordForm(NormalizedTextMixin, forms.ModelForm):
             cleaned_data["change_given"] = Decimal("0")
 
         return cleaned_data
+
+class GeneralQuotationForm(NormalizedTextMixin, forms.ModelForm):
+    class Meta:
+        model = GeneralQuotation
+        fields = (
+            "client",
+            "transaction",
+            "purpose",
+            "custom_purpose",
+            "status",
+            "valid_until",
+            "currency",
+            "tax_amount",
+            "discount_amount",
+            "notes",
+            "terms",
+        )
+        widgets = {
+            "client": forms.Select(attrs={"class": "form-control"}),
+            "transaction": forms.Select(attrs={"class": "form-control"}),
+            "purpose": forms.Select(attrs={"class": "form-control"}),
+            "custom_purpose": forms.TextInput(attrs={"class": "form-control"}),
+            "status": forms.Select(attrs={"class": "form-control"}),
+            "valid_until": forms.DateInput(
+                attrs={"class": "form-control", "type": "date"}
+            ),
+            "currency": forms.TextInput(attrs={"class": "form-control"}),
+            "tax_amount": forms.NumberInput(
+                attrs={"class": "form-control", "step": "0.01", "min": "0"}
+            ),
+            "discount_amount": forms.NumberInput(
+                attrs={"class": "form-control", "step": "0.01", "min": "0"}
+            ),
+            "notes": forms.Textarea(attrs={"class": "form-control", "rows": 3}),
+            "terms": forms.Textarea(attrs={"class": "form-control", "rows": 3}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["client"].queryset = Client.objects.order_by("name")
+        self.fields["transaction"].queryset = Transaction.objects.select_related(
+            "customer"
+        ).order_by("-created_at")
+        self.fields["transaction"].required = False
+        self.fields["custom_purpose"].required = False
+        self.fields["currency"].initial = self.fields["currency"].initial or "USD"
+
+
+class GeneralInvoiceForm(NormalizedTextMixin, forms.ModelForm):
+    class Meta:
+        model = GeneralInvoice
+        fields = (
+            "client",
+            "transaction",
+            "purpose",
+            "custom_purpose",
+            "status",
+            "due_date",
+            "currency",
+            "tax_amount",
+            "discount_amount",
+            "notes",
+            "terms",
+        )
+        widgets = {
+            "client": forms.Select(attrs={"class": "form-control"}),
+            "transaction": forms.Select(attrs={"class": "form-control"}),
+            "purpose": forms.Select(attrs={"class": "form-control"}),
+            "custom_purpose": forms.TextInput(attrs={"class": "form-control"}),
+            "status": forms.Select(attrs={"class": "form-control"}),
+            "due_date": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
+            "currency": forms.TextInput(attrs={"class": "form-control"}),
+            "tax_amount": forms.NumberInput(
+                attrs={"class": "form-control", "step": "0.01", "min": "0"}
+            ),
+            "discount_amount": forms.NumberInput(
+                attrs={"class": "form-control", "step": "0.01", "min": "0"}
+            ),
+            "notes": forms.Textarea(attrs={"class": "form-control", "rows": 3}),
+            "terms": forms.Textarea(attrs={"class": "form-control", "rows": 3}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["client"].queryset = Client.objects.order_by("name")
+        self.fields["transaction"].queryset = Transaction.objects.select_related(
+            "customer"
+        ).order_by("-created_at")
+        self.fields["transaction"].required = False
+        self.fields["custom_purpose"].required = False
+        self.fields["currency"].initial = self.fields["currency"].initial or "USD"
+
+
+class GeneralPaymentForm(NormalizedTextMixin, forms.ModelForm):
+    class Meta:
+        model = GeneralPayment
+        fields = (
+            "amount",
+            "currency",
+            "method",
+            "reference",
+            "proof_of_payment",
+            "paid_at",
+            "notes",
+        )
+        widgets = {
+            "amount": forms.NumberInput(
+                attrs={"class": "form-control", "step": "0.01", "min": "0.01"}
+            ),
+            "currency": forms.TextInput(attrs={"class": "form-control"}),
+            "method": forms.Select(attrs={"class": "form-control"}),
+            "reference": forms.TextInput(attrs={"class": "form-control"}),
+            "proof_of_payment": forms.FileInput(attrs={"class": "form-control"}),
+            "paid_at": forms.DateTimeInput(
+                attrs={"class": "form-control", "type": "datetime-local"}
+            ),
+            "notes": forms.Textarea(attrs={"class": "form-control", "rows": 2}),
+        }
+
+    def __init__(self, *args, invoice=None, **kwargs):
+        self.invoice = invoice
+        super().__init__(*args, **kwargs)
+        if invoice:
+            self.fields["currency"].initial = invoice.currency
+            self.fields["amount"].widget.attrs["max"] = str(invoice.balance)
+        if self.instance and self.instance.pk and self.instance.paid_at:
+            self.initial["paid_at"] = self.instance.paid_at.strftime("%Y-%m-%dT%H:%M")
+
+    def clean_amount(self):
+        amount = self.cleaned_data["amount"]
+        if self.invoice and amount > self.invoice.balance:
+            raise forms.ValidationError(
+                f"Payment cannot exceed the invoice balance of {self.invoice.balance}."
+            )
+        return amount
 
 
 class CommissionForm(NormalizedTextMixin, forms.ModelForm):
