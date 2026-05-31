@@ -6,21 +6,22 @@
 {% block extra_css %}
 <style>
 .transaction-workspace {
-    display: grid;
+    background: #f3f5f7;
+    border: 1px solid #e2e6ea;
+    border-radius: 12px;
+    display: flex;
+    flex-direction: column;
     gap: 1rem;
-    background: #f4f5f7;
-    border: 1px solid #e4e7eb;
-    border-radius: 16px;
     padding: 1rem;
 }
 .transaction-hero {
-    border: 1px solid rgba(17, 17, 17, 0.08);
-    border-top: 4px solid #d4af37;
+    background: #fff;
+    border: 1px solid #dfe4e8;
+    border-left: 4px solid #d4af37;
     border-radius: 12px;
-    background: linear-gradient(135deg, #171717 0%, #343434 100%);
-    color: #fff;
-    padding: 1.2rem;
-    box-shadow: 0 14px 28px rgba(17, 17, 17, 0.12);
+    box-shadow: 0 8px 20px rgba(17, 24, 39, .05);
+    color: #1f2933;
+    padding: 1rem;
 }
 .transaction-hero-grid {
     display: grid;
@@ -29,56 +30,68 @@
     align-items: center;
 }
 .transaction-eyebrow {
-    display: inline-flex;
-    gap: .45rem;
     align-items: center;
-    color: rgba(255, 255, 255, .72);
+    color: #6b7280;
+    display: inline-flex;
     font-size: .72rem;
     font-weight: 800;
+    gap: .45rem;
     letter-spacing: .08em;
     text-transform: uppercase;
 }
 .transaction-title {
-    margin: .25rem 0 .25rem;
-    color: #fff;
-    font-size: 1.85rem;
+    color: #111827;
+    font-size: 1.6rem;
     line-height: 1.15;
+    margin: .25rem 0;
 }
 .transaction-meta {
+    align-items: center;
+    color: #5f6b7a;
     display: flex;
     flex-wrap: wrap;
     gap: .55rem;
-    align-items: center;
-    color: rgba(255, 255, 255, .76);
     font-size: .88rem;
 }
 .transaction-status-pill {
-    display: inline-flex;
     align-items: center;
-    gap: .35rem;
-    border: 1px solid rgba(212, 175, 55, .34);
-    border-radius: 999px;
-    border: 1px solid #e0e3e7;
+    background: #fff8df;
+    border: 1px solid #ead58a;
     border-radius: 10px;
+    color: #4f3d05;
+    display: inline-flex;
+    gap: .35rem;
     padding: .35rem .65rem;
     font-size: .78rem;
     font-weight: 800;
-    box-shadow: 0 6px 18px rgba(17, 17, 17, .04);
+}
 .transaction-hero-actions {
-.transaction-flow-strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .5rem;
+    justify-content: flex-end;
+}
+.transaction-hero-actions .btn {
+    border-radius: 8px;
+    white-space: nowrap;
+}
+.transaction-flow-strip,
+.transaction-kpis {
     display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
     gap: .65rem;
 }
-.transaction-flow-item {
+.transaction-flow-item,
+.transaction-kpi {
     align-items: center;
     background: #fff;
-    border: 1px solid #e0e3e7;
+    border: 1px solid #dfe4e8;
     border-radius: 10px;
     display: flex;
     gap: .65rem;
     min-height: 64px;
     padding: .75rem;
+    box-shadow: 0 4px 12px rgba(17, 24, 39, .035);
 }
 .transaction-flow-item i {
     align-items: center;
@@ -90,69 +103,43 @@
     height: 34px;
     justify-content: center;
 }
-.transaction-flow-item strong {
+.transaction-flow-item strong,
+.transaction-kpi strong {
     color: #191919;
     display: block;
-    font-size: .84rem;
+    font-size: .9rem;
     line-height: 1.15;
+    margin-top: .12rem;
+    overflow-wrap: anywhere;
 }
-.transaction-flow-item span {
+.transaction-flow-item span,
+.transaction-kpi span {
     color: #68717d;
     display: block;
     font-size: .72rem;
+    font-weight: 800;
+    letter-spacing: .04em;
     line-height: 1.2;
     margin-top: .15rem;
-}
-    display: flex;
-    border: 1px solid #e0e3e7;
-    gap: .5rem;
-    border-radius: 10px;
-}
-.transaction-hero-actions .btn {
-    border-radius: 10px;
-    white-space: nowrap;
-}
-    border: 1px solid #e0e3e7;
-    border-radius: 12px;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    box-shadow: 0 8px 18px rgba(17, 17, 17, .04);
-}
-.transaction-kpi {
-    border: 1px solid rgba(17, 17, 17, .08);
-    border-radius: 14px;
-    background: #fff;
-    padding: .85rem .95rem;
-    min-width: 0;
-    box-shadow: 0 8px 24px rgba(17, 17, 17, .06);
-}
-.transaction-kpi span {
-    display: block;
-    color: #6c6c6c;
-    font-size: .7rem;
-    font-weight: 800;
-    letter-spacing: .06em;
     text-transform: uppercase;
 }
-.transaction-kpi strong {
+.transaction-kpi {
     display: block;
-    margin-top: .25rem;
-    color: #191919;
-    font-size: 1.05rem;
-    overflow-wrap: anywhere;
+    min-width: 0;
 }
 .transaction-note {
-    border: 1px solid rgba(17, 17, 17, .08);
+    border: 1px solid #e7d999;
     border-left: 4px solid #d4af37;
-    border-radius: 12px;
+    border-radius: 10px;
     background: #fffdf7;
     padding: .8rem .95rem;
     color: #383838;
 }
 .transaction-step-card {
-    border: 1px solid rgba(17, 17, 17, .08);
-    border-radius: 16px;
+    border: 1px solid #dfe4e8;
+    border-radius: 10px;
     overflow: hidden;
-    box-shadow: 0 10px 28px rgba(17, 17, 17, .06);
+    box-shadow: 0 4px 14px rgba(17, 24, 39, .04);
 }
 .transaction-step-header {
     display: flex;
@@ -162,7 +149,7 @@
     border-bottom: 1px solid #e0e3e7;
     background: #f8fafc;
     color: #191919;
-    padding: .85rem 1rem;
+    padding: .75rem .9rem;
 }
 .transaction-step-title {
     display: inline-flex;
@@ -170,23 +157,23 @@
     gap: .55rem;
     margin: 0;
     color: #191919;
-    font-size: .95rem;
+    font-size: .9rem;
     font-weight: 800;
 }
 .step-number {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 1.7rem;
-    height: 1.7rem;
+    width: 1.55rem;
+    height: 1.55rem;
     border-radius: 999px;
     background: #191919;
     color: #d4af37;
-    font-size: .78rem;
+    font-size: .72rem;
     font-weight: 900;
 }
 .transaction-empty {
-    padding: 2rem 1rem;
+    padding: 1.7rem 1rem;
     color: #6c6c6c;
     text-align: center;
 }
@@ -201,6 +188,9 @@
     justify-content: space-between;
     gap: 1rem;
     align-items: center;
+}
+.transaction-list-item strong {
+    color: #111827;
 }
 .transaction-list-item .btn-group {
     flex-wrap: wrap;
@@ -226,9 +216,7 @@
     color: #191919;
 }
 @media (max-width: 991.98px) {
-    .transaction-hero-grid,
-    .transaction-kpis,
-    .transaction-flow-strip {
+    .transaction-hero-grid {
         grid-template-columns: 1fr;
     }
     .transaction-hero-actions {
@@ -240,6 +228,21 @@
     }
     .transaction-list-item .btn-group .btn {
         flex: 1 1 auto;
+    }
+}
+@media (max-width: 575.98px) {
+    .transaction-workspace {
+        border-radius: 0;
+        margin-left: -.75rem;
+        margin-right: -.75rem;
+        padding: .75rem;
+    }
+    .transaction-title {
+        font-size: 1.35rem;
+    }
+    .transaction-step-header {
+        align-items: flex-start;
+        flex-direction: column;
     }
 }
 </style>
