@@ -8703,7 +8703,6 @@ def receipt_list(request):
     )
 
 
-@login_required
 def _general_document_item_rows(document=None):
     rows = []
     for item in getattr(document, "items", []) or []:
