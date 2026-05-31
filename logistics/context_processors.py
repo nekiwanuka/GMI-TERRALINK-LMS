@@ -28,7 +28,7 @@ def logistics_shell_context(request):
 
     session_lane = (request.session.get("active_lane") or "").lower()
     cache_key = (
-        f"shell-context:v2:{request.user.pk}:{request.user.role}:"
+        f"shell-context:v3:{request.user.pk}:{request.user.role}:"
         f"{int(request.user.is_superuser)}:{session_lane}"
     )
     cached_context = cache.get(cache_key)

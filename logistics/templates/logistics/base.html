@@ -340,6 +340,11 @@
                             <i class="bi bi-people-fill"></i> Clients
                         </a>
                     </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if 'general_' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'general_invoice_list' %}" data-bs-toggle="tooltip" data-bs-placement="right" title="General quotations, invoices, payments and receipts">
+                            <i class="bi bi-files"></i> General Documents
+                        </a>
+                    </li>
 
                     {% if shell_active_lane != 'sourcing' %}
                     <li class="sidebar-section-label"><i class="bi bi-ship"></i> Logistics</li>

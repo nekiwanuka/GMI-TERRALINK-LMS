@@ -27,6 +27,7 @@ from logistics.models import (
     Transaction,
 )
 from logistics.views import (
+    _can_switch_lane,
     _extract_text_from_file,
     _final_invoice_payment_snapshot,
     _has_extractable_document_text,
@@ -168,6 +169,31 @@ class LoginOtpTests(TestCase):
         self.assertNotIn("_auth_user_id", self.client.session)
         self.assertEqual(len(mail.outbox), 1)
         self.assertEqual(mail.outbox[0].to, ["otp@gmiterralink.com"])
+
+
+class LaneSwitchingTests(TestCase):
+    def test_procurement_can_switch_to_logistics_and_all_lanes(self):
+        user = CustomUser.objects.create_user(
+            username="lane-procurement",
+            password="testpass123",
+            role="PROCUREMENT",
+        )
+        self.client.force_login(user)
+
+        self.assertTrue(_can_switch_lane(user))
+
+        response = self.client.post(
+            reverse("set_lane"),
+            {"lane": "logistics", "next": reverse("dashboard")},
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(self.client.session.get("active_lane"), "logistics")
+
+        self.client.post(
+            reverse("set_lane"),
+            {"lane": "all", "next": reverse("dashboard")},
+        )
+        self.assertEqual(self.client.session.get("active_lane"), "all")
 
 
 class UserManagementTests(TestCase):

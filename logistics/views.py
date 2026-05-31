@@ -575,12 +575,7 @@ def _lane_label(lane):
 
 
 def _can_switch_lane(user):
-    return user.is_superuser or getattr(user, "role", "") in {
-        "ADMIN",
-        "DIRECTOR",
-        "FINANCE",
-        "OFFICE_ADMIN",
-    }
+    return bool(getattr(user, "is_authenticated", False))
 
 
 def _can_edit_closed_trade_documents(user):
