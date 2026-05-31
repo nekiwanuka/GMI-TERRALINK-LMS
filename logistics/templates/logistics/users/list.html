@@ -24,6 +24,35 @@
     </div>
 
     <div class="card">
+        <div class="card-body border-bottom">
+            <form method="get" class="row g-2 align-items-end">
+                <div class="col-md-4">
+                    <label class="form-label small fw-bold">Search</label>
+                    <input type="search" name="search" value="{{ search }}" class="form-control" placeholder="Username, email, name or phone">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small fw-bold">Role</label>
+                    <select name="role" class="form-select">
+                        <option value="">All roles</option>
+                        {% for value, label in role_choices %}
+                        <option value="{{ value }}" {% if role_filter == value %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small fw-bold">Status</label>
+                    <select name="status" class="form-select">
+                        <option value="">All statuses</option>
+                        <option value="active" {% if status_filter == 'active' %}selected{% endif %}>Active</option>
+                        <option value="inactive" {% if status_filter == 'inactive' %}selected{% endif %}>Inactive</option>
+                    </select>
+                </div>
+                <div class="col-md-3 d-flex gap-2">
+                    <button type="submit" class="btn btn-dark flex-fill"><i class="bi bi-funnel me-1"></i>Apply</button>
+                    <a href="{% url request.resolver_match.url_name %}" class="btn btn-outline-secondary"><i class="bi bi-arrow-counterclockwise"></i></a>
+                </div>
+            </form>
+        </div>
         <div class="table-responsive">
             <table class="table table-hover mb-0">
                 <thead class="table-light">

@@ -18,12 +18,19 @@
                 <div class="col-md-6">
                     <input type="text" class="form-control" name="search" value="{{ search }}" placeholder="Search by entry number or client">
                 </div>
-                <div class="col-md-4">
+                <div class="col-md-3">
                     <select class="form-select" name="status">
                         <option value="">All statuses</option>
                         {% for value, label in status_choices %}
                         <option value="{{ value }}" {% if status_filter == value %}selected{% endif %}>{{ label }}</option>
                         {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <select class="form-select" name="closed">
+                        <option value="">All entries</option>
+                        <option value="0" {% if closed_filter == '0' %}selected{% endif %}>Open</option>
+                        <option value="1" {% if closed_filter == '1' %}selected{% endif %}>Closed</option>
                     </select>
                 </div>
                 <div class="col-md-2 d-grid">

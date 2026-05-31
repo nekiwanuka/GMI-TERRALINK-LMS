@@ -13,17 +13,12 @@
 
     <div class="card mb-4">
         <div class="card-body">
-            <form method="get" class="form-inline">
-                <select name="status" class="form-select me-2">
-                    <option value="">All Status</option>
-                    {% for value, label in status_choices %}
-                    <option value="{{ value }}" {% if status_filter == value %}selected{% endif %}>{{ label }}</option>
-                    {% endfor %}
-                </select>
-                <button type="submit" class="btn btn-primary">Filter</button>
-                {% if status_filter %}
-                <a href="{% url 'container_return_list' %}" class="btn btn-secondary ms-2">Clear</a>
-                {% endif %}
+            <form method="get" class="row g-2 align-items-end">
+                <div class="col-md-4"><label class="form-label small fw-bold">Search</label><input type="search" name="search" value="{{ search }}" class="form-control" placeholder="Container, loading ID or client"></div>
+                <div class="col-md-2"><label class="form-label small fw-bold">Status</label><select name="status" class="form-select"><option value="">All statuses</option>{% for value, label in status_choices %}<option value="{{ value }}" {% if status_filter == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+                <div class="col-md-2"><label class="form-label small fw-bold">From</label><input type="date" name="date_from" value="{{ date_from }}" class="form-control"></div>
+                <div class="col-md-2"><label class="form-label small fw-bold">To</label><input type="date" name="date_to" value="{{ date_to }}" class="form-control"></div>
+                <div class="col-md-2 d-flex gap-2"><button type="submit" class="btn btn-primary flex-fill">Filter</button>{% if search or status_filter or date_from or date_to %}<a href="{% url 'container_return_list' %}" class="btn btn-secondary">Clear</a>{% endif %}</div>
             </form>
         </div>
     </div>
@@ -89,7 +84,7 @@
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="7" class="text-center text-muted py-4">No container returns found</td>
+                        <td colspan="8" class="text-center text-muted py-4">No container returns found</td>
                     </tr>
                     {% endfor %}
                 </tbody>

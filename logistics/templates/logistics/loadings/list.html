@@ -15,17 +15,22 @@
     <div class="card mb-4">
         <div class="card-body">
             {% include "logistics/components/lane_switcher.html" %}
-            <form method="get" class="form-inline">
-                <div class="input-group w-100">
-                    <input type="text" name="search" class="form-control" placeholder="Search by Loading ID, Client, or Origin" value="{{ search }}">
-                    <button type="submit" class="btn btn-primary">
-                        <i class="bi bi-search"></i> Search
-                    </button>
-                    {% if search %}
-                    <a href="{% url 'loading_list' %}" class="btn btn-secondary">
-                        <i class="bi bi-x-circle"></i> Clear
-                    </a>
-                    {% endif %}
+            <form method="get" class="row g-2 align-items-end">
+                <div class="col-md-6">
+                    <label class="form-label small fw-bold">Search</label>
+                    <input type="search" name="search" class="form-control" placeholder="Loading ID, client, or origin" value="{{ search }}">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small fw-bold">Closure</label>
+                    <select name="closed" class="form-select">
+                        <option value="">All cargo</option>
+                        <option value="0" {% if closed_filter == '0' %}selected{% endif %}>Open</option>
+                        <option value="1" {% if closed_filter == '1' %}selected{% endif %}>Closed</option>
+                    </select>
+                </div>
+                <div class="col-md-3 d-flex gap-2">
+                    <button type="submit" class="btn btn-primary flex-fill"><i class="bi bi-funnel me-1"></i>Apply</button>
+                    {% if search or closed_filter %}<a href="{% url 'loading_list' %}" class="btn btn-secondary"><i class="bi bi-x-circle"></i></a>{% endif %}
                 </div>
             </form>
         </div>

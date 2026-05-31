@@ -11,6 +11,16 @@
         </div>
     </div>
     <div class="card">
+        <div class="card-body border-bottom">
+            <form method="get" class="row g-2 align-items-end">
+                <div class="col-md-4"><label class="form-label small fw-bold">Search</label><input type="search" name="search" value="{{ search }}" class="form-control" placeholder="Invoice, client or purpose"></div>
+                <div class="col-md-2"><label class="form-label small fw-bold">Status</label><select name="status" class="form-select"><option value="">All statuses</option>{% for value, label in status_choices %}<option value="{{ value }}" {% if status_filter == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+                <div class="col-md-2"><label class="form-label small fw-bold">Purpose</label><select name="purpose" class="form-select"><option value="">All purposes</option>{% for value, label in purpose_choices %}<option value="{{ value }}" {% if purpose_filter == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+                <div class="col-md-2"><label class="form-label small fw-bold">From</label><input type="date" name="date_from" value="{{ date_from }}" class="form-control"></div>
+                <div class="col-md-1"><label class="form-label small fw-bold">To</label><input type="date" name="date_to" value="{{ date_to }}" class="form-control"></div>
+                <div class="col-md-1 d-flex gap-2"><button class="btn btn-dark" type="submit"><i class="bi bi-funnel"></i></button>{% if search or status_filter or purpose_filter or date_from or date_to %}<a href="{% url 'general_invoice_list' %}" class="btn btn-outline-secondary"><i class="bi bi-arrow-counterclockwise"></i></a>{% endif %}</div>
+            </form>
+        </div>
         <div class="table-responsive">
             <table class="table table-hover align-middle mb-0">
                 <thead class="table-light"><tr><th>Invoice</th><th>Client</th><th>Purpose</th><th>Total</th><th>Paid</th><th>Balance</th><th>Status</th><th>Actions</th></tr></thead>

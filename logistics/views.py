@@ -319,6 +319,20 @@ def _text_search_q(field_name, value):
     return Q(**{f"{field_name}__{lookup}": value})
 
 
+def _request_date_bounds(request):
+    date_from = (request.GET.get("date_from") or "").strip()
+    date_to = (request.GET.get("date_to") or "").strip()
+    return date_from, date_to
+
+
+def _apply_date_bounds(queryset, field_name, date_from, date_to):
+    if date_from:
+        queryset = queryset.filter(**{f"{field_name}__date__gte": date_from})
+    if date_to:
+        queryset = queryset.filter(**{f"{field_name}__date__lte": date_to})
+    return queryset
+
+
 def _notify_roles(*, title, message, link="", category="system", roles=None):
     roles = expand_allowed_roles(
         roles or ["ADMIN", "DIRECTOR", "FINANCE", "PROCUREMENT"]
@@ -1650,7 +1664,24 @@ def user_list(request):
                     messages.success(request, f"Updated {target.username}'s role.")
         return redirect(request.resolver_match.url_name or "user_list")
 
-    users = CustomUser.objects.all()
+    search = (request.GET.get("search") or "").strip()
+    role_filter = (request.GET.get("role") or "").strip()
+    status_filter = (request.GET.get("status") or "").strip()
+    users = CustomUser.objects.all().order_by("username")
+    if search:
+        users = users.filter(
+            _text_search_q("username", search)
+            | _text_search_q("email", search)
+            | _text_search_q("first_name", search)
+            | _text_search_q("last_name", search)
+            | _text_search_q("phone", search)
+        )
+    if role_filter:
+        users = users.filter(role=role_filter)
+    if status_filter == "active":
+        users = users.filter(is_active=True)
+    elif status_filter == "inactive":
+        users = users.filter(is_active=False)
     page_obj, query_string, page_range = paginate_queryset(request, users)
     return render(
         request,
@@ -1661,6 +1692,9 @@ def user_list(request):
             "query_string": query_string,
             "page_range": page_range,
             "role_choices": role_choices,
+            "search": search,
+            "role_filter": role_filter,
+            "status_filter": status_filter,
             "settings_mode": request.resolver_match.url_name == "settings",
         },
     )
@@ -1760,6 +1794,7 @@ def client_list(request):
         {
             "clients": page_obj,
             "search": search,
+            "closed_filter": closed_filter or "",
             "page_obj": page_obj,
             "query_string": query_string,
             "page_range": page_range,
@@ -3106,16 +3141,28 @@ def payment_receipt(request, transaction_id):
 @login_required
 def container_return_list(request):
     containers = ContainerReturn.objects.select_related("loading")
+    search = (request.GET.get("search") or "").strip()
     status = request.GET.get("status", "")
+    date_from, date_to = _request_date_bounds(request)
+    if search:
+        containers = containers.filter(
+            _text_search_q("container_number", search)
+            | _text_search_q("loading__loading_id", search)
+            | _text_search_q("loading__client__name", search)
+        )
     if status:
         containers = containers.filter(status=status)
+    containers = _apply_date_bounds(containers, "return_date", date_from, date_to)
     page_obj, query_string, page_range = paginate_queryset(request, containers)
     return render(
         request,
         "logistics/containers/list.html",
         {
             "containers": page_obj,
+            "search": search,
             "status_filter": status,
+            "date_from": date_from,
+            "date_to": date_to,
             "status_choices": ContainerReturn.STATUS_CHOICES,
             "page_obj": page_obj,
             "query_string": query_string,
@@ -3439,8 +3486,21 @@ def document_archive_list(request):
     archives = DocumentArchive.objects.select_related(
         "transaction__customer", "document", "archived_by"
     ).order_by("-created_at")
+    search = (request.GET.get("search") or "").strip()
+    document_type = (request.GET.get("document_type") or "").strip()
+    date_from, date_to = _request_date_bounds(request)
     if not request.user.is_superuser and normalized_role(request.user) != "DIRECTOR":
         archives = archives.filter(archived_by__role=normalized_role(request.user))
+    if search:
+        archives = archives.filter(
+            _text_search_q("transaction__transaction_id", search)
+            | _text_search_q("transaction__customer__name", search)
+            | _text_search_q("original_filename", search)
+            | _text_search_q("source_label", search)
+        )
+    if document_type:
+        archives = archives.filter(document_type=document_type)
+    archives = _apply_date_bounds(archives, "created_at", date_from, date_to)
     page_obj, query_string, page_range = paginate_queryset(request, archives)
     return render(
         request,
@@ -3450,6 +3510,11 @@ def document_archive_list(request):
             "page_obj": page_obj,
             "query_string": query_string,
             "page_range": page_range,
+            "search": search,
+            "document_type_filter": document_type,
+            "document_type_choices": Document.DOCUMENT_TYPE_CHOICES,
+            "date_from": date_from,
+            "date_to": date_to,
         },
     )
 
@@ -3761,12 +3826,25 @@ def _build_proforma_form_values(*, post_data=None, proforma=None):
 @procurement_required
 def sourcing_list(request):
     lane = _resolve_lane(request)
+    search = (request.GET.get("search") or "").strip()
+    status_filter = (request.GET.get("status") or "").strip()
     sourcing_records = _apply_sourcing_lane(
         Sourcing.objects.select_related(
             "transaction__customer", "created_by", "generated_proforma"
         ),
         lane,
     )
+    if search:
+        sourcing_records = sourcing_records.filter(
+            _text_search_q("transaction__transaction_id", search)
+            | _text_search_q("transaction__customer__name", search)
+            | _text_search_q("supplier_name", search)
+            | _text_search_q("supplier_contact", search)
+        )
+    if status_filter == "converted":
+        sourcing_records = sourcing_records.filter(generated_proforma__isnull=False)
+    elif status_filter == "worksheet":
+        sourcing_records = sourcing_records.filter(generated_proforma__isnull=True)
     page_obj, query_string, page_range = paginate_queryset(request, sourcing_records)
     return render(
         request,
@@ -3776,6 +3854,8 @@ def sourcing_list(request):
             "page_obj": page_obj,
             "query_string": query_string,
             "page_range": page_range,
+            "search": search,
+            "status_filter": status_filter,
             "active_lane": lane,
             "active_lane_label": _lane_label(lane),
             "can_switch_lane": _can_switch_lane(request.user),
@@ -3787,12 +3867,27 @@ def sourcing_list(request):
 @procurement_required
 def inventory_list(request):
     lane = _resolve_lane(request)
+    search = (request.GET.get("search") or "").strip()
+    status_filter = (request.GET.get("status") or "").strip()
+    supplier_filter = (request.GET.get("supplier") or "").strip()
     items = _apply_inventory_lane(
         InventoryItem.objects.select_related(
             "supplier", "updated_by", "transaction__customer"
         ).prefetch_related("fulfillment_lines"),
         lane,
     )
+    if search:
+        items = items.filter(
+            _text_search_q("item_code", search)
+            | _text_search_q("item_name", search)
+            | _text_search_q("transaction__transaction_id", search)
+            | _text_search_q("transaction__customer__name", search)
+            | _text_search_q("supplier__name", search)
+        )
+    if status_filter:
+        items = items.filter(stock_status=status_filter)
+    if supplier_filter:
+        items = items.filter(supplier_id=supplier_filter)
     page_obj, query_string, page_range = paginate_queryset(request, items)
     return render(
         request,
@@ -3800,6 +3895,11 @@ def inventory_list(request):
         {
             "items": page_obj,
             "supplier_form": SupplierForm(),
+            "suppliers": Supplier.objects.order_by("name"),
+            "search": search,
+            "status_filter": status_filter,
+            "supplier_filter": supplier_filter,
+            "stock_status_choices": InventoryItem.STOCK_STATUS_CHOICES,
             "page_obj": page_obj,
             "query_string": query_string,
             "page_range": page_range,
@@ -4593,12 +4693,24 @@ def sourcing_create(request):
 @login_required
 def proforma_list(request):
     lane = _resolve_lane_with_path(request)
+    search = (request.GET.get("search") or "").strip()
+    status_filter = (request.GET.get("status") or "").strip()
+    date_from, date_to = _request_date_bounds(request)
     proformas = _apply_proforma_lane(
         ProformaInvoice.objects.select_related(
             "transaction__customer", "created_by", "loading"
         ),
         lane,
     )
+    if search:
+        proformas = proformas.filter(
+            _text_search_q("transaction__transaction_id", search)
+            | _text_search_q("transaction__customer__name", search)
+            | _text_search_q("loading__loading_id", search)
+        )
+    if status_filter:
+        proformas = proformas.filter(status=status_filter)
+    proformas = _apply_date_bounds(proformas, "created_at", date_from, date_to)
     page_obj, query_string, page_range = paginate_queryset(request, proformas)
     return render(
         request,
@@ -4608,6 +4720,11 @@ def proforma_list(request):
             "page_obj": page_obj,
             "query_string": query_string,
             "page_range": page_range,
+            "search": search,
+            "status_filter": status_filter,
+            "status_choices": ProformaInvoice.STATUS_CHOICES,
+            "date_from": date_from,
+            "date_to": date_to,
             "active_lane": lane,
             "active_lane_label": _lane_label(lane),
             "can_switch_lane": _can_switch_lane(request.user),
@@ -5328,15 +5445,28 @@ def proforma_html_preview(request, pk):
 @login_required
 def final_invoice_list(request):
     lane = _resolve_lane_with_path(request)
+    search = (request.GET.get("search") or "").strip()
+    shipping_filter = (request.GET.get("shipping_mode") or "").strip()
+    payment_filter = (request.GET.get("payment") or "").strip()
+    date_from, date_to = _request_date_bounds(request)
     invoices = _apply_final_invoice_lane(
         FinalInvoice.objects.select_related(
             "transaction__customer", "created_by", "loading"
         ),
         lane,
     )
-    page_obj, query_string, page_range = paginate_queryset(request, invoices)
+    if search:
+        invoices = invoices.filter(
+            _text_search_q("transaction__transaction_id", search)
+            | _text_search_q("transaction__customer__name", search)
+            | _text_search_q("loading__loading_id", search)
+        )
+    if shipping_filter:
+        invoices = invoices.filter(shipping_mode=shipping_filter)
+    invoices = _apply_date_bounds(invoices, "created_at", date_from, date_to)
 
-    for inv in page_obj:
+    decorated_invoices = list(invoices)
+    for inv in decorated_invoices:
         total_paid = _final_invoice_total_paid(inv)
         payment_snapshot = _final_invoice_payment_snapshot(inv, total_paid)
         inv.total_paid_for_display = payment_snapshot["total_paid"]
@@ -5347,6 +5477,15 @@ def final_invoice_list(request):
         inv.payment_status_label = payment_snapshot["invoice_label"]
         inv.payment_status_class = payment_snapshot["invoice_class"]
 
+    if payment_filter == "paid":
+        decorated_invoices = [inv for inv in decorated_invoices if inv.balance_for_display <= 0]
+    elif payment_filter == "partial":
+        decorated_invoices = [inv for inv in decorated_invoices if inv.total_paid_for_display > 0 and inv.balance_for_display > 0]
+    elif payment_filter == "unpaid":
+        decorated_invoices = [inv for inv in decorated_invoices if inv.total_paid_for_display <= 0]
+
+    page_obj, query_string, page_range = paginate_queryset(request, decorated_invoices)
+
     return render(
         request,
         "logistics/invoicing/final_list.html",
@@ -5355,6 +5494,12 @@ def final_invoice_list(request):
             "page_obj": page_obj,
             "query_string": query_string,
             "page_range": page_range,
+            "search": search,
+            "shipping_filter": shipping_filter,
+            "payment_filter": payment_filter,
+            "shipping_choices": FinalInvoice.SHIPPING_MODE_CHOICES,
+            "date_from": date_from,
+            "date_to": date_to,
             "active_lane": lane,
             "active_lane_label": _lane_label(lane),
             "can_switch_lane": _can_switch_lane(request.user),
@@ -8766,15 +8911,37 @@ def _save_general_document_form(request, form):
 
 @login_required
 def general_quotation_list(request):
+    search = (request.GET.get("search") or "").strip()
+    status_filter = (request.GET.get("status") or "").strip()
+    purpose_filter = (request.GET.get("purpose") or "").strip()
+    date_from, date_to = _request_date_bounds(request)
     quotations = GeneralQuotation.objects.select_related("client", "created_by").order_by(
         "-created_at"
     )
+    if search:
+        quotations = quotations.filter(
+            _text_search_q("quotation_number", search)
+            | _text_search_q("client__name", search)
+            | _text_search_q("custom_purpose", search)
+        )
+    if status_filter:
+        quotations = quotations.filter(status=status_filter)
+    if purpose_filter:
+        quotations = quotations.filter(purpose=purpose_filter)
+    quotations = _apply_date_bounds(quotations, "created_at", date_from, date_to)
     return render(
         request,
         "logistics/general_documents/quotation_list.html",
         {
             "quotations": quotations,
             "can_manage_general_documents": _can_manage_general_documents(request.user),
+            "search": search,
+            "status_filter": status_filter,
+            "purpose_filter": purpose_filter,
+            "status_choices": GeneralQuotation.STATUS_CHOICES,
+            "purpose_choices": GeneralQuotation.PURPOSE_CHOICES,
+            "date_from": date_from,
+            "date_to": date_to,
         },
     )
 
@@ -8884,9 +9051,24 @@ def general_quotation_convert_to_invoice(request, pk):
 
 @login_required
 def general_invoice_list(request):
+    search = (request.GET.get("search") or "").strip()
+    status_filter = (request.GET.get("status") or "").strip()
+    purpose_filter = (request.GET.get("purpose") or "").strip()
+    date_from, date_to = _request_date_bounds(request)
     invoices = GeneralInvoice.objects.select_related("client", "created_by").order_by(
         "-created_at"
     )
+    if search:
+        invoices = invoices.filter(
+            _text_search_q("invoice_number", search)
+            | _text_search_q("client__name", search)
+            | _text_search_q("custom_purpose", search)
+        )
+    if status_filter:
+        invoices = invoices.filter(status=status_filter)
+    if purpose_filter:
+        invoices = invoices.filter(purpose=purpose_filter)
+    invoices = _apply_date_bounds(invoices, "created_at", date_from, date_to)
     return render(
         request,
         "logistics/general_documents/invoice_list.html",
@@ -8894,6 +9076,13 @@ def general_invoice_list(request):
             "invoices": invoices,
             "can_manage_general_documents": _can_manage_general_documents(request.user),
             "can_collect_general_payment": _can_collect_general_invoice_payment(request.user),
+            "search": search,
+            "status_filter": status_filter,
+            "purpose_filter": purpose_filter,
+            "status_choices": GeneralInvoice.STATUS_CHOICES,
+            "purpose_choices": GeneralInvoice.PURPOSE_CHOICES,
+            "date_from": date_from,
+            "date_to": date_to,
         },
     )
 
@@ -9006,13 +9195,33 @@ def general_invoice_record_payment(request, pk):
 
 @login_required
 def general_receipt_list(request):
+    search = (request.GET.get("search") or "").strip()
+    method_filter = (request.GET.get("method") or "").strip()
+    date_from, date_to = _request_date_bounds(request)
     receipts = GeneralReceipt.objects.select_related(
         "payment", "payment__invoice", "payment__invoice__client"
     ).order_by("-issued_at")
+    if search:
+        receipts = receipts.filter(
+            _text_search_q("receipt_number", search)
+            | _text_search_q("issued_to", search)
+            | _text_search_q("payment__invoice__invoice_number", search)
+            | _text_search_q("payment__reference", search)
+        )
+    if method_filter:
+        receipts = receipts.filter(payment__method=method_filter)
+    receipts = _apply_date_bounds(receipts, "issued_at", date_from, date_to)
     return render(
         request,
         "logistics/general_documents/receipt_list.html",
-        {"receipts": receipts},
+        {
+            "receipts": receipts,
+            "search": search,
+            "method_filter": method_filter,
+            "method_choices": GeneralPayment.METHOD_CHOICES,
+            "date_from": date_from,
+            "date_to": date_to,
+        },
     )
 
 
@@ -10865,6 +11074,9 @@ def supplier_payment_list(request):
         "purchase_order__transaction__customer", "created_by"
     ).order_by("-paid_at", "-id")
     search = (request.GET.get("search") or "").strip()
+    method_filter = (request.GET.get("method") or "").strip()
+    currency_filter = (request.GET.get("currency") or "").strip()
+    date_from, date_to = _request_date_bounds(request)
     if search:
         qs = qs.filter(
             Q(purchase_order__po_number__icontains=search)
@@ -10872,6 +11084,11 @@ def supplier_payment_list(request):
             | Q(reference__icontains=search)
             | Q(purchase_order__transaction__transaction_id__icontains=search)
         )
+    if method_filter:
+        qs = qs.filter(method=method_filter)
+    if currency_filter:
+        qs = qs.filter(currency=currency_filter)
+    qs = _apply_date_bounds(qs, "paid_at", date_from, date_to)
     page_obj, query_string, page_range = paginate_queryset(request, qs)
     totals = qs.aggregate(total=Sum("amount"))
     return render(
@@ -10883,6 +11100,12 @@ def supplier_payment_list(request):
             "query_string": query_string,
             "page_range": page_range,
             "search": search,
+            "method_filter": method_filter,
+            "currency_filter": currency_filter,
+            "date_from": date_from,
+            "date_to": date_to,
+            "method_choices": SupplierPayment.METHOD_CHOICES,
+            "currency_choices": ["USD", "UGX", "CNY", "EUR", "GBP", "KES"],
             "grand_total": totals["total"] or Decimal("0.00"),
         },
     )

@@ -30,6 +30,14 @@
 
     <div class="card">
         {% include "logistics/components/lane_switcher.html" %}
+        <div class="card-body border-bottom">
+            <form method="get" class="row g-2 align-items-end">
+                <div class="col-md-4"><label class="form-label small fw-bold">Search</label><input type="search" name="search" value="{{ search }}" class="form-control" placeholder="Item, transaction, client or supplier"></div>
+                <div class="col-md-3"><label class="form-label small fw-bold">Stock status</label><select name="status" class="form-select"><option value="">All statuses</option>{% for value, label in stock_status_choices %}<option value="{{ value }}" {% if status_filter == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+                <div class="col-md-3"><label class="form-label small fw-bold">Supplier</label><select name="supplier" class="form-select"><option value="">All suppliers</option>{% for supplier in suppliers %}<option value="{{ supplier.pk }}" {% if supplier_filter == supplier.pk|stringformat:'s' %}selected{% endif %}>{{ supplier.name }}</option>{% endfor %}</select></div>
+                <div class="col-md-2 d-flex gap-2"><button class="btn btn-dark flex-fill" type="submit"><i class="bi bi-funnel me-1"></i>Apply</button>{% if search or status_filter or supplier_filter %}<a href="{% url 'inventory_list' %}" class="btn btn-outline-secondary"><i class="bi bi-arrow-counterclockwise"></i></a>{% endif %}</div>
+            </form>
+        </div>
         <div class="table-responsive">
             <table class="table table-hover align-middle mb-0">
                 <thead class="table-light">

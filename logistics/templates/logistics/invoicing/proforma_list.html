@@ -13,6 +13,15 @@
 
     <div class="card">
         {% include "logistics/components/lane_switcher.html" %}
+        <div class="card-body border-bottom">
+            <form method="get" class="row g-2 align-items-end">
+                <div class="col-md-4"><label class="form-label small fw-bold">Search</label><input type="search" name="search" value="{{ search }}" class="form-control" placeholder="Transaction, customer or cargo"></div>
+                <div class="col-md-2"><label class="form-label small fw-bold">Status</label><select name="status" class="form-select"><option value="">All statuses</option>{% for value, label in status_choices %}<option value="{{ value }}" {% if status_filter == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+                <div class="col-md-2"><label class="form-label small fw-bold">From</label><input type="date" name="date_from" value="{{ date_from }}" class="form-control"></div>
+                <div class="col-md-2"><label class="form-label small fw-bold">To</label><input type="date" name="date_to" value="{{ date_to }}" class="form-control"></div>
+                <div class="col-md-2 d-flex gap-2"><button class="btn btn-dark flex-fill" type="submit"><i class="bi bi-funnel me-1"></i>Apply</button>{% if search or status_filter or date_from or date_to %}<a href="{% if active_lane == 'logistics' %}{% url 'logistics_proforma_list' %}{% else %}{% url 'sourcing_proforma_list' %}{% endif %}" class="btn btn-outline-secondary"><i class="bi bi-arrow-counterclockwise"></i></a>{% endif %}</div>
+            </form>
+        </div>
         <div class="table-responsive">
             <table class="table table-hover align-middle mb-0">
                 <thead class="table-light">
