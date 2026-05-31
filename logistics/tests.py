@@ -20,6 +20,8 @@ from logistics.models import (
     Document,
     DocumentArchive,
     FinalInvoice,
+    GeneralInvoice,
+    GeneralQuotation,
     PaymentTransaction,
     PurchaseOrder,
     ProformaInvoice,
@@ -194,6 +196,69 @@ class LaneSwitchingTests(TestCase):
             {"lane": "all", "next": reverse("dashboard")},
         )
         self.assertEqual(self.client.session.get("active_lane"), "all")
+
+
+class GeneralDocumentCreateTests(TestCase):
+    def setUp(self):
+        self.user = CustomUser.objects.create_user(
+            username="general-doc-finance",
+            password="testpass123",
+            role="FINANCE",
+        )
+        self.client_record = Client.objects.create(
+            name="General Document Client",
+            contact_person="General Document Client",
+            phone="0000000000",
+            address="Test address",
+            created_by=self.user,
+        )
+        self.client.force_login(self.user)
+
+    def _document_payload(self, status):
+        return {
+            "client": str(self.client_record.pk),
+            "transaction": "",
+            "purpose": "SERVICE",
+            "custom_purpose": "",
+            "status": status,
+            "currency": "USD",
+            "tax_amount": "0",
+            "discount_amount": "0",
+            "notes": "",
+            "terms": "",
+            "item_description": ["General service"],
+            "item_quantity": ["2"],
+            "item_unit_price": ["25"],
+        }
+
+    def test_general_invoice_create_posts_successfully(self):
+        payload = self._document_payload("ISSUED")
+        payload["due_date"] = ""
+
+        response = self.client.post(reverse("general_invoice_create"), payload)
+
+        invoice = GeneralInvoice.objects.get()
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            response.url, reverse("general_invoice_detail", kwargs={"pk": invoice.pk})
+        )
+        self.assertEqual(invoice.subtotal, Decimal("50"))
+        self.assertEqual(invoice.created_by, self.user)
+
+    def test_general_quotation_create_posts_successfully(self):
+        payload = self._document_payload("SENT")
+        payload["valid_until"] = ""
+
+        response = self.client.post(reverse("general_quotation_create"), payload)
+
+        quotation = GeneralQuotation.objects.get()
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            response.url,
+            reverse("general_quotation_detail", kwargs={"pk": quotation.pk}),
+        )
+        self.assertEqual(quotation.subtotal, Decimal("50"))
+        self.assertEqual(quotation.created_by, self.user)
 
 
 class UserManagementTests(TestCase):

@@ -8724,7 +8724,7 @@ def _parse_general_document_items(request):
     items = []
     subtotal = Decimal("0.00")
     for index, description in enumerate(descriptions):
-        description = normalize_text_entry(description)
+        description = normalize_text_entry("description", description)
         if not description:
             continue
         try:
