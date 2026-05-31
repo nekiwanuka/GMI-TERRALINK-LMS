@@ -6628,6 +6628,24 @@ def purchase_order_update(request, pk):
         if status not in valid_statuses:
             status = purchase_order.status
 
+        if status in {"RECEIVED", "FULFILLED"}:
+            _, supplier_total_paid, _ = _po_supplier_summary(purchase_order)
+            if subtotal > 0 and supplier_total_paid < subtotal:
+                messages.error(
+                    request,
+                    "This purchase order cannot be marked received or fulfilled until the supplier portion is fully paid from client funds.",
+                )
+                return render(
+                    request,
+                    "logistics/invoicing/purchase_order_form.html",
+                    {
+                        "purchase_order": purchase_order,
+                        "suppliers": suppliers,
+                        "title": title,
+                        "can_edit_line_items": can_edit_line_items,
+                    },
+                )
+
         purchase_order.supplier_name = supplier_name
         purchase_order.supplier_address = supplier_address
         purchase_order.items = items
@@ -10172,9 +10190,6 @@ def _decorate_purchase_order_edit_lock(purchase_order):
     is_served = effective_status in {
         "RECEIVED",
         "FULFILLED",
-    } or purchase_order.status in {
-        "RECEIVED",
-        "FULFILLED",
     }
     is_closed = purchase_order.transaction.is_closed
 
@@ -10214,11 +10229,13 @@ def _decorate_purchase_order_edit_lock(purchase_order):
 
 
 def _purchase_order_effective_status(purchase_order, total_paid=None):
-    if purchase_order.status in {"RECEIVED", "FULFILLED"}:
-        return purchase_order.status
     if total_paid is None:
         _, total_paid, _ = _po_supplier_summary(purchase_order)
     subtotal = purchase_order.subtotal or Decimal("0.00")
+    if purchase_order.status in {"RECEIVED", "FULFILLED"} and (
+        subtotal <= 0 or total_paid >= subtotal
+    ):
+        return purchase_order.status
     if subtotal > 0 and total_paid >= subtotal:
         return "FULFILLED"
     supplier_name = (purchase_order.supplier_name or "").strip().lower()

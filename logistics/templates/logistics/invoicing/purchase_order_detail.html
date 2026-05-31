@@ -93,7 +93,7 @@
 }
 .po-payment-cards {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 0.75rem;
     margin-bottom: 1rem;
 }
@@ -298,6 +298,11 @@
                     <span class="badge {{ purchase_order.item_funds_status_class|default:'bg-secondary' }} mt-2">{{ purchase_order.item_funds_status_label|default:'Item Funds Pending' }}</span>
                 </div>
                 <div class="po-payment-card">
+                    <small>Invoice Balance</small>
+                    <strong>{{ purchase_order.client_invoice_balance|default:'0.00' }} {{ purchase_order.final_invoice.currency }}</strong>
+                    <span class="badge {% if purchase_order.client_invoice_balance > 0 %}bg-warning text-dark{% else %}bg-success{% endif %} mt-2">{% if purchase_order.client_invoice_balance > 0 %}Balance Due{% else %}Cleared{% endif %}</span>
+                </div>
+                <div class="po-payment-card">
                     <small>Fees Balance</small>
                     <strong>{{ purchase_order.client_fee_balance|default:'0.00' }} {{ purchase_order.final_invoice.currency }}</strong>
                     <span class="badge {{ purchase_order.fee_payment_status_class|default:'bg-secondary' }} mt-2">{{ purchase_order.fee_payment_status_label|default:'Fees Status Pending' }}</span>
@@ -307,6 +312,12 @@
             <div class="alert alert-warning mt-3 no-print">
                 <i class="bi bi-exclamation-triangle-fill"></i>
                 <strong>Supplier Payments Locked:</strong> More supplier payments can only be recorded once the client makes an additional deposit. (Current Client Deposit: {{ purchase_order.client_deposit|floatformat:2 }} USD, Record Limit Reached).
+            </div>
+            {% endif %}
+            {% if purchase_order.client_invoice_balance > 0 %}
+            <div class="alert alert-info mt-3 no-print">
+                <i class="bi bi-info-circle-fill"></i>
+                <strong>Partial client payment:</strong> Supplier payments and clearance are limited to the client funds received. Split POs may be prepared, but unpaid portions cannot be cleared on credit.
             </div>
             {% endif %}
             {% endif %}

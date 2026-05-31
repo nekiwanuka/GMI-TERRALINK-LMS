@@ -822,7 +822,7 @@ class PurchaseOrderSplitTests(TestCase):
         split_po.refresh_from_db()
         self.assertEqual(split_po.split_quantity, Decimal("2.00"))
 
-    def test_procurement_can_control_po_splits_but_not_directly_edit_po(self):
+    def test_procurement_can_edit_po_and_control_splits(self):
         procurement_user = CustomUser.objects.create_user(
             username="po-procurement",
             password="testpass123",
@@ -837,7 +837,7 @@ class PurchaseOrderSplitTests(TestCase):
         self.assertEqual(detail_response.status_code, 200)
         self.assertContains(detail_response, "Purchase Orders")
         self.assertContains(detail_response, "Split PO")
-        self.assertNotContains(detail_response, "Edit PO")
+        self.assertContains(detail_response, "Edit PO")
 
         edit_response = self.client.post(
             reverse("purchase_order_update", kwargs={"pk": self.purchase_order.pk}),
@@ -845,15 +845,15 @@ class PurchaseOrderSplitTests(TestCase):
                 "supplier_name": "Edited Supplier",
                 "status": "SENT",
                 "item_desc[]": ["Changed item"],
-                "item_qty[]": ["1"],
-                "item_unit_price[]": ["1"],
+                "item_qty[]": ["5"],
+                "item_unit_price[]": ["100"],
             },
         )
 
         self.assertEqual(edit_response.status_code, 302)
         self.purchase_order.refresh_from_db()
-        self.assertEqual(self.purchase_order.supplier_name, "Supplier Pending")
-        self.assertEqual(self.purchase_order.items[0]["description"], "Solar battery")
+        self.assertEqual(self.purchase_order.supplier_name, "Edited Supplier")
+        self.assertEqual(self.purchase_order.items[0]["description"], "Changed item")
 
         split_response = self.client.post(
             reverse(
@@ -866,3 +866,32 @@ class PurchaseOrderSplitTests(TestCase):
         self.assertTrue(
             PurchaseOrder.objects.filter(parent_po=self.purchase_order).exists()
         )
+
+    def test_unpaid_purchase_order_cannot_be_marked_fulfilled(self):
+        response = self.client.post(
+            reverse("purchase_order_update", kwargs={"pk": self.purchase_order.pk}),
+            {
+                "supplier_name": "Supplier Pending",
+                "status": "FULFILLED",
+                "item_desc[]": ["Solar battery"],
+                "item_qty[]": ["5"],
+                "item_unit_price[]": ["100"],
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "cannot be marked received or fulfilled")
+        self.purchase_order.refresh_from_db()
+        self.assertEqual(self.purchase_order.status, "PENDING")
+
+    def test_manual_received_status_without_supplier_payment_does_not_clear_po(self):
+        self.purchase_order.status = "RECEIVED"
+        self.purchase_order.save(update_fields=["status", "updated_at"])
+
+        response = self.client.get(
+            reverse("purchase_order_detail", kwargs={"pk": self.purchase_order.pk})
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "served/fulfilled")
+        self.assertContains(response, "Unpaid")
