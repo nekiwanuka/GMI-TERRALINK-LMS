@@ -2750,6 +2750,7 @@ def dashboard(request):
         in {
             "ADMIN",
             "DIRECTOR",
+            "FINANCE",
         }
     )
     active_lane = _resolve_lane(request) if request.user.is_authenticated else "all"
@@ -2787,6 +2788,7 @@ def dashboard(request):
         "recent_clients": scoped_clients[:5],
         "recent_loadings": scoped_loadings[:5],
         "can_view_financials": can_view_financials,
+        "user_role": user_role,
     }
     if request.user.is_authenticated and can_view_financials:
         context.update(

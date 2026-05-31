@@ -8,15 +8,19 @@
 .transaction-workspace {
     display: grid;
     gap: 1rem;
+    background: #f4f5f7;
+    border: 1px solid #e4e7eb;
+    border-radius: 16px;
+    padding: 1rem;
 }
 .transaction-hero {
     border: 1px solid rgba(17, 17, 17, 0.08);
     border-top: 4px solid #d4af37;
-    border-radius: 18px;
-    background: linear-gradient(135deg, #191919 0%, #3f3a3a 100%);
+    border-radius: 12px;
+    background: linear-gradient(135deg, #171717 0%, #343434 100%);
     color: #fff;
     padding: 1.2rem;
-    box-shadow: 0 18px 44px rgba(17, 17, 17, 0.16);
+    box-shadow: 0 14px 28px rgba(17, 17, 17, 0.12);
 }
 .transaction-hero-grid {
     display: grid;
@@ -54,26 +58,64 @@
     gap: .35rem;
     border: 1px solid rgba(212, 175, 55, .34);
     border-radius: 999px;
-    background: rgba(212, 175, 55, .16);
-    color: #fff;
+    border: 1px solid #e0e3e7;
+    border-radius: 10px;
     padding: .35rem .65rem;
     font-size: .78rem;
     font-weight: 800;
-}
+    box-shadow: 0 6px 18px rgba(17, 17, 17, .04);
 .transaction-hero-actions {
+.transaction-flow-strip {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: .65rem;
+}
+.transaction-flow-item {
+    align-items: center;
+    background: #fff;
+    border: 1px solid #e0e3e7;
+    border-radius: 10px;
     display: flex;
-    flex-wrap: wrap;
+    gap: .65rem;
+    min-height: 64px;
+    padding: .75rem;
+}
+.transaction-flow-item i {
+    align-items: center;
+    background: #f7f1d5;
+    border-radius: 8px;
+    color: #4d3d07;
+    display: inline-flex;
+    flex: 0 0 34px;
+    height: 34px;
+    justify-content: center;
+}
+.transaction-flow-item strong {
+    color: #191919;
+    display: block;
+    font-size: .84rem;
+    line-height: 1.15;
+}
+.transaction-flow-item span {
+    color: #68717d;
+    display: block;
+    font-size: .72rem;
+    line-height: 1.2;
+    margin-top: .15rem;
+}
+    display: flex;
+    border: 1px solid #e0e3e7;
     gap: .5rem;
-    justify-content: flex-end;
+    border-radius: 10px;
 }
 .transaction-hero-actions .btn {
     border-radius: 10px;
     white-space: nowrap;
 }
-.transaction-kpis {
-    display: grid;
+    border: 1px solid #e0e3e7;
+    border-radius: 12px;
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: .75rem;
+    box-shadow: 0 8px 18px rgba(17, 17, 17, .04);
 }
 .transaction-kpi {
     border: 1px solid rgba(17, 17, 17, .08);
@@ -117,8 +159,8 @@
     align-items: center;
     justify-content: space-between;
     gap: .75rem;
-    border-bottom: 1px solid rgba(17, 17, 17, .08);
-    background: #f8f8f8;
+    border-bottom: 1px solid #e0e3e7;
+    background: #f8fafc;
     color: #191919;
     padding: .85rem 1rem;
 }
@@ -165,9 +207,9 @@
     justify-content: flex-end;
 }
 .transaction-mini-card {
-    border: 1px solid rgba(17, 17, 17, .08);
-    border-radius: 12px;
-    background: #fafafa;
+    border: 1px solid #e0e3e7;
+    border-radius: 10px;
+    background: #fbfcfd;
     padding: .9rem;
     height: 100%;
 }
@@ -185,7 +227,8 @@
 }
 @media (max-width: 991.98px) {
     .transaction-hero-grid,
-    .transaction-kpis {
+    .transaction-kpis,
+    .transaction-flow-strip {
         grid-template-columns: 1fr;
     }
     .transaction-hero-actions {
@@ -229,6 +272,14 @@
                 {% endif %}
             </div>
         </div>
+    </section>
+
+    <section class="transaction-flow-strip" aria-label="Transaction workflow summary">
+        <div class="transaction-flow-item"><i class="bi bi-file-earmark-arrow-up"></i><div><strong>Intake</strong><span>{{ documents.count }} document{{ documents.count|pluralize }}</span></div></div>
+        <div class="transaction-flow-item"><i class="bi bi-file-earmark-text"></i><div><strong>Quotation</strong><span>{{ proformas|length }} proforma{{ proformas|length|pluralize }}</span></div></div>
+        <div class="transaction-flow-item"><i class="bi bi-receipt-cutoff"></i><div><strong>Invoice</strong><span>{{ final_invoices|length }} final invoice{{ final_invoices|length|pluralize }}</span></div></div>
+        <div class="transaction-flow-item"><i class="bi bi-cash-coin"></i><div><strong>Payment</strong><span>{% if latest_invoice %}{{ latest_payment_snapshot.invoice_label }}{% else %}Awaiting invoice{% endif %}</span></div></div>
+        <div class="transaction-flow-item"><i class="bi bi-truck"></i><div><strong>Fulfillment</strong><span>{% if fulfillment_order %}{{ fulfillment_order.get_status_display }}{% else %}Not started{% endif %}</span></div></div>
     </section>
 
     {% if transaction.is_closed and not can_edit_closed_trade_documents %}
