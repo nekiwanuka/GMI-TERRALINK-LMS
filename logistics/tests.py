@@ -7,8 +7,10 @@ from unittest.mock import patch
 
 from django.apps import apps
 from django.contrib import admin
+from django.contrib.contenttypes.models import ContentType
 from django.core import mail
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.template.loader import render_to_string
 from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 
@@ -19,12 +21,15 @@ from logistics.models import (
     CustomUser,
     Document,
     DocumentArchive,
+    DocumentSignature,
     FinalInvoice,
     GeneralInvoice,
+    GeneralPayment,
     GeneralQuotation,
     PaymentTransaction,
     PurchaseOrder,
     ProformaInvoice,
+    SignatureProfile,
     SupplierPayment,
     Transaction,
 )
@@ -200,6 +205,12 @@ class LaneSwitchingTests(TestCase):
 
 class GeneralDocumentCreateTests(TestCase):
     def setUp(self):
+        self.media_root = tempfile.mkdtemp()
+        self.override = override_settings(MEDIA_ROOT=self.media_root)
+        self.override.enable()
+        self.addCleanup(self.override.disable)
+        self.addCleanup(shutil.rmtree, self.media_root, ignore_errors=True)
+
         self.user = CustomUser.objects.create_user(
             username="general-doc-finance",
             password="testpass123",
@@ -259,6 +270,81 @@ class GeneralDocumentCreateTests(TestCase):
         )
         self.assertEqual(quotation.subtotal, Decimal("50"))
         self.assertEqual(quotation.created_by, self.user)
+
+    def test_general_document_previews_include_branding(self):
+        quotation = GeneralQuotation.objects.create(
+            client=self.client_record,
+            created_by=self.user,
+            status="SENT",
+            currency="USD",
+            subtotal=Decimal("50"),
+            items=[{"description": "General service", "quantity": "2", "unit_price": "25", "amount": "50"}],
+        )
+        invoice = GeneralInvoice.objects.create(
+            client=self.client_record,
+            created_by=self.user,
+            status="ISSUED",
+            currency="USD",
+            subtotal=Decimal("50"),
+            items=[{"description": "General service", "quantity": "2", "unit_price": "25", "amount": "50"}],
+        )
+        payment = GeneralPayment.objects.create(
+            invoice=invoice,
+            amount=Decimal("10"),
+            currency="USD",
+            method="CASH",
+            created_by=self.user,
+        )
+
+        rendered_documents = (
+            render_to_string(
+                "logistics/pdf/general_quotation_standalone.html",
+                {"quotation": quotation},
+            ),
+            render_to_string(
+                "logistics/pdf/general_invoice_standalone.html",
+                {"invoice": invoice},
+            ),
+            render_to_string(
+                "logistics/pdf/general_receipt_standalone.html",
+                {"receipt": payment.receipt},
+            ),
+        )
+
+        for rendered in rendered_documents:
+            self.assertIn("GMI TERRALINK", rendered)
+            self.assertIn("Uganda Branch | Kampala", rendered)
+
+    def test_general_invoice_can_be_signed(self):
+        invoice = GeneralInvoice.objects.create(
+            client=self.client_record,
+            created_by=self.user,
+            status="ISSUED",
+            currency="USD",
+            subtotal=Decimal("50"),
+            items=[{"description": "General service", "quantity": "2", "unit_price": "25", "amount": "50"}],
+        )
+        SignatureProfile.objects.create(
+            user=self.user,
+            title="Finance Manager",
+            signature_image=SimpleUploadedFile("signature.txt", b"signature"),
+        )
+
+        response = self.client.post(
+            reverse("general_invoice_sign", kwargs={"pk": invoice.pk}),
+            {"note": "Approved"},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            response.url, reverse("general_invoice_detail", kwargs={"pk": invoice.pk})
+        )
+        signature = DocumentSignature.objects.get(
+            content_type=ContentType.objects.get_for_model(invoice, for_concrete_model=False),
+            object_id=invoice.pk,
+        )
+        self.assertEqual(signature.signer_name, self.user.username)
+        self.assertEqual(signature.note, "Approved")
 
 
 class UserManagementTests(TestCase):

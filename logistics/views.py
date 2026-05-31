@@ -8813,7 +8813,20 @@ def general_quotation_detail(request, pk):
         {
             "quotation": quotation,
             "can_manage_general_documents": _can_manage_general_documents(request.user),
+            "document_signature": _document_signature_for(quotation),
         },
+    )
+
+
+@login_required
+@role_required("PROCUREMENT", "OFFICE_ADMIN", "FINANCE", "DIRECTOR", "ADMIN")
+def general_quotation_sign(request, pk):
+    quotation = get_object_or_404(GeneralQuotation, pk=pk)
+    return _sign_business_document(
+        request,
+        document=quotation,
+        detail_route="general_quotation_detail",
+        document_label=f"General Quotation {quotation.quotation_number}",
     )
 
 
@@ -8923,7 +8936,20 @@ def general_invoice_detail(request, pk):
             "can_edit_invoice": _can_edit_general_invoice(request.user, invoice),
             "can_collect_general_payment": _can_collect_general_invoice_payment(request.user)
             and invoice.balance > 0,
+            "document_signature": _document_signature_for(invoice),
         },
+    )
+
+
+@login_required
+@role_required("PROCUREMENT", "OFFICE_ADMIN", "FINANCE", "DIRECTOR", "ADMIN")
+def general_invoice_sign(request, pk):
+    invoice = get_object_or_404(GeneralInvoice, pk=pk)
+    return _sign_business_document(
+        request,
+        document=invoice,
+        detail_route="general_invoice_detail",
+        document_label=f"General Invoice {invoice.invoice_number}",
     )
 
 
@@ -8999,7 +9025,19 @@ def general_receipt_detail(request, pk):
     return render(
         request,
         "logistics/general_documents/receipt_detail.html",
-        {"receipt": receipt},
+        {"receipt": receipt, "document_signature": _document_signature_for(receipt)},
+    )
+
+
+@login_required
+@role_required("PROCUREMENT", "OFFICE_ADMIN", "FINANCE", "DIRECTOR", "ADMIN")
+def general_receipt_sign(request, pk):
+    receipt = get_object_or_404(GeneralReceipt, pk=pk)
+    return _sign_business_document(
+        request,
+        document=receipt,
+        detail_route="general_receipt_detail",
+        document_label=f"General Receipt {receipt.receipt_number}",
     )
 
 
@@ -9009,7 +9047,11 @@ def general_quotation_html_preview(request, pk):
     return render(
         request,
         "logistics/pdf/general_quotation_standalone.html",
-        {"quotation": quotation, "auto_print_pdf": request.GET.get("download") == "1"},
+        {
+            "quotation": quotation,
+            "document_signature": _document_signature_for(quotation),
+            "auto_print_pdf": request.GET.get("download") == "1",
+        },
     )
 
 
@@ -9024,7 +9066,11 @@ def general_invoice_html_preview(request, pk):
     return render(
         request,
         "logistics/pdf/general_invoice_standalone.html",
-        {"invoice": invoice, "auto_print_pdf": request.GET.get("download") == "1"},
+        {
+            "invoice": invoice,
+            "document_signature": _document_signature_for(invoice),
+            "auto_print_pdf": request.GET.get("download") == "1",
+        },
     )
 
 
@@ -9042,7 +9088,11 @@ def general_receipt_html_preview(request, pk):
     return render(
         request,
         "logistics/pdf/general_receipt_standalone.html",
-        {"receipt": receipt, "auto_print_pdf": request.GET.get("download") == "1"},
+        {
+            "receipt": receipt,
+            "document_signature": _document_signature_for(receipt),
+            "auto_print_pdf": request.GET.get("download") == "1",
+        },
     )
 
 

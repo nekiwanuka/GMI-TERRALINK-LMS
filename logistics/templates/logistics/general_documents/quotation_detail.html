@@ -9,6 +9,7 @@
             <a class="btn btn-outline-dark" href="{% url 'general_quotation_html_preview' quotation.pk %}" target="_blank"><i class="bi bi-eye"></i> Preview</a>
             <a class="btn btn-outline-primary" href="{% url 'general_quotation_html_preview' quotation.pk %}?download=1" target="_blank"><i class="bi bi-printer"></i> Print</a>
             <a class="btn btn-outline-danger" href="{% url 'general_quotation_pdf' quotation.pk %}"><i class="bi bi-download"></i> Download</a>
+            <a class="btn {% if document_signature %}btn-outline-success{% else %}btn-outline-dark{% endif %}" href="{% url 'general_quotation_sign' quotation.pk %}"><i class="bi bi-pen"></i> {% if document_signature %}Signed{% else %}Sign{% endif %}</a>
             {% if can_manage_general_documents %}<a class="btn btn-warning" href="{% url 'general_quotation_update' quotation.pk %}">Edit</a><a class="btn btn-success" href="{% url 'general_quotation_convert_to_invoice' quotation.pk %}">Create Invoice</a>{% endif %}
         </div>
     </div>

@@ -464,6 +464,11 @@ urlpatterns = [
         name="general_quotation_update",
     ),
     path(
+        "invoicing/general/quotations/<int:pk>/sign/",
+        views.general_quotation_sign,
+        name="general_quotation_sign",
+    ),
+    path(
         "invoicing/general/quotations/<int:pk>/convert/",
         views.general_quotation_convert_to_invoice,
         name="general_quotation_convert_to_invoice",
@@ -499,6 +504,11 @@ urlpatterns = [
         name="general_invoice_update",
     ),
     path(
+        "invoicing/general/invoices/<int:pk>/sign/",
+        views.general_invoice_sign,
+        name="general_invoice_sign",
+    ),
+    path(
         "invoicing/general/invoices/<int:pk>/payment/",
         views.general_invoice_record_payment,
         name="general_invoice_record_payment",
@@ -522,6 +532,11 @@ urlpatterns = [
         "invoicing/general/receipts/<int:pk>/",
         views.general_receipt_detail,
         name="general_receipt_detail",
+    ),
+    path(
+        "invoicing/general/receipts/<int:pk>/sign/",
+        views.general_receipt_sign,
+        name="general_receipt_sign",
     ),
     path(
         "invoicing/general/receipts/<int:pk>/html-preview/",

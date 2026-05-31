@@ -1,30 +1,55 @@
-<!doctype html>
+{% load static humanize %}<!doctype html>
 <html>
 <head>
     <meta charset="utf-8">
     <title>{{ receipt.receipt_number }}</title>
     <style>
-        body { font-family: Arial, sans-serif; color: #1f2933; margin: 32px; }
-        .header { display: flex; justify-content: space-between; border-bottom: 2px solid #111827; padding-bottom: 14px; margin-bottom: 28px; }
-        .brand { font-size: 22px; font-weight: 700; }
-        .doc-title { text-align: right; font-size: 18px; font-weight: 700; text-transform: uppercase; }
-        .receipt-box { border: 1px solid #d1d5db; padding: 18px; margin-top: 20px; }
-        .row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #eef2f7; }
-        .row:last-child { border-bottom: 0; }
-        .label { color: #6b7280; font-size: 12px; text-transform: uppercase; }
-        .amount { font-size: 24px; font-weight: 700; }
-        @media print { body { margin: 18mm; } }
+        @page { size: A4 portrait; margin: 10mm 14mm 18mm; }
+        * { box-sizing: border-box; }
+        body { font-family: Arial, sans-serif; color: #1f2933; margin: 0; background: #fff; font-size: 9.5px; }
+        .document { border: 1px solid #d8d8d8; border-radius: 8px; overflow: hidden; }
+        .top-ledger { width: 100%; border-collapse: collapse; border-top: 5px solid #101010; border-bottom: 3px solid #d4af37; }
+        .logo-cell { width: 126px; padding: 10px 12px 9px 14px; }
+        .logo-card { border: 1px solid #d4af37; border-radius: 7px; padding: 6px 8px; background: #ffffff; }
+        .logo { width: 94px; display: block; }
+        .brand-cell { padding: 12px 10px 9px 0; vertical-align: middle; }
+        .brand-name { font-size: 20px; font-weight: 700; color: #101010; }
+        .brand-line { margin-top: 4px; font-size: 8px; color: #8a6d1d; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; }
+        .doc-cell { width: 220px; padding: 10px 14px 9px 8px; text-align: right; vertical-align: middle; }
+        .doc-title { font-size: 18px; font-weight: 700; text-transform: uppercase; }
+        .doc-number { display: inline-block; margin-top: 5px; background: #101010; color: #fff; border-right: 18px solid #d4af37; padding: 5px 8px; font-size: 12.5px; font-weight: 700; }
+        .address-strip { width: 100%; border-collapse: collapse; background: #f7f4ea; border-bottom: 1px solid #e5d8ac; }
+        .address-strip td { width: 50%; padding: 7px 14px; }
+        .address-strip td + td { border-left: 1px solid #e5d8ac; }
+        .addr-title { font-size: 8px; font-weight: 700; color: #8a6d1d; text-transform: uppercase; letter-spacing: .8px; margin-bottom: 3px; }
+        .addr-line { font-size: 8.6px; color: #262626; margin-bottom: 2px; }
+        .addr-phone { font-size: 9px; font-weight: 700; color: #101010; }
+        .body-pad { padding: 18px 14px 14px; }
+        .receipt-box { border: 1px solid #d1d5db; border-radius: 8px; overflow: hidden; }
+        .receipt-row { display: flex; justify-content: space-between; gap: 24px; padding: 11px 12px; border-bottom: 1px solid #eef2f7; }
+        .receipt-row:last-child { border-bottom: 0; }
+        .label { color: #6b7280; font-size: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: .7px; }
+        .amount { font-size: 24px; font-weight: 700; color: #101010; }
+        .lower { display: grid; grid-template-columns: 1fr 260px; gap: 18px; margin-top: 24px; align-items: end; }
+        .terms { border: 1px solid #e5d8ac; border-radius: 8px; background: #f7f4ea; padding: 10px; line-height: 1.45; }
+        .signature { text-align: center; border: 1px solid #d8d8d8; border-top: 3px solid #d4af37; border-radius: 8px; padding: 10px; min-height: 95px; }
+        .sig-img { max-height: 38px; max-width: 180px; object-fit: contain; margin-bottom: 4px; }
+        .sig-line { width: 170px; margin: 26px auto 0; border-top: 1px solid #101010; padding-top: 4px; font-weight: 700; }
+        .sig-line.signed { margin-top: 4px; }
+        .sig-sub { font-size: 8px; color: #555; margin-top: 2px; }
+        @media screen { body { width: 210mm; min-height: 297mm; margin: 0 auto; padding: 10mm 14mm; background: #fff; } html { background: #e9e9e9; } }
+        @media print { body { margin: 0; } }
     </style>
 </head>
 <body>
-    <div class="header"><div><div class="brand">GMI TERRALINK</div><div>General Receipt</div></div><div class="doc-title">General Receipt<br>{{ receipt.receipt_number }}</div></div>
-    <div class="receipt-box">
-        <div class="row"><div><div class="label">Received From</div><strong>{{ receipt.issued_to }}</strong></div><div><div class="label">Issued At</div>{{ receipt.issued_at }}</div></div>
-        <div class="row"><div><div class="label">Invoice</div>{{ receipt.payment.invoice.invoice_number }}</div><div><div class="label">Payment Method</div>{{ receipt.payment.get_method_display }}</div></div>
-        <div class="row"><div><div class="label">Purpose</div>{{ receipt.purpose }}</div><div><div class="label">Reference</div>{{ receipt.payment.reference|default:"-" }}</div></div>
-        <div class="row"><div><div class="label">Amount Paid</div><div class="amount">{{ receipt.amount }} {{ receipt.currency }}</div></div></div>
+<div class="document">
+    <table class="top-ledger"><tr><td class="logo-cell"><div class="logo-card"><img class="logo" src="{% static 'images/gmi_logo.png' %}" alt="GMI Terralink"></div></td><td class="brand-cell"><div class="brand-name">GMI TERRALINK</div><div class="brand-line">General Billing | Trade Settlement | Documentation</div></td><td class="doc-cell"><div class="doc-title">General Receipt</div><div class="doc-number">{{ receipt.receipt_number }}</div></td></tr></table>
+    <table class="address-strip"><tr><td><div class="addr-title">China Branch | Guangzhou</div><div class="addr-line">B239B (ECAT), Jinsha Block B 2F, Baiyun</div><div class="addr-phone">+86 177 0195 4464</div></td><td><div class="addr-title">Uganda Branch | Kampala</div><div class="addr-line">Plot 10/12, Hamdeen Lwanga Close, Muyenga</div><div class="addr-phone">+256 768 049 940</div><div class="addr-line">gmiterralinkinfo@gmail.com | www.gmi-terralink.com</div></td></tr></table>
+    <div class="body-pad">
+        <div class="receipt-box"><div class="receipt-row"><div><div class="label">Received From</div><strong>{{ receipt.issued_to }}</strong></div><div><div class="label">Issued At</div>{{ receipt.issued_at|date:"d M Y H:i" }}</div></div><div class="receipt-row"><div><div class="label">Invoice</div>{{ receipt.payment.invoice.invoice_number }}</div><div><div class="label">Payment Method</div>{{ receipt.payment.get_method_display }}</div></div><div class="receipt-row"><div><div class="label">Purpose</div>{{ receipt.purpose }}</div><div><div class="label">Reference</div>{{ receipt.payment.reference|default:"-" }}</div></div><div class="receipt-row"><div><div class="label">Amount Paid</div><div class="amount">{{ receipt.currency }} {{ receipt.amount|floatformat:2|intcomma }}</div></div></div></div>
+        <div class="lower"><div class="terms">{% if receipt.notes %}<strong>Notes:</strong> {{ receipt.notes|linebreaksbr }}{% else %}This receipt confirms payment received against the general invoice referenced above.{% endif %}</div><div class="signature">{% if document_signature and document_signature.signature_profile.signature_image %}<img class="sig-img" src="{{ document_signature.signature_profile.signature_image.url }}" alt="Signature"><div class="sig-line signed">{{ document_signature.signer_name }}</div><div class="sig-sub">For GMI Terralink Ltd</div>{% if document_signature.signed_at %}<div class="sig-sub">Signed {{ document_signature.signed_at|date:"d M Y H:i" }}</div>{% endif %}{% else %}<div class="sig-line">Authorised Signature</div><div class="sig-sub">For GMI Terralink Ltd</div>{% endif %}</div></div>
     </div>
-    {% if receipt.notes %}<h4>Notes</h4><p>{{ receipt.notes|linebreaksbr }}</p>{% endif %}
-    {% if auto_print_pdf %}<script>window.addEventListener('load', function () { setTimeout(function () { window.focus(); window.print(); }, 350); });</script>{% endif %}
+</div>
+{% if auto_print_pdf %}<script>window.addEventListener('load', function () { setTimeout(function () { window.focus(); window.print(); }, 350); });</script>{% endif %}
 </body>
 </html>
