@@ -7750,9 +7750,6 @@ def noticeboard(request):
     notice_page_obj, notice_query_string, notice_page_range = paginate_queryset(
         request, notifications, per_page=8
     )
-    employees = CustomUser.objects.filter(is_active=True).order_by(
-        "role", "first_name", "last_name", "username"
-    )
     return render(
         request,
         "logistics/noticeboard.html",
@@ -7766,7 +7763,6 @@ def noticeboard(request):
             "notice_page_obj": notice_page_obj,
             "notice_query_string": notice_query_string,
             "notice_page_range": notice_page_range,
-            "employees": employees,
             "unread_count": request.user.notifications.filter(is_read=False).count(),
         },
     )

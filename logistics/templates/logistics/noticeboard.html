@@ -63,23 +63,6 @@
                 </div>
             </div>
 
-            <div class="card shadow-sm">
-                <div class="card-header bg-white"><strong>Employee Contacts</strong></div>
-                <div class="list-group list-group-flush">
-                    {% for employee in employees %}
-                    <div class="list-group-item">
-                        <div class="fw-semibold">{{ employee.get_full_name|default:employee.username }}</div>
-                        <div class="small text-muted">{{ employee.get_role_display }}</div>
-                        <div class="small mt-1">
-                            <i class="bi bi-telephone"></i> {{ employee.phone|default:"No phone" }}<br>
-                            <i class="bi bi-envelope"></i> {{ employee.email|default:"No email" }}
-                        </div>
-                    </div>
-                    {% empty %}
-                    <div class="list-group-item text-muted">No employees found.</div>
-                    {% endfor %}
-                </div>
-            </div>
         </div>
 
         <div class="col-xl-8">
