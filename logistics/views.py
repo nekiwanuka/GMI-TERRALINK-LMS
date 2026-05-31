@@ -410,8 +410,8 @@ def _can_manage_general_documents(user):
         user.is_authenticated
         and (
             user.is_superuser
-            or getattr(user, "role", "")
-            in {"ADMIN", "DIRECTOR", "FINANCE", "LOGISTICS", "PROCUREMENT"}
+            or role_has_procurement_permissions(user)
+            or getattr(user, "role", "") in {"FINANCE", "LOGISTICS"}
         )
     )
 

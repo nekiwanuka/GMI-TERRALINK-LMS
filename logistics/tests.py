@@ -34,11 +34,13 @@ from logistics.models import (
     Transaction,
 )
 from logistics.views import (
+    _can_manage_general_documents,
     _can_switch_lane,
     _extract_text_from_file,
     _final_invoice_payment_snapshot,
     _has_extractable_document_text,
 )
+from logistics.role_permissions import role_has_procurement_permissions
 
 
 class AdminCoverageTests(SimpleTestCase):
@@ -201,6 +203,16 @@ class LaneSwitchingTests(TestCase):
             {"lane": "all", "next": reverse("dashboard")},
         )
         self.assertEqual(self.client.session.get("active_lane"), "all")
+
+    def test_office_admin_has_procurement_capabilities(self):
+        user = CustomUser.objects.create_user(
+            username="lane-office-admin",
+            password="testpass123",
+            role="OFFICE_ADMIN",
+        )
+
+        self.assertTrue(role_has_procurement_permissions(user))
+        self.assertTrue(_can_manage_general_documents(user))
 
 
 class GeneralDocumentCreateTests(TestCase):
