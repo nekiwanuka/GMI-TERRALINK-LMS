@@ -137,14 +137,18 @@ class NoticeboardTaskForm(NormalizedTextMixin, forms.ModelForm):
         super().__init__(*args, **kwargs)
         from .models import CustomUser
 
-        self.fields["assigned_to"].queryset = CustomUser.objects.filter(
-            is_active=True
-        ).order_by("first_name", "last_name", "username")
+        self.fields["assigned_to"].queryset = (
+            CustomUser.objects.filter(is_active=True, is_superuser=False)
+            .exclude(role="ADMIN")
+            .order_by("first_name", "last_name", "username")
+        )
         self.fields["assigned_to"].required = False
         self.fields["assigned_to"].empty_label = "Select staff member"
         self.fields["assigned_role"].required = False
         self.fields["assigned_role"].choices = (("", "Select department"),) + tuple(
-            CustomUser.ROLE_CHOICES
+            (value, label)
+            for value, label in CustomUser.ROLE_CHOICES
+            if value != "ADMIN"
         )
 
     def clean(self):

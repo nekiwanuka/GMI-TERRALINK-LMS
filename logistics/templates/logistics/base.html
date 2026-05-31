@@ -274,8 +274,8 @@
                                             {% if notification.category == 'invoice' %}<i class="bi bi-receipt-cutoff"></i>{% elif notification.category == 'document' %}<i class="bi bi-folder-symlink"></i>{% else %}<i class="bi bi-bell"></i>{% endif %}
                                         </span>
                                         <span class="notification-item-body">
-                                            <span class="notification-item-title">{{ notification.title }}</span>
-                                            <span class="notification-item-copy">{{ notification.message }}</span>
+                                            <span class="notification-item-title">{{ notification.safe_title|default:notification.title }}</span>
+                                            <span class="notification-item-copy">{{ notification.safe_message|default:notification.message }}</span>
                                             <span class="notification-item-time">{{ notification.created_at|timesince }} ago</span>
                                         </span>
                                     </a>

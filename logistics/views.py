@@ -361,6 +361,36 @@ def _can_record_payment_entry(user):
     )
 
 
+def _is_system_admin_account(user):
+    return bool(
+        user
+        and (getattr(user, "is_superuser", False) or getattr(user, "role", "") == "ADMIN")
+    )
+
+
+def _public_staff_label(user):
+    if _is_system_admin_account(user):
+        return "System"
+    if not user:
+        return "-"
+    return user.get_full_name() or user.username
+
+
+def _hide_system_admin_names(text):
+    cleaned = text or ""
+    admin_users = CustomUser.objects.filter(Q(is_superuser=True) | Q(role="ADMIN"))
+    for admin_user in admin_users:
+        replacements = {
+            admin_user.username,
+            admin_user.get_full_name(),
+            admin_user.email,
+        }
+        for value in replacements:
+            if value:
+                cleaned = cleaned.replace(value, "System")
+    return cleaned
+
+
 def _can_record_supplier_payment_entry(user):
     return bool(
         user.is_authenticated
@@ -1668,6 +1698,8 @@ def user_list(request):
     role_filter = (request.GET.get("role") or "").strip()
     status_filter = (request.GET.get("status") or "").strip()
     users = CustomUser.objects.all().order_by("username")
+    if not request.user.is_superuser:
+        users = users.filter(is_superuser=False).exclude(role="ADMIN")
     if search:
         users = users.filter(
             _text_search_q("username", search)
@@ -7719,18 +7751,19 @@ def noticeboard(request):
             task.created_by = request.user
             task.save()
             task_link = reverse("noticeboard")
+            actor_label = _public_staff_label(request.user)
             if task.assigned_to_id:
                 Notification.objects.create(
                     recipient=task.assigned_to,
                     title="Noticeboard task assigned",
-                    message=f"{request.user.get_full_name() or request.user.username} assigned you: {task.title}",
+                    message=f"{actor_label} assigned you: {task.title}",
                     category="system",
                     link=task_link,
                 )
             if task.assigned_role:
                 _notify_roles(
                     title="Noticeboard department task",
-                    message=f"{request.user.get_full_name() or request.user.username} assigned {task.title} to your department.",
+                    message=f"{actor_label} assigned {task.title} to your department.",
                     link=task_link,
                     category="system",
                     roles=[task.assigned_role],
@@ -7750,6 +7783,9 @@ def noticeboard(request):
     notice_page_obj, notice_query_string, notice_page_range = paginate_queryset(
         request, notifications, per_page=8
     )
+    for notification in notice_page_obj:
+        notification.safe_title = _hide_system_admin_names(notification.title)
+        notification.safe_message = _hide_system_admin_names(notification.message)
     return render(
         request,
         "logistics/noticeboard.html",

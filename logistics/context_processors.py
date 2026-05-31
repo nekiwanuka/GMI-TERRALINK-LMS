@@ -2,7 +2,7 @@ from django.db.models import Count, Q
 from django.conf import settings
 from django.core.cache import cache
 
-from logistics.models import FinalInvoice, Notification, ProformaInvoice
+from logistics.models import CustomUser, FinalInvoice, Notification, ProformaInvoice
 
 SHELL_MODULE_BADGE_SCAN_LIMIT = 250
 SHELL_CONTEXT_CACHE_SECONDS = 15
@@ -22,13 +22,28 @@ def _shell_resolve_lane(request):
     return default_lane
 
 
+def _hide_system_admin_names(text):
+    cleaned = text or ""
+    admin_users = CustomUser.objects.filter(Q(is_superuser=True) | Q(role="ADMIN"))
+    for admin_user in admin_users:
+        replacements = {
+            admin_user.username,
+            admin_user.get_full_name(),
+            admin_user.email,
+        }
+        for value in replacements:
+            if value:
+                cleaned = cleaned.replace(value, "System")
+    return cleaned
+
+
 def logistics_shell_context(request):
     if not getattr(request, "user", None) or not request.user.is_authenticated:
         return {}
 
     session_lane = (request.session.get("active_lane") or "").lower()
     cache_key = (
-        f"shell-context:v3:{request.user.pk}:{request.user.role}:"
+        f"shell-context:v4:{request.user.pk}:{request.user.role}:"
         f"{int(request.user.is_superuser)}:{session_lane}"
     )
     cached_context = cache.get(cache_key)
@@ -41,6 +56,9 @@ def logistics_shell_context(request):
             "title", "message", "category", "link", "is_read", "created_at"
         ).order_by("is_read", "-created_at")[:8]
     )
+    for notification in notifications:
+        notification.safe_title = _hide_system_admin_names(notification.title)
+        notification.safe_message = _hide_system_admin_names(notification.message)
     unread_qs = notification_qs.filter(is_read=False)
     unread_count = unread_qs.count()
     cache.set(f"notification-unread-count:{request.user.pk}", unread_count, 30)

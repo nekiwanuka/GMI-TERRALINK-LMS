@@ -82,23 +82,23 @@
                                 </div>
                                 <div class="text-muted mt-1">{{ task.description }}</div>
                                 <div class="small text-muted mt-2">
-                                    Posted by {{ task.created_by.get_full_name|default:task.created_by.username }} on {{ task.created_at|date:"d M Y H:i" }}
+                                    Posted by {% if task.created_by.is_superuser or task.created_by.role == 'ADMIN' %}System{% else %}{{ task.created_by.get_full_name|default:task.created_by.username }}{% endif %} on {{ task.created_at|date:"d M Y H:i" }}
                                 </div>
                             </div>
                             <div class="text-lg-end flex-shrink-0">
                                 <div class="small text-muted">Assigned to</div>
                                 <div class="fw-semibold">
-                                    {% if task.assigned_to %}{{ task.assigned_to.get_full_name|default:task.assigned_to.username }}{% endif %}
-                                    {% if task.assigned_to and task.assigned_role %}<span class="text-muted"> / </span>{% endif %}
-                                    {% if task.assigned_role %}{{ task.get_assigned_role_display }}{% endif %}
+                                    {% if task.assigned_to %}{% if task.assigned_to.is_superuser or task.assigned_to.role == 'ADMIN' %}System{% else %}{{ task.assigned_to.get_full_name|default:task.assigned_to.username }}{% endif %}{% endif %}
+                                    {% if task.assigned_to and task.assigned_role and task.assigned_role != 'ADMIN' %}<span class="text-muted"> / </span>{% endif %}
+                                    {% if task.assigned_role and task.assigned_role != 'ADMIN' %}{{ task.get_assigned_role_display }}{% endif %}
                                 </div>
-                                {% if task.assigned_to %}
+                                {% if task.assigned_to and not task.assigned_to.is_superuser and task.assigned_to.role != 'ADMIN' %}
                                 <div class="small text-muted mt-1">
                                     {{ task.assigned_to.phone|default:"No phone" }}<br>{{ task.assigned_to.email|default:"No email" }}
                                 </div>
                                 {% endif %}
                                 {% if task.is_done %}
-                                <div class="small text-success mt-2">Done by {{ task.completed_by|default:"-" }}{% if task.completed_at %} on {{ task.completed_at|date:"d M Y H:i" }}{% endif %}</div>
+                                <div class="small text-success mt-2">Done by {% if task.completed_by %}{% if task.completed_by.is_superuser or task.completed_by.role == 'ADMIN' %}System{% else %}{{ task.completed_by.get_full_name|default:task.completed_by.username }}{% endif %}{% else %}-{% endif %}{% if task.completed_at %} on {{ task.completed_at|date:"d M Y H:i" }}{% endif %}</div>
                                 {% else %}
                                 <form method="post" action="{% url 'noticeboard_task_done' task.pk %}" class="mt-2">
                                     {% csrf_token %}
@@ -128,10 +128,10 @@
                     <div>
                         <div class="fw-semibold">
                             {% if notification.category == 'invoice' %}<i class="bi bi-receipt-cutoff text-primary me-1"></i>{% elif notification.category == 'document' %}<i class="bi bi-folder-symlink text-primary me-1"></i>{% else %}<i class="bi bi-bell text-primary me-1"></i>{% endif %}
-                            {{ notification.title }}
+                            {{ notification.safe_title|default:notification.title }}
                             {% if not notification.is_read %}<span class="badge noticeboard-new-badge ms-2">New</span>{% endif %}
                         </div>
-                        <div class="text-muted mt-1">{{ notification.message }}</div>
+                        <div class="text-muted mt-1">{{ notification.safe_message|default:notification.message }}</div>
                     </div>
                     <div class="text-muted small text-md-end flex-shrink-0">{{ notification.created_at|date:"d M Y H:i" }}</div>
                 </div>
