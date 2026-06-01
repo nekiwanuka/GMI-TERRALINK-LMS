@@ -1838,6 +1838,7 @@ def client_list(request):
 
 
 @login_required
+@role_required("ADMIN", "DIRECTOR", "OFFICE_ADMIN", "PROCUREMENT")
 def client_create(request):
     if request.method == "POST":
         form = ClientForm(request.POST)
