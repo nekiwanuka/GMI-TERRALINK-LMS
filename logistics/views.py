@@ -579,6 +579,12 @@ def _path_lane(request):
 
 
 def _resolve_lane_with_path(request):
+    requested_lane = (request.GET.get("lane") or "").strip().lower()
+    if requested_lane in {"all", "logistics", "sourcing"} and _can_switch_lane(
+        request.user
+    ):
+        request.session["active_lane"] = requested_lane
+        return requested_lane
     forced_lane = _path_lane(request)
     if forced_lane in {"logistics", "sourcing"}:
         default_lane = _user_default_lane(request.user)
