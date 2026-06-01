@@ -345,6 +345,14 @@
                             <i class="bi bi-files"></i> General Documents
                         </a>
                     </li>
+                    {% if shell_active_lane == 'sourcing' and user.role == 'FINANCE' %}
+                    <li class="nav-item">
+                        <a class="nav-link {% if 'final_invoice' in request.resolver_match.url_name or 'payment' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'logistics_final_invoice_list' %}" data-bs-toggle="tooltip" data-bs-placement="right" title="Open cargo invoices and record freight payments from invoice">
+                            <i class="bi bi-cash-coin"></i> Freight Payments
+                            {% if shell_module_notification_counts.freight_payments %}<span class="sidebar-count-badge ms-auto">{{ shell_module_notification_counts.freight_payments }}</span>{% endif %}
+                        </a>
+                    </li>
+                    {% endif %}
 
                     {% if shell_active_lane != 'sourcing' %}
                     <li class="sidebar-section-label"><i class="bi bi-ship"></i> Logistics</li>
