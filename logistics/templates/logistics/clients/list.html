@@ -142,7 +142,7 @@
                 <div class="col-lg-5">
                     <div class="d-flex gap-2 justify-content-lg-end">
                         <button type="submit" class="btn btn-sm btn-outline-dark"><i class="bi bi-funnel me-1"></i>Search</button>
-                        {% if request.user.role != 'FINANCE' %}
+                        {% if user.role != 'FINANCE' %}
                         <a href="{% url 'client_create' %}" class="btn btn-sm btn-dark"><i class="bi bi-plus-lg me-1"></i>Add client</a>
                         {% endif %}
                     </div>

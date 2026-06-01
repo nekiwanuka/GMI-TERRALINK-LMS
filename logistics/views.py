@@ -1826,7 +1826,6 @@ def client_list(request):
         {
             "clients": page_obj,
             "search": search,
-            "closed_filter": closed_filter or "",
             "page_obj": page_obj,
             "query_string": query_string,
             "page_range": page_range,
