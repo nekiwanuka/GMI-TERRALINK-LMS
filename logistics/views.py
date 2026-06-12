@@ -906,6 +906,12 @@ def _client_cleanup_summary(client):
             Q(logistics_payment__payment__loading_id__in=loading_ids)
             | Q(sourcing_payment__transaction_id__in=transaction_ids)
         ).count(),
+        "sourcing_records": Sourcing.objects.filter(
+            transaction_id__in=transaction_ids
+        ).count(),
+        "sourcing_payments": TransactionPaymentRecord.objects.filter(
+            transaction_id__in=transaction_ids
+        ).count(),
         "proformas": len(proforma_ids),
         "final_invoices": len(final_invoice_ids),
         "purchase_orders": len(purchase_order_ids),
@@ -2334,6 +2340,31 @@ def client_detail(request, pk):
     transaction_documents = Document.objects.select_related("uploaded_by").order_by(
         "-timestamp"
     )
+    sourcing_records = Sourcing.objects.select_related("created_by").order_by(
+        "-created_at"
+    )
+    proformas = ProformaInvoice.objects.select_related(
+        "created_by", "loading"
+    ).order_by("-created_at")
+    final_invoices = FinalInvoice.objects.select_related(
+        "created_by", "loading", "proforma"
+    ).order_by("-created_at")
+    purchase_orders = (
+        PurchaseOrder.objects.select_related("created_by", "proforma", "final_invoice")
+        .prefetch_related(
+            Prefetch(
+                "supplier_payments",
+                queryset=SupplierPayment.objects.select_related("created_by").order_by(
+                    "-paid_at", "-id"
+                ),
+                to_attr="cleanup_supplier_payments",
+            )
+        )
+        .order_by("-created_at")
+    )
+    trade_payments = TransactionPaymentRecord.objects.select_related(
+        "created_by", "final_invoice"
+    ).order_by("-payment_date")
     transactions = (
         _client_transactions_queryset(client)
         .select_related("customer", "source_loading", "created_by")
@@ -2342,7 +2373,32 @@ def client_detail(request, pk):
                 "documents",
                 queryset=transaction_documents,
                 to_attr="cleanup_documents",
-            )
+            ),
+            Prefetch(
+                "sourcing_entries",
+                queryset=sourcing_records,
+                to_attr="cleanup_sourcing_entries",
+            ),
+            Prefetch(
+                "proforma_invoices",
+                queryset=proformas,
+                to_attr="cleanup_proformas",
+            ),
+            Prefetch(
+                "final_invoices",
+                queryset=final_invoices,
+                to_attr="cleanup_final_invoices",
+            ),
+            Prefetch(
+                "purchase_orders",
+                queryset=purchase_orders,
+                to_attr="cleanup_purchase_orders",
+            ),
+            Prefetch(
+                "payment_records",
+                queryset=trade_payments,
+                to_attr="cleanup_trade_payments",
+            ),
         )
         .annotate(document_count=Count("documents"))
         .order_by("-created_at")

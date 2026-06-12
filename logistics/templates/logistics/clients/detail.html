@@ -52,7 +52,7 @@
     }
     .summary-item strong,
     .record-field strong { display: block; color: #1a1a1a; overflow-wrap: anywhere; }
-    .workspace-toolbar { padding: .75rem .9rem; background: #faf8ef; }
+    .workspace-toolbar { position: sticky; top: .5rem; z-index: 5; padding: .75rem .9rem; background: #faf8ef; box-shadow: 0 4px 12px rgba(26, 26, 26, .05); }
     .workspace-toolbar h2 { margin: 0; color: #1a1a1a; font-size: .98rem; font-weight: 800; }
     .select-all-label { display: inline-flex; align-items: center; gap: .35rem; margin: 0; color: #1a1a1a; font-size: .82rem; font-weight: 700; }
     .transaction-stack { display: grid; gap: .75rem; }
@@ -60,8 +60,12 @@
     .record-title { display: flex; flex-wrap: wrap; align-items: center; gap: .45rem; }
     .record-id { color: #1a1a1a; font-size: 1rem; font-weight: 800; text-decoration: none; }
     .status-pill { border: 1px solid #d8d8d8; background: #f6f6f6; color: #1a1a1a; padding: .18rem .45rem; font-size: .72rem; font-weight: 700; }
-    .document-strip { margin-top: .85rem; border-top: 1px solid #ece7cd; }
-    .document-strip-head { display: flex; justify-content: space-between; gap: .5rem; padding: .6rem 0 .45rem; }
+    .record-counts { display: flex; flex-wrap: wrap; gap: .35rem; margin-top: .45rem; }
+    .metric-chip { display: inline-flex; align-items: center; gap: .22rem; border: 1px solid #d8d8d8; background: #fff; color: #1a1a1a; padding: .18rem .42rem; font-size: .72rem; font-weight: 800; }
+    .document-strip,
+    .sourcing-strip { margin-top: .85rem; border-top: 1px solid #ece7cd; }
+    .document-strip-head,
+    .sourcing-strip-head { display: flex; justify-content: space-between; gap: .5rem; padding: .6rem 0 .45rem; }
     .document-row {
         display: grid;
         grid-template-columns: auto minmax(0, 1.35fr) minmax(155px, .6fr) auto;
@@ -76,6 +80,25 @@
     .doc-main { min-width: 0; }
     .doc-name { display: block; margin-top: .22rem; color: #1a1a1a; font-weight: 700; overflow-wrap: anywhere; }
     .doc-note { display: block; margin-top: .18rem; color: #6b6b6b; font-size: .78rem; overflow-wrap: anywhere; }
+    .sourcing-grid { display: grid; grid-template-columns: 1fr; border: 1px solid #f1ecd8; background: #fff; }
+    .sourcing-card {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: .35rem .75rem;
+        align-items: center;
+        border-top: 1px solid #f1ecd8;
+        background: #fff;
+        padding: .58rem .65rem;
+    }
+    .sourcing-card:first-child { border-top: 0; }
+    .sourcing-card-head { display: flex; justify-content: space-between; gap: .45rem; align-items: flex-start; }
+    .sourcing-card-title { color: #1a1a1a; font-weight: 800; overflow-wrap: anywhere; }
+    .sourcing-card-meta { color: #6b6b6b; font-size: .78rem; margin-top: .12rem; }
+    .sourcing-card-actions { display: flex; flex-wrap: wrap; gap: .35rem; justify-content: flex-end; margin-top: 0; }
+    .sourcing-card > .sourcing-card-meta { grid-column: 1; }
+    .sourcing-card > .sourcing-card-actions { grid-column: 2; grid-row: 1 / span 2; }
+    .nested-payment-list { display: grid; gap: .3rem; grid-column: 1 / -1; margin-top: .2rem; }
+    .nested-payment { border-top: 1px solid #f1ecd8; padding-top: .35rem; color: #6b6b6b; font-size: .78rem; }
     .empty-state { padding: 1.2rem; border: 1px dashed #d8d8d8; color: #6b6b6b; text-align: center; background: #fff; }
     .cargo-panel-head { display: flex; justify-content: space-between; gap: .7rem; align-items: center; padding: .75rem .9rem; background: #faf8ef; border-bottom: 1px solid #ece7cd; }
     .cargo-panel-head h2,
@@ -97,6 +120,8 @@
         .document-row { grid-template-columns: auto minmax(0, 1fr); }
         .doc-meta,
         .doc-actions { grid-column: 2; }
+        .sourcing-card { grid-template-columns: 1fr; }
+        .sourcing-card > .sourcing-card-actions { grid-column: 1; grid-row: auto; justify-content: flex-start; }
         .client-danger form { flex-direction: column; align-items: stretch; }
         .client-danger input { min-width: 0; }
     }
@@ -129,7 +154,10 @@
             <div class="summary-item"><span>Phone</span><strong>{{ client.phone|default:'-' }}</strong></div>
             <div class="summary-item"><span>Email</span><strong>{% if client.email %}<a href="mailto:{{ client.email }}">{{ client.email }}</a>{% else %}-{% endif %}</strong></div>
             <div class="summary-item"><span>Transactions</span><strong>{{ cleanup_summary.transactions }}</strong></div>
+            <div class="summary-item"><span>Sourcing</span><strong>{{ cleanup_summary.sourcing_records }}</strong></div>
             <div class="summary-item"><span>Documents</span><strong>{{ cleanup_summary.uploaded_documents }}</strong></div>
+            <div class="summary-item"><span>Invoices</span><strong>{{ cleanup_summary.final_invoices }}</strong></div>
+            <div class="summary-item"><span>Purchase orders</span><strong>{{ cleanup_summary.purchase_orders }}</strong></div>
             <div class="summary-item"><span>Related rows</span><strong>{{ cleanup_summary.total_records }}</strong></div>
         </div>
     </section>
@@ -138,8 +166,8 @@
         {% csrf_token %}
         <section class="workspace-toolbar">
             <div>
-                <h2><i class="bi bi-diagram-3 me-1"></i> Transactions and documents</h2>
-                <div class="toolbar-meta">{{ cleanup_summary.transactions }} transactions &middot; {{ cleanup_summary.uploaded_documents }} documents</div>
+                <h2><i class="bi bi-diagram-3 me-1"></i> Transactions, sourcing and documents</h2>
+                <div class="toolbar-meta">{{ cleanup_summary.transactions }} transactions &middot; {{ cleanup_summary.sourcing_records }} sourcing &middot; {{ cleanup_summary.uploaded_documents }} documents &middot; {{ cleanup_summary.final_invoices }} invoices &middot; {{ cleanup_summary.purchase_orders }} POs</div>
             </div>
             <div class="toolbar-actions">
                 {% if can_manage_client_cleanup and client_documents %}
@@ -161,6 +189,14 @@
                             <span class="status-pill">{{ txn.get_status_display }}</span>
                         </div>
                         <div class="record-subtitle">{{ txn.description|default:'No description' }}</div>
+                        <div class="record-counts">
+                            <span class="metric-chip"><i class="bi bi-files"></i>{{ txn.document_count }} docs</span>
+                            <span class="metric-chip"><i class="bi bi-search"></i>{{ txn.cleanup_sourcing_entries|length }} sourcing</span>
+                            <span class="metric-chip"><i class="bi bi-receipt"></i>{{ txn.cleanup_proformas|length }} PI</span>
+                            <span class="metric-chip"><i class="bi bi-file-earmark-text"></i>{{ txn.cleanup_final_invoices|length }} FI</span>
+                            <span class="metric-chip"><i class="bi bi-cart-check"></i>{{ txn.cleanup_purchase_orders|length }} PO</span>
+                            <span class="metric-chip"><i class="bi bi-cash-coin"></i>{{ txn.cleanup_trade_payments|length }} payments</span>
+                        </div>
                     </div>
                     <div class="record-actions">
                         <a href="{% url 'transaction_detail' txn.pk %}" class="btn btn-sm btn-outline-dark"><i class="bi bi-eye"></i> Open</a>
@@ -169,10 +205,124 @@
                 </div>
                 <div class="record-fields">
                     <div class="record-field"><span>Customer</span><strong>{{ txn.customer.name }}</strong></div>
-                    <div class="record-field"><span>Cargo</span><strong>{% if txn.source_loading %}<a href="{% url 'loading_detail' txn.source_loading.id %}">{{ txn.source_loading.loading_id }}</a>{% else %}-{% endif %}</strong></div>
+                    <div class="record-field"><span>Operation</span><strong>{% if txn.source_loading %}<a href="{% url 'loading_detail' txn.source_loading.id %}">{{ txn.source_loading.loading_id }}</a>{% else %}Sourcing trade{% endif %}</strong></div>
                     <div class="record-field"><span>Created</span><strong>{{ txn.created_at|date:"d M Y H:i" }}</strong></div>
                     <div class="record-field"><span>Created by</span><strong>{{ txn.created_by.get_full_name|default:txn.created_by.username|default:'-' }}</strong></div>
                     <div class="record-field"><span>Documents</span><strong>{{ txn.document_count }}</strong></div>
+                    <div class="record-field"><span>Sourcing</span><strong>{{ txn.cleanup_sourcing_entries|length }}</strong></div>
+                    <div class="record-field"><span>Invoices</span><strong>{{ txn.cleanup_final_invoices|length }}</strong></div>
+                    <div class="record-field"><span>Purchase orders</span><strong>{{ txn.cleanup_purchase_orders|length }}</strong></div>
+                </div>
+                <div class="sourcing-strip">
+                    <div class="sourcing-strip-head"><span>Sourcing records for {{ txn.transaction_id }}</span><strong>{{ txn.cleanup_sourcing_entries|length }}</strong></div>
+                    {% if txn.cleanup_sourcing_entries %}
+                    <div class="sourcing-grid">
+                        {% for sourcing in txn.cleanup_sourcing_entries %}
+                        <div class="sourcing-card">
+                            <div class="sourcing-card-head">
+                                <div>
+                                    <div class="sourcing-card-title">{{ sourcing.supplier_name }}</div>
+                                    <div class="sourcing-card-meta">{{ sourcing.item_details|length }} item(s) &middot; {{ sourcing.created_at|date:"d M Y H:i" }}</div>
+                                </div>
+                                <span class="badge bg-light text-dark border">Sourcing</span>
+                            </div>
+                            {% if sourcing.notes %}<div class="sourcing-card-meta">{{ sourcing.notes|truncatechars:120 }}</div>{% endif %}
+                            <div class="sourcing-card-actions">
+                                {% if can_manage_client_cleanup %}<a href="{% url 'sourcing_update' sourcing.pk %}" class="btn btn-sm btn-warning"><i class="bi bi-pencil"></i> Edit</a>{% endif %}
+                                <a href="{% url 'sourcing_pdf' sourcing.pk %}" class="btn btn-sm btn-outline-dark" target="_blank" rel="noopener noreferrer"><i class="bi bi-file-earmark-pdf"></i> PDF</a>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <div class="empty-state">No sourcing records linked to this transaction.</div>
+                    {% endif %}
+                </div>
+                <div class="sourcing-strip">
+                    <div class="sourcing-strip-head"><span>Invoices and purchase orders for {{ txn.transaction_id }}</span><strong>{{ txn.cleanup_proformas|length }} PI &middot; {{ txn.cleanup_final_invoices|length }} FI &middot; {{ txn.cleanup_purchase_orders|length }} PO</strong></div>
+                    {% if txn.cleanup_proformas or txn.cleanup_final_invoices or txn.cleanup_purchase_orders %}
+                    <div class="sourcing-grid">
+                        {% for proforma in txn.cleanup_proformas %}
+                        <div class="sourcing-card">
+                            <div class="sourcing-card-head">
+                                <div>
+                                    <div class="sourcing-card-title">{{ proforma }}</div>
+                                    <div class="sourcing-card-meta">{{ proforma.status }} &middot; {{ proforma.total_amount }} &middot; {{ proforma.created_at|date:"d M Y" }}</div>
+                                </div>
+                                <span class="badge bg-primary">Proforma</span>
+                            </div>
+                            <div class="sourcing-card-actions">
+                                <a href="{% if proforma.loading_id %}{% url 'logistics_proforma_detail' proforma.pk %}{% else %}{% url 'sourcing_proforma_detail' proforma.pk %}{% endif %}" class="btn btn-sm btn-outline-dark"><i class="bi bi-eye"></i> Open</a>
+                                {% if can_manage_client_cleanup %}<a href="{% if proforma.loading_id %}{% url 'logistics_proforma_update' proforma.pk %}{% else %}{% url 'sourcing_proforma_update' proforma.pk %}{% endif %}" class="btn btn-sm btn-warning"><i class="bi bi-pencil"></i> Edit</a>{% endif %}
+                            </div>
+                        </div>
+                        {% endfor %}
+                        {% for invoice in txn.cleanup_final_invoices %}
+                        <div class="sourcing-card">
+                            <div class="sourcing-card-head">
+                                <div>
+                                    <div class="sourcing-card-title">{{ invoice }}</div>
+                                    <div class="sourcing-card-meta">{{ invoice.currency }} {{ invoice.total_amount }} &middot; {{ invoice.created_at|date:"d M Y" }}</div>
+                                </div>
+                                <span class="badge {% if invoice.is_confirmed %}bg-success{% else %}bg-secondary{% endif %}">Final invoice</span>
+                            </div>
+                            <div class="sourcing-card-actions">
+                                <a href="{% if invoice.loading_id %}{% url 'logistics_final_invoice_detail' invoice.pk %}{% else %}{% url 'sourcing_final_invoice_detail' invoice.pk %}{% endif %}" class="btn btn-sm btn-outline-dark"><i class="bi bi-eye"></i> Open</a>
+                                {% if can_manage_client_cleanup %}<a href="{% if invoice.loading_id %}{% url 'logistics_final_invoice_update' invoice.pk %}{% else %}{% url 'sourcing_final_invoice_update' invoice.pk %}{% endif %}" class="btn btn-sm btn-warning"><i class="bi bi-pencil"></i> Edit</a>{% endif %}
+                            </div>
+                        </div>
+                        {% endfor %}
+                        {% for po in txn.cleanup_purchase_orders %}
+                        <div class="sourcing-card">
+                            <div class="sourcing-card-head">
+                                <div>
+                                    <div class="sourcing-card-title">{{ po.po_number }}</div>
+                                    <div class="sourcing-card-meta">{{ po.supplier_name }} &middot; {{ po.status }} &middot; {{ po.subtotal }}</div>
+                                </div>
+                                <span class="badge bg-dark">PO</span>
+                            </div>
+                            <div class="sourcing-card-actions">
+                                <a href="{% url 'purchase_order_detail' po.pk %}" class="btn btn-sm btn-outline-dark"><i class="bi bi-eye"></i> Open</a>
+                                {% if can_manage_client_cleanup %}<a href="{% url 'purchase_order_update' po.pk %}" class="btn btn-sm btn-warning"><i class="bi bi-pencil"></i> Edit</a>{% endif %}
+                                <a href="{% url 'record_supplier_payment' po.pk %}" class="btn btn-sm btn-outline-success"><i class="bi bi-cash-coin"></i> Pay supplier</a>
+                            </div>
+                            {% if po.cleanup_supplier_payments %}
+                            <div class="nested-payment-list">
+                                {% for payment in po.cleanup_supplier_payments %}
+                                <div class="nested-payment">Supplier payment: {{ payment.currency }} {{ payment.amount }} &middot; {{ payment.reference }} &middot; {{ payment.paid_at|date:"d M Y" }}</div>
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <div class="empty-state">No invoices or purchase orders linked to this transaction.</div>
+                    {% endif %}
+                </div>
+                <div class="sourcing-strip">
+                    <div class="sourcing-strip-head"><span>Client sourcing payments for {{ txn.transaction_id }}</span><strong>{{ txn.cleanup_trade_payments|length }}</strong></div>
+                    {% if txn.cleanup_trade_payments %}
+                    <div class="sourcing-grid">
+                        {% for payment in txn.cleanup_trade_payments %}
+                        <div class="sourcing-card">
+                            <div class="sourcing-card-head">
+                                <div>
+                                    <div class="sourcing-card-title">{{ payment.currency }} {{ payment.amount }}</div>
+                                    <div class="sourcing-card-meta">{{ payment.get_payment_method_display }} &middot; {{ payment.reference }} &middot; {{ payment.payment_date|date:"d M Y H:i" }}</div>
+                                </div>
+                                <span class="badge bg-success">Client payment</span>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <div class="empty-state">No client sourcing payments linked to this transaction.</div>
+                    {% endif %}
+                    <div class="sourcing-card-actions">
+                        <a href="{% url 'sourcing_payment_list' txn.pk %}" class="btn btn-sm btn-outline-dark"><i class="bi bi-receipt"></i> Payments</a>
+                        <a href="{% url 'sourcing_payment_create_for' txn.pk %}" class="btn btn-sm btn-outline-success"><i class="bi bi-plus-lg"></i> Record payment</a>
+                    </div>
                 </div>
                 <div class="document-strip">
                     <div class="document-strip-head"><span>Documents for {{ txn.transaction_id }}</span><strong>{{ txn.document_count }}</strong></div>

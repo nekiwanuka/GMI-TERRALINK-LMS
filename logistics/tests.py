@@ -34,8 +34,10 @@ from logistics.models import (
     PurchaseOrder,
     ProformaInvoice,
     SignatureProfile,
+    Sourcing,
     SupplierPayment,
     Transaction,
+    TransactionPaymentRecord,
 )
 from logistics.views import (
     _can_manage_general_documents,
@@ -1221,6 +1223,60 @@ class ClientCleanupTests(TestCase):
         )
 
     def test_client_detail_lists_transaction_documents_inline(self):
+        sourcing = Sourcing.objects.create(
+            transaction=self.transaction,
+            supplier_name="Guangzhou Source Co",
+            item_details=[{"description": "Cleanup item", "quantity": "1"}],
+            unit_prices={"Cleanup item": "100"},
+            notes="Supplier quote ready",
+            created_by=self.admin,
+        )
+        proforma = ProformaInvoice.objects.create(
+            transaction=self.transaction,
+            source_sourcing=sourcing,
+            items=[{"description": "Cleanup item", "quantity": "1", "total": 100}],
+            subtotal=Decimal("100.00"),
+            validity_date="2026-06-18",
+            supplier_name="Guangzhou Source Co",
+            created_by=self.admin,
+        )
+        final_invoice = FinalInvoice.objects.create(
+            transaction=self.transaction,
+            proforma=proforma,
+            items=[{"description": "Cleanup item", "quantity": "1", "total": 100}],
+            subtotal=Decimal("100.00"),
+            total_amount=Decimal("100.00"),
+            created_by=self.admin,
+        )
+        purchase_order = PurchaseOrder.objects.create(
+            transaction=self.transaction,
+            proforma=proforma,
+            final_invoice=final_invoice,
+            supplier_name="Guangzhou Source Co",
+            items=[{"description": "Cleanup item", "quantity": "1", "total": 100}],
+            subtotal=Decimal("100.00"),
+            created_by=self.admin,
+        )
+        SupplierPayment.objects.create(
+            purchase_order=purchase_order,
+            supplier_name="Guangzhou Source Co",
+            amount=Decimal("50.00"),
+            currency="USD",
+            method="BANK",
+            reference="SUP-CLEAN-1",
+            created_by=self.admin,
+        )
+        TransactionPaymentRecord.objects.create(
+            transaction=self.transaction,
+            final_invoice=final_invoice,
+            amount_due_snapshot=Decimal("100.00"),
+            amount=Decimal("60.00"),
+            currency="USD",
+            payment_method="bank_transfer",
+            reference="CLIENT-CLEAN-1",
+            created_by=self.admin,
+        )
+
         response = self.client.get(
             reverse("client_detail", kwargs={"pk": self.customer.pk})
         )
@@ -1228,7 +1284,30 @@ class ClientCleanupTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, self.transaction.transaction_id)
         self.assertContains(response, "Cleanup goods")
+        self.assertContains(response, "Sourcing trade")
+        self.assertContains(response, "Guangzhou Source Co")
+        self.assertContains(response, "Supplier quote ready")
+        self.assertContains(response, "Proforma")
+        self.assertContains(response, "Final invoice")
+        self.assertContains(response, purchase_order.po_number)
+        self.assertContains(response, "Supplier payment")
+        self.assertContains(response, "Client payment")
+        self.assertContains(response, "CLIENT-CLEAN-1")
         self.assertContains(response, "derrick-pi")
+        self.assertContains(
+            response, reverse("sourcing_update", kwargs={"pk": sourcing.pk})
+        )
+        self.assertContains(
+            response, reverse("sourcing_proforma_update", kwargs={"pk": proforma.pk})
+        )
+        self.assertContains(
+            response,
+            reverse("sourcing_final_invoice_update", kwargs={"pk": final_invoice.pk}),
+        )
+        self.assertContains(
+            response,
+            reverse("purchase_order_update", kwargs={"pk": purchase_order.pk}),
+        )
         self.assertContains(
             response, reverse("transaction_update", kwargs={"pk": self.transaction.pk})
         )
