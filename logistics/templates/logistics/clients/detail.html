@@ -2,109 +2,310 @@
 
 {% block title %}{{ client.name }} - GMI TERRALINK Logistics Portal{% endblock %}
 
+{% block extra_css %}
+<style>
+    .client-cleanup-stack { display: grid; gap: 1rem; }
+    .client-cleanup-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 1rem;
+        padding: 1rem;
+        border: 1px solid #ece7cd;
+        background: #fff;
+    }
+    .client-cleanup-header h1 {
+        margin: .1rem 0 .35rem;
+        color: #1a1a1a;
+        font-size: 1.35rem;
+        line-height: 1.15;
+    }
+    .client-cleanup-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: .45rem;
+        color: #6b6b6b;
+        font-size: .82rem;
+    }
+    .client-cleanup-actions { display: inline-flex; gap: .4rem; align-items: center; }
+    .cleanup-stat-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(135px, 1fr));
+        gap: .55rem;
+    }
+    .cleanup-stat {
+        border: 1px solid #ece7cd;
+        background: #fbf7e4;
+        padding: .65rem .75rem;
+    }
+    .cleanup-stat strong {
+        display: block;
+        color: #1a1a1a;
+        font-size: 1rem;
+        line-height: 1.1;
+    }
+    .cleanup-stat span {
+        color: #6b6b6b;
+        font-size: .66rem;
+        text-transform: uppercase;
+        letter-spacing: .06em;
+        font-weight: 700;
+    }
+    .cleanup-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.5fr) minmax(280px, .75fr);
+        gap: 1rem;
+        align-items: start;
+    }
+    .cleanup-panel {
+        border: 1px solid #ece7cd;
+        background: #fff;
+    }
+    .cleanup-panel-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: .75rem;
+        padding: .75rem .9rem;
+        border-bottom: 1px solid #ece7cd;
+        background: #faf8ef;
+    }
+    .cleanup-panel-head h2 {
+        margin: 0;
+        color: #1a1a1a;
+        font-size: .9rem;
+        font-weight: 800;
+    }
+    .cleanup-table { margin: 0; font-size: .84rem; }
+    .cleanup-table th {
+        color: #6b6b6b;
+        font-size: .66rem;
+        letter-spacing: .06em;
+        text-transform: uppercase;
+        white-space: nowrap;
+    }
+    .cleanup-table td { vertical-align: middle; }
+    .cleanup-empty { padding: 1.4rem; color: #6b6b6b; text-align: center; }
+    .cleanup-detail-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: .75rem;
+        padding: .9rem;
+    }
+    .cleanup-detail-item span {
+        display: block;
+        color: #6b6b6b;
+        font-size: .66rem;
+        font-weight: 800;
+        letter-spacing: .06em;
+        text-transform: uppercase;
+    }
+    .cleanup-detail-item strong {
+        display: block;
+        margin-top: .12rem;
+        color: #1a1a1a;
+        overflow-wrap: anywhere;
+    }
+    .cleanup-danger { border-color: #fecaca; background: #fff; }
+    .cleanup-danger .cleanup-panel-head { border-bottom-color: #fecaca; background: #fff1f2; }
+    @media (max-width: 991.98px) {
+        .client-cleanup-header,
+        .cleanup-grid { grid-template-columns: 1fr; }
+        .client-cleanup-header { flex-direction: column; }
+        .cleanup-detail-grid { grid-template-columns: 1fr; }
+    }
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="workspace-stack">
-    <section class="workspace-hero">
-        <div class="workspace-hero-grid">
-            <div class="workspace-hero-copy">
-                <span class="eyebrow-label"><i class="bi bi-person-badge-fill"></i> Client account view</span>
-                <h1>{{ client.name }}</h1>
-                <p>Review the commercial identity, contact ownership and cargo relationship for this client before opening a new transaction or freight record.</p>
+<div class="client-cleanup-stack">
+    <section class="client-cleanup-header">
+        <div>
+            <span class="eyebrow-label"><i class="bi bi-person-badge-fill"></i> Client record</span>
+            <h1>{{ client.name }}</h1>
+            <div class="client-cleanup-meta">
+                <span>{{ client.client_id }}</span>
+                <span>{{ client.get_country_display|default:'No country' }}</span>
+                <span>{{ client.date_registered|date:"d M Y" }}</span>
             </div>
-            <div class="workspace-badge-row">
-                <div class="workspace-badge">
-                    <strong>{{ client.client_id }}</strong>
-                    <span>Client ID</span>
-                </div>
-                <div class="workspace-badge">
-                    <strong>{{ loadings.count }}</strong>
-                    <span>Linked cargo</span>
-                </div>
-            </div>
+        </div>
+        <div class="client-cleanup-actions">
+            {% if can_manage_client_cleanup %}
+            <a href="{% url 'client_update' client.id %}" class="btn btn-sm btn-warning"><i class="bi bi-pencil"></i> Edit client</a>
+            <a href="{% url 'client_delete' client.id %}" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i> Delete client</a>
+            {% endif %}
+            <a href="{% url 'client_list' %}" class="btn btn-sm btn-outline-dark"><i class="bi bi-arrow-left"></i> Registry</a>
         </div>
     </section>
 
-    <div class="row g-4">
-        <div class="col-xl-8">
-            <section class="card workspace-card mb-0">
-                <div class="card-header">
-                    <div>
-                        <h3 class="mb-1">Account information</h3>
-                        <small class="text-white-50">Profile data used in downstream operations and documents.</small>
-                    </div>
-                    {% if user.is_superuser or user.role == 'ADMIN' or user.role == 'DIRECTOR' or user.role == 'superuser' %}
-                    <a href="{% url 'client_update' client.id %}" class="btn btn-warning btn-sm"><i class="bi bi-pencil me-1"></i>Edit</a>
-                    {% endif %}
-                </div>
-                <div class="card-body p-4">
-                    <div class="detail-grid">
-                        <div class="detail-item">
-                            <span class="label">Client ID</span>
-                            <span class="value">{{ client.client_id }}</span>
-                        </div>
-                        <div class="detail-item">
-                            <span class="label">Date Registered</span>
-                            <span class="value">{{ client.date_registered|date:"d M Y H:i" }}</span>
-                        </div>
-                        <div class="detail-item">
-                            <span class="label">Company</span>
-                            <span class="value">{{ client.company_name|default:'—' }}</span>
-                        </div>
-                        <div class="detail-item">
-                            <span class="label">Country</span>
-                            <span class="value">{{ client.get_country_display|default:'—' }}</span>
-                        </div>
-                        <div class="detail-item">
-                            <span class="label">Contact Person</span>
-                            <span class="value">{{ client.contact_person }}</span>
-                        </div>
-                        <div class="detail-item">
-                            <span class="label">Phone</span>
-                            <span class="value">{{ client.phone }}</span>
-                        </div>
-                        <div class="detail-item">
-                            <span class="label">Email</span>
-                            <span class="value">{% if client.email %}<a href="mailto:{{ client.email }}">{{ client.email }}</a>{% else %}—{% endif %}</span>
-                        </div>
-                        <div class="detail-item detail-item-wide">
-                            <span class="label">Address</span>
-                            <span class="value">{{ client.address }}</span>
-                        </div>
-                        {% if client.remarks %}
-                        <div class="detail-item detail-item-wide">
-                            <span class="label">Remarks</span>
-                            <span class="value">{{ client.remarks }}</span>
-                        </div>
-                        {% endif %}
-                    </div>
-                </div>
-            </section>
-        </div>
+    <section class="cleanup-stat-grid">
+        <div class="cleanup-stat"><strong>{{ cleanup_summary.transactions }}</strong><span>Transactions</span></div>
+        <div class="cleanup-stat"><strong>{{ cleanup_summary.uploaded_documents }}</strong><span>Documents</span></div>
+        <div class="cleanup-stat"><strong>{{ cleanup_summary.loadings }}</strong><span>Cargo</span></div>
+        <div class="cleanup-stat"><strong>{{ cleanup_summary.final_invoices }}</strong><span>Invoices</span></div>
+        <div class="cleanup-stat"><strong>{{ cleanup_summary.purchase_orders }}</strong><span>Purchase orders</span></div>
+        <div class="cleanup-stat"><strong>{{ cleanup_summary.total_records }}</strong><span>Related rows</span></div>
+    </section>
 
-        <div class="col-xl-4">
-            <section class="surface-panel h-100">
-                <div class="panel-header">
-                    <h3 class="panel-title"><i class="bi bi-box-seam me-2"></i>Associated cargo</h3>
-                    <a href="{% url 'loading_create' %}" class="btn btn-outline-primary btn-sm">Add Cargo</a>
-                </div>
-                {% if loadings %}
-                <div class="detail-sidebar-list">
-                    {% for loading in loadings %}
-                    <a href="{% url 'loading_detail' loading.id %}" class="detail-sidebar-link">
-                        <strong class="d-block mb-1">{{ loading.loading_id }}</strong>
-                        <span class="d-block text-muted small mb-1">{{ loading.destination }}</span>
-                        <span class="metric-pill"><i class="bi bi-box"></i>{{ loading.container_number|default:'Container pending' }}</span>
-                    </a>
-                    {% endfor %}
-                </div>
-                {% else %}
-                <div class="detail-item">
-                    <span class="label">Status</span>
-                    <span class="value">No cargo records are linked to this client yet.</span>
-                </div>
-                {% endif %}
-            </section>
-        </div>
+    <div class="cleanup-grid">
+        <section class="cleanup-panel">
+            <div class="cleanup-panel-head">
+                <h2><i class="bi bi-person-lines-fill me-1"></i> Account information</h2>
+            </div>
+            <div class="cleanup-detail-grid">
+                <div class="cleanup-detail-item"><span>Company</span><strong>{{ client.company_name|default:'-' }}</strong></div>
+                <div class="cleanup-detail-item"><span>Contact</span><strong>{{ client.contact_person|default:'-' }}</strong></div>
+                <div class="cleanup-detail-item"><span>Phone</span><strong>{{ client.phone|default:'-' }}</strong></div>
+                <div class="cleanup-detail-item"><span>Email</span><strong>{% if client.email %}<a href="mailto:{{ client.email }}">{{ client.email }}</a>{% else %}-{% endif %}</strong></div>
+                <div class="cleanup-detail-item"><span>Address</span><strong>{{ client.address|default:'-' }}</strong></div>
+                <div class="cleanup-detail-item"><span>Remarks</span><strong>{{ client.remarks|default:'-' }}</strong></div>
+            </div>
+        </section>
+
+        {% if can_manage_client_cleanup %}
+        <section class="cleanup-panel cleanup-danger">
+            <div class="cleanup-panel-head">
+                <h2><i class="bi bi-exclamation-triangle me-1"></i> Client deletion</h2>
+            </div>
+            <div class="p-3">
+                <form method="post" action="{% url 'client_delete' client.id %}">
+                    {% csrf_token %}
+                    <label class="form-label fw-semibold">Confirm client name</label>
+                    <input type="text" name="confirm_name" class="form-control form-control-sm mb-2" placeholder="{{ client.name }}" required>
+                    <button type="submit" class="btn btn-sm btn-danger w-100">
+                        <i class="bi bi-trash"></i> Delete client and related data
+                    </button>
+                </form>
+            </div>
+        </section>
+        {% endif %}
     </div>
+
+    <section class="cleanup-panel">
+        <div class="cleanup-panel-head">
+            <h2><i class="bi bi-diagram-3 me-1"></i> Transactions</h2>
+            <a href="{% url 'transaction_create' %}" class="btn btn-sm btn-outline-dark"><i class="bi bi-plus-lg"></i> New transaction</a>
+        </div>
+        {% if transactions %}
+        <div class="table-responsive">
+            <table class="table table-hover cleanup-table">
+                <thead>
+                    <tr>
+                        <th>Entry</th>
+                        <th>Status</th>
+                        <th>Documents</th>
+                        <th>Created</th>
+                        <th class="text-end">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for txn in transactions %}
+                    <tr>
+                        <td><a href="{% url 'transaction_detail' txn.pk %}" class="fw-semibold text-decoration-none">{{ txn.transaction_id }}</a></td>
+                        <td><span class="badge bg-light text-dark border">{{ txn.get_status_display }}</span></td>
+                        <td>{{ txn.document_count }}</td>
+                        <td class="text-muted">{{ txn.created_at|date:"d M Y" }}</td>
+                        <td class="text-end">
+                            <a href="{% url 'transaction_detail' txn.pk %}" class="btn btn-sm btn-outline-dark"><i class="bi bi-eye"></i></a>
+                            {% if can_manage_client_cleanup %}<a href="{% url 'transaction_update' txn.pk %}" class="btn btn-sm btn-warning"><i class="bi bi-pencil"></i></a>{% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="cleanup-empty">No transaction data is linked to this client.</div>
+        {% endif %}
+    </section>
+
+    <section class="cleanup-panel">
+        <form method="post" action="{% url 'client_documents_bulk_delete' client.id %}">
+            {% csrf_token %}
+            <div class="cleanup-panel-head">
+                <h2><i class="bi bi-files me-1"></i> Uploaded documents</h2>
+                {% if can_manage_client_cleanup %}
+                <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i> Delete selected</button>
+                {% endif %}
+            </div>
+            {% if client_documents %}
+            <div class="table-responsive">
+                <table class="table table-hover cleanup-table">
+                    <thead>
+                        <tr>
+                            {% if can_manage_client_cleanup %}<th><input type="checkbox" id="selectDocuments" aria-label="Select documents"></th>{% endif %}
+                            <th>Document</th>
+                            <th>Transaction</th>
+                            <th>Uploaded</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for doc in client_documents %}
+                        <tr>
+                            {% if can_manage_client_cleanup %}<td><input type="checkbox" name="document_ids" value="{{ doc.id }}" class="document-check" aria-label="Select {{ doc.get_document_type_display }}"></td>{% endif %}
+                            <td>
+                                <span class="badge {% if doc.document_type == 'CLIENT_PI' %}bg-primary{% else %}bg-secondary{% endif %}">{{ doc.get_document_type_display }}</span>
+                                <span class="d-block small text-muted mt-1">{{ doc.original_file.name|default:'-' }}</span>
+                            </td>
+                            <td><a href="{% url 'transaction_detail' doc.transaction.pk %}" class="text-decoration-none fw-semibold">{{ doc.transaction.transaction_id }}</a></td>
+                            <td class="text-muted">{{ doc.timestamp|date:"d M Y H:i" }}</td>
+                            <td class="text-end">
+                                {% if doc.original_file %}<a href="{% url 'protected_media' doc.original_file.name %}" class="btn btn-sm btn-outline-dark" target="_blank" rel="noopener noreferrer"><i class="bi bi-box-arrow-up-right"></i></a>{% endif %}
+                                {% if can_manage_client_cleanup %}
+                                <a href="{% url 'document_update' doc.pk %}?next={{ request.get_full_path|urlencode }}" class="btn btn-sm btn-warning"><i class="bi bi-pencil"></i></a>
+                                {% if doc.document_type == 'CLIENT_PI' %}<a href="{% url 'document_edit_pi' doc.pk %}" class="btn btn-sm btn-outline-primary"><i class="bi bi-list-check"></i></a>{% endif %}
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="cleanup-empty">No uploaded documents are linked to this client.</div>
+            {% endif %}
+        </form>
+    </section>
+
+    <section class="cleanup-panel">
+        <div class="cleanup-panel-head">
+            <h2><i class="bi bi-box-seam me-1"></i> Associated cargo</h2>
+            <a href="{% url 'loading_create' %}" class="btn btn-sm btn-outline-dark"><i class="bi bi-plus-lg"></i> Add cargo</a>
+        </div>
+        {% if loadings %}
+        <div class="table-responsive">
+            <table class="table table-hover cleanup-table">
+                <thead><tr><th>Cargo</th><th>Destination</th><th>Container</th><th>Date</th></tr></thead>
+                <tbody>
+                    {% for loading in loadings %}
+                    <tr>
+                        <td><a href="{% url 'loading_detail' loading.id %}" class="text-decoration-none fw-semibold">{{ loading.loading_id }}</a></td>
+                        <td>{{ loading.destination }}</td>
+                        <td>{{ loading.container_number|default:'Pending' }}</td>
+                        <td class="text-muted">{{ loading.loading_date|date:"d M Y" }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="cleanup-empty">No cargo records are linked to this client.</div>
+        {% endif %}
+    </section>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    var selectAll = document.getElementById('selectDocuments');
+    if (!selectAll) return;
+    selectAll.addEventListener('change', function () {
+        document.querySelectorAll('.document-check').forEach(function (checkbox) {
+            checkbox.checked = selectAll.checked;
+        });
+    });
+});
+</script>
 {% endblock %}

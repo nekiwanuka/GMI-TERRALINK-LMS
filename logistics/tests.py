@@ -13,11 +13,14 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.template.loader import render_to_string
 from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
+from django.utils import timezone
 
 from reportlab.pdfgen import canvas
 
 from logistics.models import (
     Client,
+    Commission,
+    ContainerReturn,
     CustomUser,
     Document,
     DocumentArchive,
@@ -26,6 +29,7 @@ from logistics.models import (
     GeneralInvoice,
     GeneralPayment,
     GeneralQuotation,
+    Loading,
     PaymentTransaction,
     PurchaseOrder,
     ProformaInvoice,
@@ -290,7 +294,14 @@ class GeneralDocumentCreateTests(TestCase):
             status="SENT",
             currency="USD",
             subtotal=Decimal("50"),
-            items=[{"description": "General service", "quantity": "2", "unit_price": "25", "amount": "50"}],
+            items=[
+                {
+                    "description": "General service",
+                    "quantity": "2",
+                    "unit_price": "25",
+                    "amount": "50",
+                }
+            ],
         )
         invoice = GeneralInvoice.objects.create(
             client=self.client_record,
@@ -298,7 +309,14 @@ class GeneralDocumentCreateTests(TestCase):
             status="ISSUED",
             currency="USD",
             subtotal=Decimal("50"),
-            items=[{"description": "General service", "quantity": "2", "unit_price": "25", "amount": "50"}],
+            items=[
+                {
+                    "description": "General service",
+                    "quantity": "2",
+                    "unit_price": "25",
+                    "amount": "50",
+                }
+            ],
         )
         payment = GeneralPayment.objects.create(
             invoice=invoice,
@@ -334,7 +352,14 @@ class GeneralDocumentCreateTests(TestCase):
             status="ISSUED",
             currency="USD",
             subtotal=Decimal("50"),
-            items=[{"description": "General service", "quantity": "2", "unit_price": "25", "amount": "50"}],
+            items=[
+                {
+                    "description": "General service",
+                    "quantity": "2",
+                    "unit_price": "25",
+                    "amount": "50",
+                }
+            ],
         )
         SignatureProfile.objects.create(
             user=self.user,
@@ -352,7 +377,9 @@ class GeneralDocumentCreateTests(TestCase):
             response.url, reverse("general_invoice_detail", kwargs={"pk": invoice.pk})
         )
         signature = DocumentSignature.objects.get(
-            content_type=ContentType.objects.get_for_model(invoice, for_concrete_model=False),
+            content_type=ContentType.objects.get_for_model(
+                invoice, for_concrete_model=False
+            ),
             object_id=invoice.pk,
         )
         self.assertEqual(signature.signer_name, self.user.username)
@@ -764,7 +791,9 @@ class PurchaseOrderSplitTests(TestCase):
         )
 
         base_payment_response = self.client.post(
-            reverse("record_supplier_payment", kwargs={"po_pk": self.purchase_order.pk}),
+            reverse(
+                "record_supplier_payment", kwargs={"po_pk": self.purchase_order.pk}
+            ),
             {
                 "supplier_name": "Main Supplier",
                 "amount": "250.00",
@@ -793,7 +822,9 @@ class PurchaseOrderSplitTests(TestCase):
         self.assertEqual(SupplierPayment.objects.count(), 1)
         payment = SupplierPayment.objects.get()
         self.assertEqual(payment.purchase_order_id, self.purchase_order.pk)
-        self.assertContains(over_cap_response, "exceeds the allowed client deposit room")
+        self.assertContains(
+            over_cap_response, "exceeds the allowed client deposit room"
+        )
 
     def test_invoice_payment_snapshot_allocates_goods_shipping_then_company_fees(self):
         invoice = FinalInvoice.objects.create(
@@ -806,12 +837,8 @@ class PurchaseOrderSplitTests(TestCase):
             created_by=self.user,
         )
 
-        partial_snapshot = _final_invoice_payment_snapshot(
-            invoice, Decimal("1000.00")
-        )
-        shipping_snapshot = _final_invoice_payment_snapshot(
-            invoice, Decimal("2500.00")
-        )
+        partial_snapshot = _final_invoice_payment_snapshot(invoice, Decimal("1000.00"))
+        shipping_snapshot = _final_invoice_payment_snapshot(invoice, Decimal("2500.00"))
 
         self.assertEqual(partial_snapshot["item_balance"], Decimal("1112.00"))
         self.assertEqual(partial_snapshot["shipping_balance"], Decimal("300.00"))
@@ -1114,3 +1141,179 @@ class PurchaseOrderSplitTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, "served/fulfilled")
         self.assertContains(response, "Unpaid")
+
+
+class ClientCleanupTests(TestCase):
+    def setUp(self):
+        self.media_root = tempfile.mkdtemp()
+        self.override = override_settings(MEDIA_ROOT=self.media_root)
+        self.override.enable()
+        self.addCleanup(self.override.disable)
+        self.addCleanup(shutil.rmtree, self.media_root, ignore_errors=True)
+
+        self.admin = CustomUser.objects.create_user(
+            username="cleanup-admin",
+            password="testpass123",
+            role="ADMIN",
+        )
+        self.customer = Client.objects.create(
+            name="Derrick Trading",
+            contact_person="Derrick",
+            phone="0700000000",
+            email="derrick@example.com",
+            address="Kampala",
+            created_by=self.admin,
+        )
+        self.other_customer = Client.objects.create(
+            name="Other Client",
+            contact_person="Amina",
+            phone="0711111111",
+            email="amina@example.com",
+            address="Entebbe",
+            created_by=self.admin,
+        )
+        self.transaction = Transaction.objects.create(
+            customer=self.customer,
+            description="Cleanup goods",
+            created_by=self.admin,
+        )
+        self.other_transaction = Transaction.objects.create(
+            customer=self.other_customer,
+            description="Separate goods",
+            created_by=self.admin,
+        )
+        self.document = self._create_document(self.transaction, "derrick-pi.txt")
+        self.other_document = self._create_document(
+            self.other_transaction, "other-pi.txt"
+        )
+        self.client.force_login(self.admin)
+
+    def _create_document(self, transaction, filename):
+        document = Document.objects.create(
+            transaction=transaction,
+            document_type="CLIENT_PI",
+            original_file=SimpleUploadedFile(
+                filename, b"client purchase inquiry", content_type="text/plain"
+            ),
+            uploaded_by=self.admin,
+        )
+        DocumentArchive.create_from_document(document, archived_by=self.admin)
+        return document
+
+    def test_bulk_document_delete_only_removes_selected_client_documents(self):
+        response = self.client.post(
+            reverse("client_documents_bulk_delete", kwargs={"pk": self.customer.pk}),
+            {"document_ids": [str(self.document.pk), str(self.other_document.pk)]},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(Document.objects.filter(pk=self.document.pk).exists())
+        self.assertFalse(
+            DocumentArchive.objects.filter(
+                source_model="Document", source_object_id=str(self.document.pk)
+            ).exists()
+        )
+        self.assertTrue(Document.objects.filter(pk=self.other_document.pk).exists())
+        self.assertTrue(
+            DocumentArchive.objects.filter(
+                source_model="Document", source_object_id=str(self.other_document.pk)
+            ).exists()
+        )
+
+    def test_client_delete_get_renders_confirmation_without_deleting(self):
+        response = self.client.get(
+            reverse("client_delete", kwargs={"pk": self.customer.pk})
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(Client.objects.filter(pk=self.customer.pk).exists())
+
+    def test_office_admin_cannot_delete_client_data(self):
+        office_admin = CustomUser.objects.create_user(
+            username="cleanup-office-admin",
+            password="testpass123",
+            role="OFFICE_ADMIN",
+        )
+        self.client.force_login(office_admin)
+
+        document_response = self.client.post(
+            reverse("client_documents_bulk_delete", kwargs={"pk": self.customer.pk}),
+            {"document_ids": [str(self.document.pk)]},
+        )
+        client_response = self.client.post(
+            reverse("client_delete", kwargs={"pk": self.customer.pk}),
+            {"confirm_name": self.customer.name},
+        )
+
+        self.assertEqual(document_response.status_code, 302)
+        self.assertEqual(client_response.status_code, 302)
+        self.assertTrue(Client.objects.filter(pk=self.customer.pk).exists())
+        self.assertTrue(Document.objects.filter(pk=self.document.pk).exists())
+
+    def test_client_delete_removes_protected_related_records(self):
+        loading = Loading.objects.create(
+            loading_id="LOAD-CLEAN-1",
+            client=self.customer,
+            loading_date=timezone.now(),
+            item_description="Cleanup cargo",
+            origin="Guangzhou",
+            destination="Kampala",
+            created_by=self.admin,
+        )
+        self.transaction.source_loading = loading
+        self.transaction.save(update_fields=["source_loading"])
+        proforma = ProformaInvoice.objects.create(
+            transaction=self.transaction,
+            loading=loading,
+            items=[{"description": "Cleanup item", "quantity": "1", "total": 100}],
+            subtotal=Decimal("100.00"),
+            validity_date="2026-06-18",
+            created_by=self.admin,
+        )
+        final_invoice = FinalInvoice.objects.create(
+            transaction=self.transaction,
+            loading=loading,
+            proforma=proforma,
+            items=[{"description": "Cleanup item", "quantity": "1", "total": 100}],
+            subtotal=Decimal("100.00"),
+            total_amount=Decimal("100.00"),
+            created_by=self.admin,
+        )
+        PurchaseOrder.objects.create(
+            transaction=self.transaction,
+            proforma=proforma,
+            final_invoice=final_invoice,
+            supplier_name="Cleanup Supplier",
+            items=[{"description": "Cleanup item", "quantity": "1", "total": 100}],
+            subtotal=Decimal("100.00"),
+            created_by=self.admin,
+        )
+        ContainerReturn.objects.create(
+            container_number="CLEAN1234567",
+            loading=loading,
+            return_date=timezone.now(),
+            condition="good",
+            created_by=self.admin,
+        )
+        Commission.objects.create(
+            client=self.customer,
+            amount=Decimal("25.00"),
+            currency="USD",
+            created_by=self.admin,
+        )
+
+        response = self.client.post(
+            reverse("client_delete", kwargs={"pk": self.customer.pk}),
+            {"confirm_name": self.customer.name},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(Client.objects.filter(pk=self.customer.pk).exists())
+        self.assertFalse(Transaction.objects.filter(pk=self.transaction.pk).exists())
+        self.assertFalse(Loading.objects.filter(pk=loading.pk).exists())
+        self.assertFalse(Document.objects.filter(pk=self.document.pk).exists())
+        self.assertFalse(ProformaInvoice.objects.filter(pk=proforma.pk).exists())
+        self.assertFalse(FinalInvoice.objects.filter(pk=final_invoice.pk).exists())
+        self.assertFalse(ContainerReturn.objects.filter(loading=loading).exists())
+        self.assertFalse(Commission.objects.filter(client_id=self.customer.pk).exists())
+        self.assertTrue(Client.objects.filter(pk=self.other_customer.pk).exists())

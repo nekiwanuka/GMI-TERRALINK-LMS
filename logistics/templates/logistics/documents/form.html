@@ -1,0 +1,76 @@
+{% extends "logistics/base.html" %}
+
+{% block title %}{{ title }} - GMI TERRALINK Logistics Portal{% endblock %}
+
+{% block extra_css %}
+<style>
+    .document-form-shell { max-width: 820px; margin: 0 auto; }
+    .document-form-panel { border: 1px solid #ece7cd; background: #fff; }
+    .document-form-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 1rem;
+        align-items: center;
+        padding: .85rem 1rem;
+        border-bottom: 1px solid #ece7cd;
+        background: #faf8ef;
+    }
+    .document-form-head h1 { margin: 0; color: #1a1a1a; font-size: 1rem; }
+    .document-meta { color: #6b6b6b; font-size: .8rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="document-form-shell">
+    <section class="document-form-panel">
+        <div class="document-form-head">
+            <div>
+                <h1><i class="bi bi-pencil me-1"></i> {{ title }}</h1>
+                <div class="document-meta">{{ document.transaction.transaction_id }} &middot; {{ document.transaction.customer.name }}</div>
+            </div>
+            <a href="{% url 'client_detail' document.transaction.customer_id %}" class="btn btn-sm btn-outline-dark"><i class="bi bi-arrow-left"></i> Client</a>
+        </div>
+        <form method="post" enctype="multipart/form-data" class="p-3">
+            {% csrf_token %}
+            {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
+            {% if document.transaction.is_closed %}
+            <div class="alert alert-warning small py-2">
+                Closed trade edit. Add a reason before saving document changes.
+            </div>
+            <div class="mb-3">
+                <label class="form-label fw-semibold">Reason</label>
+                <textarea name="closed_edit_reason" class="form-control form-control-sm" rows="2" required></textarea>
+            </div>
+            {% endif %}
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label class="form-label fw-semibold" for="{{ form.document_type.id_for_label }}">Document type</label>
+                    {{ form.document_type }}
+                    {% for error in form.document_type.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label fw-semibold">Current file</label>
+                    <div class="form-control form-control-sm bg-light text-muted">{{ document.original_file.name|default:'No file' }}</div>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label fw-semibold" for="{{ form.original_file.id_for_label }}">Original file</label>
+                    {{ form.original_file }}
+                    {% for error in form.original_file.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label fw-semibold" for="{{ form.processed_file.id_for_label }}">Processed file</label>
+                    {{ form.processed_file }}
+                    {% for error in form.processed_file.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+                </div>
+            </div>
+            {% if form.non_field_errors %}
+            <div class="alert alert-warning mt-3 mb-0">{{ form.non_field_errors }}</div>
+            {% endif %}
+            <div class="d-flex gap-2 justify-content-end mt-3">
+                <a href="{% url 'client_detail' document.transaction.customer_id %}" class="btn btn-outline-secondary">Cancel</a>
+                <button type="submit" class="btn btn-dark"><i class="bi bi-save"></i> Save document</button>
+            </div>
+        </form>
+    </section>
+</div>
+{% endblock %}

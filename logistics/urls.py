@@ -58,6 +58,11 @@ urlpatterns = [
     path("clients/<int:pk>/", views.client_detail, name="client_detail"),
     path("clients/<int:pk>/update/", views.client_update, name="client_update"),
     path("clients/<int:pk>/delete/", views.client_delete, name="client_delete"),
+    path(
+        "clients/<int:pk>/documents/delete/",
+        views.client_documents_bulk_delete,
+        name="client_documents_bulk_delete",
+    ),
     # Commissions (Director / System Admin only)
     path("commissions/", views.commission_list, name="commission_list"),
     path("commissions/create/", views.commission_create, name="commission_create"),
@@ -203,6 +208,11 @@ urlpatterns = [
         "transactions/<int:pk>/documents/upload/",
         views.transaction_document_upload,
         name="transaction_document_upload",
+    ),
+    path(
+        "documents/<int:pk>/update/",
+        views.document_update,
+        name="document_update",
     ),
     path(
         "documents/<int:pk>/edit-pi/",

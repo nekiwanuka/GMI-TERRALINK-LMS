@@ -12,32 +12,139 @@ from html import escape
 from io import BytesIO
 from urllib.parse import quote
 
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout, update_session_auth_hash
 from django.contrib.auth.decorators import login_required
-from django.conf import settings
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
 from django.core.mail import send_mail
 from django.core.paginator import Paginator
 from django.core.validators import validate_email
 from django.db import transaction
-from django.db.models import Q, Sum, ProtectedError, Count
+from django.db.models import Count, ProtectedError, Q, Sum
 from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
+from django.utils._os import safe_join
 from django.utils.crypto import constant_time_compare, salted_hmac
 from django.utils.http import url_has_allowed_host_and_scheme
-from django.utils._os import safe_join
 from django.views.decorators.clickjacking import xframe_options_sameorigin
 
-from .pi_parser import (
-    parse_purchase_inquiry,
-    items_to_sourcing_lines,
-    build_sourcing_notes,
-)
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import A4, landscape
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.pdfgen import canvas
+from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
+from .decorators import (
+    director_required,
+    finance_required,
+    procurement_required,
+    role_required,
+)
+from .document_numbers import (
+    display_document_number,
+    display_document_slug,
+    document_department_code,
+)
+from .forms import (
+    ClientForm,
+    ContainerReturnForm,
+    DocumentForm,
+    FinalInvoiceForm,
+    FulfillmentLineForm,
+    FulfillmentOrderForm,
+    GeneralInvoiceForm,
+    GeneralPaymentForm,
+    GeneralQuotationForm,
+    InventoryItemForm,
+    LoadingForm,
+    NoticeboardTaskForm,
+    PaymentForm,
+    PaymentTransactionForm,
+    ProformaInvoiceForm,
+    ProofOfDeliveryForm,
+    ShipmentLegForm,
+    SignatureProfileForm,
+    AdminUserEditForm,
+    SourcingForm,
+    SupplierForm,
+    SupplierPaymentForm,
+    SupplierProductForm,
+    TransactionForm,
+    TransactionPaymentRecordForm,
+    TransitForm,
+    UserRegistrationForm,
+    normalize_text_entry,
+)
+from .models import (
+    _draw_international_terms_footer,
+    _draw_standard_doc_header,
+    AuditLog,
+    BillingCharge,
+    BillingInvoice,
+    BillingInvoiceLine,
+    BillingPayment,
+    CargoItemWorkflow,
+    Client,
+    Commission,
+    ContainerReturn,
+    CustomUser,
+    Document,
+    DocumentArchive,
+    DocumentSignature,
+    DomainEvent,
+    FinalInvoice,
+    FulfillmentLine,
+    FulfillmentOrder,
+    GeneralInvoice,
+    GeneralPayment,
+    GeneralQuotation,
+    GeneralReceipt,
+    InventoryItem,
+    InventoryMovement,
+    InventoryPosition,
+    Loading,
+    Notification,
+    NoticeboardTask,
+    Payment,
+    PaymentTransaction,
+    ProformaInvoice,
+    ProofOfDelivery,
+    PurchaseOrder,
+    Receipt,
+    ShipmentWorkflow,
+    ShipmentLeg,
+    SignatureProfile,
+    Sourcing,
+    Supplier,
+    SupplierPayment,
+    SupplierProduct,
+    Transaction,
+    TransactionPaymentRecord,
+    Transit,
+    WorkflowTransitionLog,
+)
+from .pi_parser import (
+    build_sourcing_notes,
+    items_to_sourcing_lines,
+    parse_purchase_inquiry,
+)
+from .role_permissions import (
+    PROCUREMENT_PERMISSION_ROLES,
+    PROCUREMENT_STAFF_ROLES,
+    expand_allowed_roles,
+    normalized_role,
+    role_has_procurement_permissions,
+)
+from .services import (
+    WorkflowTransitionError,
+    transition_cargo_item,
+    transition_shipment,
+)
+from .services.reporting import DirectorReportingService
 
 logger = logging.getLogger(__name__)
 
@@ -144,104 +251,6 @@ def _unit_prices_from_structured_data(structured_data):
                 continue
     return prices
 
-
-from reportlab.lib import colors
-from reportlab.lib.pagesizes import A4, landscape
-from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.pdfgen import canvas
-from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
-
-from .forms import (
-    ClientForm,
-    ContainerReturnForm,
-    DocumentForm,
-    FinalInvoiceForm,
-    FulfillmentLineForm,
-    FulfillmentOrderForm,
-    GeneralInvoiceForm,
-    GeneralPaymentForm,
-    GeneralQuotationForm,
-    InventoryItemForm,
-    LoadingForm,
-    NoticeboardTaskForm,
-    PaymentForm,
-    PaymentTransactionForm,
-    ProformaInvoiceForm,
-    ProofOfDeliveryForm,
-    ShipmentLegForm,
-    SignatureProfileForm,
-    AdminUserEditForm,
-    SourcingForm,
-    SupplierForm,
-    SupplierPaymentForm,
-    SupplierProductForm,
-    TransactionForm,
-    TransitForm,
-    TransactionPaymentRecordForm,
-    UserRegistrationForm,
-    normalize_text_entry,
-)
-from .decorators import (
-    director_required,
-    finance_required,
-    procurement_required,
-    role_required,
-)
-from .role_permissions import (
-    PROCUREMENT_PERMISSION_ROLES,
-    PROCUREMENT_STAFF_ROLES,
-    expand_allowed_roles,
-    normalized_role,
-    role_has_procurement_permissions,
-)
-from .document_numbers import (
-    display_document_number,
-    display_document_slug,
-    document_department_code,
-)
-from .models import (
-    _draw_international_terms_footer,
-    _draw_standard_doc_header,
-    AuditLog,
-    Client,
-    ContainerReturn,
-    CustomUser,
-    Document,
-    DocumentArchive,
-    DocumentSignature,
-    FinalInvoice,
-    FulfillmentLine,
-    FulfillmentOrder,
-    GeneralInvoice,
-    GeneralPayment,
-    GeneralQuotation,
-    GeneralReceipt,
-    InventoryItem,
-    Loading,
-    Notification,
-    NoticeboardTask,
-    Payment,
-    PaymentTransaction,
-    ProformaInvoice,
-    ProofOfDelivery,
-    PurchaseOrder,
-    Receipt,
-    Sourcing,
-    Supplier,
-    SupplierPayment,
-    SupplierProduct,
-    ShipmentLeg,
-    SignatureProfile,
-    Transaction,
-    TransactionPaymentRecord,
-    Transit,
-)
-from .services import (
-    WorkflowTransitionError,
-    transition_cargo_item,
-    transition_shipment,
-)
-from .services.reporting import DirectorReportingService
 
 DEFAULT_PAGE_SIZE = 20
 AUDIT_PAGE_SIZE = 40
@@ -364,7 +373,9 @@ def _can_record_payment_entry(user):
 def _is_system_admin_account(user):
     return bool(
         user
-        and (getattr(user, "is_superuser", False) or getattr(user, "role", "") == "ADMIN")
+        and (
+            getattr(user, "is_superuser", False) or getattr(user, "role", "") == "ADMIN"
+        )
     )
 
 
@@ -632,6 +643,14 @@ def _can_edit_closed_trade_documents(user):
     return user.is_superuser or getattr(user, "role", "") in {"ADMIN", "DIRECTOR"}
 
 
+def _can_manage_client_cleanup(user):
+    return user.is_superuser or getattr(user, "role", "") in {
+        "ADMIN",
+        "DIRECTOR",
+        "superuser",
+    }
+
+
 def _can_directly_edit_business_documents(user):
     return user.is_superuser or getattr(user, "role", "") in {
         "ADMIN",
@@ -744,6 +763,446 @@ def _locked_trade_document_response(request, transaction):
     return None
 
 
+def _client_transactions_queryset(client):
+    return Transaction.objects.filter(
+        Q(customer=client) | Q(source_loading__client=client)
+    ).distinct()
+
+
+def _client_documents_queryset(client):
+    transaction_ids = _client_transactions_queryset(client).values_list("pk", flat=True)
+    return Document.objects.filter(transaction_id__in=transaction_ids)
+
+
+def _delete_file_field_values(queryset, field_names):
+    if not field_names:
+        return
+    for instance in queryset:
+        for field_name in field_names:
+            file_value = getattr(instance, field_name, None)
+            if file_value:
+                file_value.delete(save=False)
+
+
+def _delete_queryset_records(queryset, stats=None, key=None, file_fields=()):
+    instances = list(queryset)
+    pks = list(dict.fromkeys(instance.pk for instance in instances))
+    count = len(pks)
+    if not count:
+        return 0
+    if file_fields:
+        _delete_file_field_values(instances, file_fields)
+    queryset.model._default_manager.filter(pk__in=pks).delete()
+    if stats is not None and key:
+        stats[key] = stats.get(key, 0) + count
+    return count
+
+
+def _delete_document_signatures_for_model(model, object_ids, stats):
+    object_ids = [object_id for object_id in object_ids if object_id]
+    if not object_ids:
+        return 0
+    content_type = ContentType.objects.get_for_model(model, for_concrete_model=False)
+    return _delete_queryset_records(
+        DocumentSignature.objects.filter(
+            content_type=content_type,
+            object_id__in=object_ids,
+        ),
+        stats,
+        "document_signatures",
+    )
+
+
+def _source_archive_q(source_model, object_ids):
+    object_ids = [str(object_id) for object_id in object_ids if object_id]
+    if not object_ids:
+        return Q(pk__in=[])
+    return Q(source_model=source_model, source_object_id__in=object_ids)
+
+
+def _delete_purchase_orders(purchase_order_ids, stats):
+    remaining_ids = list(purchase_order_ids)
+    deleted = 0
+    while remaining_ids:
+        progress = False
+        for purchase_order in PurchaseOrder.objects.filter(
+            pk__in=remaining_ids
+        ).order_by("-pk"):
+            purchase_order_id = purchase_order.pk
+            try:
+                purchase_order.delete()
+            except ProtectedError:
+                continue
+            remaining_ids.remove(purchase_order_id)
+            deleted += 1
+            progress = True
+        if not progress:
+            protected_orders = PurchaseOrder.objects.filter(pk__in=remaining_ids)
+            raise ProtectedError(
+                "Purchase orders are still protected by related records.",
+                protected_orders,
+            )
+    if deleted:
+        stats["purchase_orders"] = stats.get("purchase_orders", 0) + deleted
+    return deleted
+
+
+def _client_cleanup_summary(client):
+    transaction_ids = list(
+        _client_transactions_queryset(client).values_list("pk", flat=True)
+    )
+    loading_ids = list(
+        Loading.objects.filter(client=client).values_list("pk", flat=True)
+    )
+    fulfillment_order_ids = list(
+        FulfillmentOrder.objects.filter(transaction_id__in=transaction_ids).values_list(
+            "pk", flat=True
+        )
+    )
+    workflow_shipment_ids = list(
+        ShipmentWorkflow.objects.filter(client=client).values_list("pk", flat=True)
+    )
+    cargo_item_ids = list(
+        CargoItemWorkflow.objects.filter(
+            shipment_id__in=workflow_shipment_ids
+        ).values_list("pk", flat=True)
+    )
+    final_invoice_ids = list(
+        FinalInvoice.objects.filter(
+            Q(transaction_id__in=transaction_ids) | Q(loading_id__in=loading_ids)
+        ).values_list("pk", flat=True)
+    )
+    proforma_ids = list(
+        ProformaInvoice.objects.filter(
+            Q(transaction_id__in=transaction_ids) | Q(loading_id__in=loading_ids)
+        ).values_list("pk", flat=True)
+    )
+    purchase_order_ids = list(
+        PurchaseOrder.objects.filter(
+            Q(transaction_id__in=transaction_ids)
+            | Q(proforma_id__in=proforma_ids)
+            | Q(final_invoice_id__in=final_invoice_ids)
+        ).values_list("pk", flat=True)
+    )
+    billing_invoice_ids = list(
+        BillingInvoice.objects.filter(
+            Q(client=client) | Q(shipment_id__in=workflow_shipment_ids)
+        ).values_list("pk", flat=True)
+    )
+    summary = {
+        "transactions": len(transaction_ids),
+        "uploaded_documents": Document.objects.filter(
+            transaction_id__in=transaction_ids
+        ).count(),
+        "document_archives": DocumentArchive.objects.filter(
+            Q(transaction_id__in=transaction_ids)
+            | Q(document__transaction_id__in=transaction_ids)
+        ).count(),
+        "loadings": len(loading_ids),
+        "logistics_payments": Payment.objects.filter(
+            Q(loading_id__in=loading_ids) | Q(final_invoice_id__in=final_invoice_ids)
+        ).count(),
+        "payment_receipts": Receipt.objects.filter(
+            Q(logistics_payment__payment__loading_id__in=loading_ids)
+            | Q(sourcing_payment__transaction_id__in=transaction_ids)
+        ).count(),
+        "proformas": len(proforma_ids),
+        "final_invoices": len(final_invoice_ids),
+        "purchase_orders": len(purchase_order_ids),
+        "supplier_payments": SupplierPayment.objects.filter(
+            purchase_order_id__in=purchase_order_ids
+        ).count(),
+        "fulfillment_orders": len(fulfillment_order_ids),
+        "inventory_items": InventoryItem.objects.filter(
+            transaction_id__in=transaction_ids
+        ).count(),
+        "proofs_of_delivery": ProofOfDelivery.objects.filter(
+            Q(loading_id__in=loading_ids)
+            | Q(fulfillment_order_id__in=fulfillment_order_ids)
+        ).count(),
+        "workflow_shipments": len(workflow_shipment_ids),
+        "workflow_cargo_items": len(cargo_item_ids),
+        "workflow_billing_invoices": len(billing_invoice_ids),
+        "commissions": Commission.objects.filter(client=client).count(),
+    }
+    summary["total_records"] = sum(summary.values())
+    return summary
+
+
+def _delete_client_with_related_data(client, user):
+    stats = {}
+    with transaction.atomic():
+        transaction_ids = list(
+            _client_transactions_queryset(client).values_list("pk", flat=True)
+        )
+        loading_ids = list(
+            Loading.objects.filter(client=client).values_list("pk", flat=True)
+        )
+        fulfillment_order_ids = list(
+            FulfillmentOrder.objects.filter(
+                transaction_id__in=transaction_ids
+            ).values_list("pk", flat=True)
+        )
+        workflow_shipment_ids = list(
+            ShipmentWorkflow.objects.filter(client=client).values_list("pk", flat=True)
+        )
+        cargo_item_ids = list(
+            CargoItemWorkflow.objects.filter(
+                shipment_id__in=workflow_shipment_ids
+            ).values_list("pk", flat=True)
+        )
+        final_invoice_ids = list(
+            FinalInvoice.objects.filter(
+                Q(transaction_id__in=transaction_ids) | Q(loading_id__in=loading_ids)
+            ).values_list("pk", flat=True)
+        )
+        proforma_ids = list(
+            ProformaInvoice.objects.filter(
+                Q(transaction_id__in=transaction_ids) | Q(loading_id__in=loading_ids)
+            ).values_list("pk", flat=True)
+        )
+        purchase_order_ids = list(
+            PurchaseOrder.objects.filter(
+                Q(transaction_id__in=transaction_ids)
+                | Q(proforma_id__in=proforma_ids)
+                | Q(final_invoice_id__in=final_invoice_ids)
+            ).values_list("pk", flat=True)
+        )
+        payment_transaction_ids = list(
+            PaymentTransaction.objects.filter(
+                payment__loading_id__in=loading_ids
+            ).values_list("pk", flat=True)
+        )
+        trade_payment_ids = list(
+            TransactionPaymentRecord.objects.filter(
+                Q(transaction_id__in=transaction_ids)
+                | Q(final_invoice_id__in=final_invoice_ids)
+            ).values_list("pk", flat=True)
+        )
+        supplier_payment_ids = list(
+            SupplierPayment.objects.filter(
+                purchase_order_id__in=purchase_order_ids
+            ).values_list("pk", flat=True)
+        )
+        billing_invoice_ids = list(
+            BillingInvoice.objects.filter(
+                Q(client=client) | Q(shipment_id__in=workflow_shipment_ids)
+            ).values_list("pk", flat=True)
+        )
+        billing_payment_ids = list(
+            BillingPayment.objects.filter(
+                invoice_id__in=billing_invoice_ids
+            ).values_list("pk", flat=True)
+        )
+
+        _delete_document_signatures_for_model(
+            Receipt,
+            Receipt.objects.filter(
+                Q(logistics_payment_id__in=payment_transaction_ids)
+                | Q(sourcing_payment_id__in=trade_payment_ids)
+            ).values_list("pk", flat=True),
+            stats,
+        )
+        _delete_document_signatures_for_model(ProformaInvoice, proforma_ids, stats)
+        _delete_document_signatures_for_model(FinalInvoice, final_invoice_ids, stats)
+        _delete_document_signatures_for_model(PurchaseOrder, purchase_order_ids, stats)
+
+        archive_filter = (
+            Q(transaction_id__in=transaction_ids)
+            | Q(document__transaction_id__in=transaction_ids)
+            | _source_archive_q("PaymentTransaction", payment_transaction_ids)
+            | _source_archive_q("TransactionPaymentRecord", trade_payment_ids)
+            | _source_archive_q("SupplierPayment", supplier_payment_ids)
+            | _source_archive_q("BillingPayment", billing_payment_ids)
+        )
+        _delete_queryset_records(
+            DocumentArchive.objects.filter(archive_filter).distinct(),
+            stats,
+            "document_archives",
+            ("archived_file",),
+        )
+        _delete_queryset_records(
+            Document.objects.filter(transaction_id__in=transaction_ids),
+            stats,
+            "uploaded_documents",
+            ("original_file", "processed_file"),
+        )
+        _delete_queryset_records(
+            Receipt.objects.filter(
+                Q(logistics_payment_id__in=payment_transaction_ids)
+                | Q(sourcing_payment_id__in=trade_payment_ids)
+            ),
+            stats,
+            "payment_receipts",
+        )
+        _delete_queryset_records(
+            ProofOfDelivery.objects.filter(
+                Q(loading_id__in=loading_ids)
+                | Q(fulfillment_order_id__in=fulfillment_order_ids)
+            ),
+            stats,
+            "proofs_of_delivery",
+            ("signature_or_photo",),
+        )
+        _delete_queryset_records(
+            PaymentTransaction.objects.filter(pk__in=payment_transaction_ids),
+            stats,
+            "payment_transactions",
+            ("proof_of_payment",),
+        )
+        _delete_queryset_records(
+            TransactionPaymentRecord.objects.filter(pk__in=trade_payment_ids),
+            stats,
+            "trade_payments",
+            ("proof_of_payment",),
+        )
+        _delete_queryset_records(
+            Payment.objects.filter(
+                Q(loading_id__in=loading_ids)
+                | Q(final_invoice_id__in=final_invoice_ids)
+            ),
+            stats,
+            "logistics_payments",
+        )
+        _delete_queryset_records(
+            SupplierPayment.objects.filter(pk__in=supplier_payment_ids),
+            stats,
+            "supplier_payments",
+            ("proof_of_payment",),
+        )
+        _delete_queryset_records(
+            BillingPayment.objects.filter(pk__in=billing_payment_ids),
+            stats,
+            "workflow_billing_payments",
+            ("proof_of_payment",),
+        )
+        _delete_queryset_records(
+            BillingInvoiceLine.objects.filter(invoice_id__in=billing_invoice_ids),
+            stats,
+            "workflow_billing_lines",
+        )
+        _delete_queryset_records(
+            BillingInvoice.objects.filter(pk__in=billing_invoice_ids),
+            stats,
+            "workflow_billing_invoices",
+        )
+        _delete_queryset_records(
+            BillingCharge.objects.filter(shipment_id__in=workflow_shipment_ids),
+            stats,
+            "workflow_billing_charges",
+        )
+        _delete_queryset_records(
+            WorkflowTransitionLog.objects.filter(
+                Q(entity_type="SHIPMENT", entity_id__in=workflow_shipment_ids)
+                | Q(entity_type="CARGO", entity_id__in=cargo_item_ids)
+            ),
+            stats,
+            "workflow_transition_logs",
+        )
+        _delete_queryset_records(
+            InventoryMovement.objects.filter(
+                Q(shipment_id__in=workflow_shipment_ids)
+                | Q(cargo_item_id__in=cargo_item_ids)
+            ),
+            stats,
+            "workflow_inventory_movements",
+        )
+        _delete_queryset_records(
+            InventoryPosition.objects.filter(cargo_item_id__in=cargo_item_ids),
+            stats,
+            "workflow_inventory_positions",
+        )
+        _delete_queryset_records(
+            CargoItemWorkflow.objects.filter(pk__in=cargo_item_ids),
+            stats,
+            "workflow_cargo_items",
+        )
+        _delete_queryset_records(
+            DomainEvent.objects.filter(
+                Q(
+                    aggregate_type="ShipmentWorkflow",
+                    aggregate_id__in=[str(pk) for pk in workflow_shipment_ids],
+                )
+                | Q(
+                    aggregate_type="CargoItemWorkflow",
+                    aggregate_id__in=[str(pk) for pk in cargo_item_ids],
+                )
+            ),
+            stats,
+            "workflow_events",
+        )
+        _delete_queryset_records(
+            ShipmentWorkflow.objects.filter(pk__in=workflow_shipment_ids),
+            stats,
+            "workflow_shipments",
+        )
+        _delete_queryset_records(
+            FulfillmentLine.objects.filter(order_id__in=fulfillment_order_ids),
+            stats,
+            "fulfillment_lines",
+        )
+        _delete_queryset_records(
+            ShipmentLeg.objects.filter(order_id__in=fulfillment_order_ids),
+            stats,
+            "shipment_legs",
+        )
+        _delete_queryset_records(
+            FulfillmentOrder.objects.filter(pk__in=fulfillment_order_ids),
+            stats,
+            "fulfillment_orders",
+        )
+        _delete_queryset_records(
+            InventoryItem.objects.filter(transaction_id__in=transaction_ids),
+            stats,
+            "inventory_items",
+        )
+        _delete_purchase_orders(purchase_order_ids, stats)
+        _delete_queryset_records(
+            FinalInvoice.objects.filter(pk__in=final_invoice_ids),
+            stats,
+            "final_invoices",
+        )
+        _delete_queryset_records(
+            ProformaInvoice.objects.filter(pk__in=proforma_ids),
+            stats,
+            "proformas",
+        )
+        _delete_queryset_records(
+            Sourcing.objects.filter(transaction_id__in=transaction_ids),
+            stats,
+            "sourcing_records",
+        )
+        _delete_queryset_records(
+            Transaction.objects.filter(pk__in=transaction_ids),
+            stats,
+            "transactions",
+        )
+        _delete_queryset_records(
+            ContainerReturn.objects.filter(loading_id__in=loading_ids),
+            stats,
+            "container_returns",
+        )
+        _delete_queryset_records(
+            Transit.objects.filter(loading_id__in=loading_ids),
+            stats,
+            "transits",
+        )
+        _delete_queryset_records(
+            Loading.objects.filter(pk__in=loading_ids),
+            stats,
+            "loadings",
+        )
+        _delete_queryset_records(
+            Commission.objects.filter(client=client),
+            stats,
+            "commissions",
+        )
+        client.delete()
+        stats["clients"] = 1
+        stats["deleted_by"] = user.pk
+    return stats
+
+
 def _apply_transaction_lane(queryset, lane):
     if lane == "logistics":
         return queryset.filter(source_loading__isnull=False)
@@ -848,8 +1307,12 @@ def _final_invoice_payment_snapshot(invoice, total_paid=None):
     sourcing_fee = Decimal(str(invoice.sourcing_fee or "0.00"))
     shipping_cost = Decimal(str(invoice.shipping_cost or "0.00"))
     service_fee = Decimal(str(invoice.service_fee or "0.00"))
-    shipping_total = shipping_cost + (sourcing_fee if invoice.loading_id else Decimal("0.00"))
-    company_fee_total = service_fee + (Decimal("0.00") if invoice.loading_id else sourcing_fee)
+    shipping_total = shipping_cost + (
+        sourcing_fee if invoice.loading_id else Decimal("0.00")
+    )
+    company_fee_total = service_fee + (
+        Decimal("0.00") if invoice.loading_id else sourcing_fee
+    )
     fee_total = shipping_total + company_fee_total
     invoice_total = Decimal(str(invoice.total_amount or "0.00"))
     invoice_balance = max(invoice_total - total_paid, Decimal("0.00"))
@@ -1647,7 +2110,9 @@ def user_list(request):
             if action == "update_email":
                 new_email = (request.POST.get("email") or "").strip().lower()
                 if not new_email:
-                    messages.error(request, "Email address is required for OTP delivery.")
+                    messages.error(
+                        request, "Email address is required for OTP delivery."
+                    )
                 elif target.email == new_email:
                     messages.info(request, "No email change was needed.")
                 else:
@@ -1866,10 +2331,27 @@ def client_create(request):
 @login_required
 def client_detail(request, pk):
     client = get_object_or_404(Client, pk=pk)
+    transactions = (
+        _client_transactions_queryset(client)
+        .select_related("customer", "source_loading", "created_by")
+        .annotate(document_count=Count("documents"))
+    )
+    documents = (
+        _client_documents_queryset(client)
+        .select_related("transaction", "uploaded_by")
+        .order_by("transaction__transaction_id", "-timestamp")
+    )
     return render(
         request,
         "logistics/clients/detail.html",
-        {"client": client, "loadings": client.loadings.all()},
+        {
+            "client": client,
+            "loadings": client.loadings.all(),
+            "transactions": transactions,
+            "client_documents": documents,
+            "cleanup_summary": _client_cleanup_summary(client),
+            "can_manage_client_cleanup": _can_manage_client_cleanup(request.user),
+        },
     )
 
 
@@ -1903,29 +2385,179 @@ def client_update(request, pk):
 
 @login_required
 def client_delete(request, pk):
-    if not (
-        request.user.is_superuser
-        or request.user.role in {"DIRECTOR", "ADMIN", "superuser"}
-    ):
+    if not _can_manage_client_cleanup(request.user):
         messages.error(
             request,
             "Only the Director or System Administrator can delete clients. Please request permission from an authorised user.",
         )
         return redirect("client_detail", pk=pk)
     client = get_object_or_404(Client, pk=pk)
+    if request.method != "POST":
+        return render(
+            request,
+            "logistics/clients/confirm_delete.html",
+            {
+                "client": client,
+                "cleanup_summary": _client_cleanup_summary(client),
+            },
+        )
+
+    confirm_name = (request.POST.get("confirm_name") or "").strip()
+    if confirm_name != client.name:
+        messages.error(request, "Enter the exact client name before deleting.")
+        return redirect("client_delete", pk=client.pk)
+
     client_str = str(client)
     client_id = client.id
     try:
-        client.delete()
-    except ProtectedError:
+        deletion_stats = _delete_client_with_related_data(client, request.user)
+    except ProtectedError as exc:
         messages.error(
             request,
-            "This client cannot be deleted while there are cargo/loadings linked to them. Remove or reassign those records first.",
+            "This client still has protected related records. Review the cleanup data and try again.",
+        )
+        log_audit(
+            "client",
+            "delete_failed",
+            client_id,
+            client_str,
+            request.user,
+            changes={"error": str(exc)},
         )
         return redirect("client_detail", pk=client_id)
-    messages.success(request, "Client deleted successfully")
-    log_audit("client", "delete", client_id, client_str, request.user)
+
+    total_related = sum(
+        value for key, value in deletion_stats.items() if key != "deleted_by"
+    )
+    messages.success(
+        request,
+        f"Deleted {client_str} and {max(total_related - 1, 0)} related record(s).",
+    )
+    log_audit(
+        "client",
+        "cascade_delete",
+        client_id,
+        client_str,
+        request.user,
+        changes=deletion_stats,
+    )
     return redirect("client_list")
+
+
+@login_required
+def client_documents_bulk_delete(request, pk):
+    client = get_object_or_404(Client, pk=pk)
+    if not _can_manage_client_cleanup(request.user):
+        messages.error(
+            request,
+            "Only the Director or System Administrator can delete client documents.",
+        )
+        return redirect("client_detail", pk=client.pk)
+    if request.method != "POST":
+        return redirect("client_detail", pk=client.pk)
+
+    document_ids = request.POST.getlist("document_ids")
+    if not document_ids:
+        messages.warning(request, "Select at least one document to delete.")
+        return redirect("client_detail", pk=client.pk)
+
+    documents = _client_documents_queryset(client).filter(pk__in=document_ids)
+    if not documents.exists():
+        messages.warning(request, "No matching client documents were found.")
+        return redirect("client_detail", pk=client.pk)
+
+    document_count = documents.count()
+    with transaction.atomic():
+        archive_count = _delete_queryset_records(
+            DocumentArchive.objects.filter(document__in=documents).distinct(),
+            file_fields=("archived_file",),
+        )
+        _delete_queryset_records(
+            documents,
+            file_fields=("original_file", "processed_file"),
+        )
+
+    messages.success(
+        request,
+        f"Deleted {document_count} document(s) and {archive_count} archive snapshot(s) for {client.name}.",
+    )
+    log_audit(
+        "document",
+        "bulk_delete",
+        client.pk,
+        f"{client.name} documents",
+        request.user,
+        changes={"document_ids": document_ids, "deleted_documents": document_count},
+    )
+    return redirect("client_detail", pk=client.pk)
+
+
+@login_required
+def document_update(request, pk):
+    document = get_object_or_404(
+        Document.objects.select_related("transaction__customer"), pk=pk
+    )
+    if not _can_manage_client_cleanup(request.user):
+        messages.error(
+            request,
+            "Only the Director or System Administrator can edit uploaded documents.",
+        )
+        return redirect("transaction_detail", pk=document.transaction.pk)
+    locked_response = _locked_trade_document_response(request, document.transaction)
+    if locked_response:
+        return locked_response
+
+    if request.method == "POST":
+        form = DocumentForm(request.POST, request.FILES, instance=document)
+        if form.is_valid():
+            updated_document = form.save(commit=False)
+            replaced_file = "original_file" in request.FILES
+            if replaced_file:
+                uploaded_file = request.FILES["original_file"]
+                updated_document.extracted_text = _extract_text_from_file(uploaded_file)
+                if _has_extractable_document_text(updated_document.extracted_text):
+                    updated_document.structured_data = (
+                        _structured_data_for_transaction_document(
+                            updated_document.extracted_text,
+                            updated_document.transaction,
+                            form.cleaned_data.get("document_type") or "",
+                        )
+                    )
+                else:
+                    updated_document.structured_data = {}
+            updated_document.save()
+            if replaced_file:
+                DocumentArchive.create_from_document(
+                    updated_document, archived_by=request.user
+                )
+            log_audit(
+                "document",
+                "update",
+                updated_document.pk,
+                str(updated_document),
+                request.user,
+                changes={"replaced_file": replaced_file},
+            )
+            messages.success(request, "Document updated successfully.")
+            next_url = _safe_next_url(request)
+            if next_url:
+                return redirect(next_url)
+            return redirect(
+                "client_detail", pk=updated_document.transaction.customer_id
+            )
+    else:
+        form = DocumentForm(instance=document)
+
+    return render(
+        request,
+        "logistics/documents/form.html",
+        {
+            "form": form,
+            "document": document,
+            "title": "Edit Document",
+            "next": _safe_next_url(request),
+        },
+    )
 
 
 # ===== LOADING MANAGEMENT =====
@@ -2827,6 +3459,7 @@ def dashboard(request):
         "recent_loadings": scoped_loadings[:5],
         "can_view_financials": can_view_financials,
         "user_role": user_role,
+        "can_manage_client_cleanup": _can_manage_client_cleanup(request.user),
     }
     if request.user.is_authenticated and can_view_financials:
         context.update(
@@ -5518,11 +6151,19 @@ def final_invoice_list(request):
         inv.payment_status_class = payment_snapshot["invoice_class"]
 
     if payment_filter == "paid":
-        decorated_invoices = [inv for inv in decorated_invoices if inv.balance_for_display <= 0]
+        decorated_invoices = [
+            inv for inv in decorated_invoices if inv.balance_for_display <= 0
+        ]
     elif payment_filter == "partial":
-        decorated_invoices = [inv for inv in decorated_invoices if inv.total_paid_for_display > 0 and inv.balance_for_display > 0]
+        decorated_invoices = [
+            inv
+            for inv in decorated_invoices
+            if inv.total_paid_for_display > 0 and inv.balance_for_display > 0
+        ]
     elif payment_filter == "unpaid":
-        decorated_invoices = [inv for inv in decorated_invoices if inv.total_paid_for_display <= 0]
+        decorated_invoices = [
+            inv for inv in decorated_invoices if inv.total_paid_for_display <= 0
+        ]
 
     page_obj, query_string, page_range = paginate_queryset(request, decorated_invoices)
 
@@ -6015,7 +6656,9 @@ def final_invoice_generate_purchase_order(request, pk):
         )
         return redirect(_final_invoice_route_name(invoice, "detail"), pk=invoice.pk)
     payment_snapshot = _final_invoice_payment_snapshot(invoice)
-    if not (payment_snapshot["procurement_ready"] or payment_snapshot["total_paid"] > 0):
+    if not (
+        payment_snapshot["procurement_ready"] or payment_snapshot["total_paid"] > 0
+    ):
         messages.error(
             request,
             "Purchase orders can only be generated once the client has made at least a partial payment deposit.",
@@ -8899,7 +9542,9 @@ def _general_document_item_rows(document=None):
                 "amount": item.get("amount", "0"),
             }
         )
-    return rows or [{"description": "", "quantity": "1", "unit_price": "0", "amount": "0"}]
+    return rows or [
+        {"description": "", "quantity": "1", "unit_price": "0", "amount": "0"}
+    ]
 
 
 def _parse_general_document_items(request):
@@ -8955,9 +9600,9 @@ def general_quotation_list(request):
     status_filter = (request.GET.get("status") or "").strip()
     purpose_filter = (request.GET.get("purpose") or "").strip()
     date_from, date_to = _request_date_bounds(request)
-    quotations = GeneralQuotation.objects.select_related("client", "created_by").order_by(
-        "-created_at"
-    )
+    quotations = GeneralQuotation.objects.select_related(
+        "client", "created_by"
+    ).order_by("-created_at")
     if search:
         quotations = quotations.filter(
             _text_search_q("quotation_number", search)
@@ -8989,7 +9634,9 @@ def general_quotation_list(request):
 @login_required
 def general_quotation_create(request):
     if not _can_manage_general_documents(request.user):
-        messages.error(request, "You do not have permission to create general quotations.")
+        messages.error(
+            request, "You do not have permission to create general quotations."
+        )
         return redirect("general_quotation_list")
     form = GeneralQuotationForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
@@ -9041,7 +9688,9 @@ def general_quotation_sign(request, pk):
 def general_quotation_update(request, pk):
     quotation = get_object_or_404(GeneralQuotation, pk=pk)
     if not _can_manage_general_documents(request.user):
-        messages.error(request, "You do not have permission to edit general quotations.")
+        messages.error(
+            request, "You do not have permission to edit general quotations."
+        )
         return redirect("general_quotation_detail", pk=quotation.pk)
     form = GeneralQuotationForm(request.POST or None, instance=quotation)
     if request.method == "POST" and form.is_valid():
@@ -9065,7 +9714,9 @@ def general_quotation_update(request, pk):
 def general_quotation_convert_to_invoice(request, pk):
     quotation = get_object_or_404(GeneralQuotation, pk=pk)
     if not _can_manage_general_documents(request.user):
-        messages.error(request, "You do not have permission to create general invoices.")
+        messages.error(
+            request, "You do not have permission to create general invoices."
+        )
         return redirect("general_quotation_detail", pk=quotation.pk)
     invoice = GeneralInvoice.objects.create(
         quotation=quotation,
@@ -9115,7 +9766,9 @@ def general_invoice_list(request):
         {
             "invoices": invoices,
             "can_manage_general_documents": _can_manage_general_documents(request.user),
-            "can_collect_general_payment": _can_collect_general_invoice_payment(request.user),
+            "can_collect_general_payment": _can_collect_general_invoice_payment(
+                request.user
+            ),
             "search": search,
             "status_filter": status_filter,
             "purpose_filter": purpose_filter,
@@ -9130,7 +9783,9 @@ def general_invoice_list(request):
 @login_required
 def general_invoice_create(request):
     if not _can_manage_general_documents(request.user):
-        messages.error(request, "You do not have permission to create general invoices.")
+        messages.error(
+            request, "You do not have permission to create general invoices."
+        )
         return redirect("general_invoice_list")
     form = GeneralInvoiceForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
@@ -9153,7 +9808,8 @@ def general_invoice_create(request):
 @login_required
 def general_invoice_detail(request, pk):
     invoice = get_object_or_404(
-        GeneralInvoice.objects.select_related("client", "created_by", "quotation"), pk=pk
+        GeneralInvoice.objects.select_related("client", "created_by", "quotation"),
+        pk=pk,
     )
     payments = invoice.payments.select_related("receipt", "created_by")
     return render(
@@ -9163,7 +9819,9 @@ def general_invoice_detail(request, pk):
             "invoice": invoice,
             "payments": payments,
             "can_edit_invoice": _can_edit_general_invoice(request.user, invoice),
-            "can_collect_general_payment": _can_collect_general_invoice_payment(request.user)
+            "can_collect_general_payment": _can_collect_general_invoice_payment(
+                request.user
+            )
             and invoice.balance > 0,
             "document_signature": _document_signature_for(invoice),
         },
@@ -9213,12 +9871,16 @@ def general_invoice_update(request, pk):
 def general_invoice_record_payment(request, pk):
     invoice = get_object_or_404(GeneralInvoice, pk=pk)
     if not _can_collect_general_invoice_payment(request.user):
-        messages.error(request, "Only finance can collect payments for general invoices.")
+        messages.error(
+            request, "Only finance can collect payments for general invoices."
+        )
         return redirect("general_invoice_detail", pk=invoice.pk)
     if invoice.balance <= 0:
         messages.info(request, "This general invoice is already fully paid.")
         return redirect("general_invoice_detail", pk=invoice.pk)
-    form = GeneralPaymentForm(request.POST or None, request.FILES or None, invoice=invoice)
+    form = GeneralPaymentForm(
+        request.POST or None, request.FILES or None, invoice=invoice
+    )
     if request.method == "POST" and form.is_valid():
         payment = form.save(commit=False)
         payment.invoice = invoice
@@ -9268,7 +9930,9 @@ def general_receipt_list(request):
 @login_required
 def general_receipt_detail(request, pk):
     receipt = get_object_or_404(
-        GeneralReceipt.objects.select_related("payment", "payment__invoice", "payment__invoice__client"),
+        GeneralReceipt.objects.select_related(
+            "payment", "payment__invoice", "payment__invoice__client"
+        ),
         pk=pk,
     )
     return render(
@@ -9292,7 +9956,9 @@ def general_receipt_sign(request, pk):
 
 @login_required
 def general_quotation_html_preview(request, pk):
-    quotation = get_object_or_404(GeneralQuotation.objects.select_related("client"), pk=pk)
+    quotation = get_object_or_404(
+        GeneralQuotation.objects.select_related("client"), pk=pk
+    )
     return render(
         request,
         "logistics/pdf/general_quotation_standalone.html",
@@ -9306,7 +9972,9 @@ def general_quotation_html_preview(request, pk):
 
 @login_required
 def general_quotation_pdf(request, pk):
-    return redirect(f"{reverse('general_quotation_html_preview', kwargs={'pk': pk})}?download=1")
+    return redirect(
+        f"{reverse('general_quotation_html_preview', kwargs={'pk': pk})}?download=1"
+    )
 
 
 @login_required
@@ -9325,13 +9993,17 @@ def general_invoice_html_preview(request, pk):
 
 @login_required
 def general_invoice_pdf(request, pk):
-    return redirect(f"{reverse('general_invoice_html_preview', kwargs={'pk': pk})}?download=1")
+    return redirect(
+        f"{reverse('general_invoice_html_preview', kwargs={'pk': pk})}?download=1"
+    )
 
 
 @login_required
 def general_receipt_html_preview(request, pk):
     receipt = get_object_or_404(
-        GeneralReceipt.objects.select_related("payment", "payment__invoice", "payment__invoice__client"),
+        GeneralReceipt.objects.select_related(
+            "payment", "payment__invoice", "payment__invoice__client"
+        ),
         pk=pk,
     )
     return render(
@@ -9347,7 +10019,9 @@ def general_receipt_html_preview(request, pk):
 
 @login_required
 def general_receipt_pdf(request, pk):
-    return redirect(f"{reverse('general_receipt_html_preview', kwargs={'pk': pk})}?download=1")
+    return redirect(
+        f"{reverse('general_receipt_html_preview', kwargs={'pk': pk})}?download=1"
+    )
 
 
 def receipt_detail(request, pk):
@@ -10779,9 +11453,10 @@ def _prime_purchase_order_payment_metrics(purchase_orders):
                 purchase_order.final_invoice_id, Decimal("0.00")
             )
             transaction_record_total = Decimal("0.00")
-            if invoice_record_total <= 0 and final_invoice_counts.get(
-                purchase_order.transaction_id, 0
-            ) <= 1:
+            if (
+                invoice_record_total <= 0
+                and final_invoice_counts.get(purchase_order.transaction_id, 0) <= 1
+            ):
                 transaction_record_total = transaction_payment_totals.get(
                     purchase_order.transaction_id, Decimal("0.00")
                 )
@@ -10818,6 +11493,7 @@ def _decorate_purchase_order_supplier_payment(
 ):
     from decimal import Decimal
     from django.db.models import Sum
+
     payments, total_paid, balance_due = _po_supplier_summary(purchase_order)
     if has_supplier_splits is None:
         has_supplier_splits = (
@@ -11014,6 +11690,7 @@ def record_supplier_payment(request, po_pk):
         return redirect("purchase_order_detail", pk=purchase_order.pk)
 
     from django.db.models import Sum
+
     client_deposit = Decimal("0.00")
     if purchase_order.final_invoice:
         client_deposit = _final_invoice_total_paid(purchase_order.final_invoice)
@@ -11026,7 +11703,9 @@ def record_supplier_payment(request, po_pk):
         purchase_order__transaction=purchase_order.transaction
     ).aggregate(total=Sum("amount"))["total"] or Decimal("0.00")
 
-    client_deposit_room = max(client_deposit - recorded_supplier_paid_total, Decimal("0.00"))
+    client_deposit_room = max(
+        client_deposit - recorded_supplier_paid_total, Decimal("0.00")
+    )
 
     if client_deposit_room <= Decimal("0.00"):
         messages.error(

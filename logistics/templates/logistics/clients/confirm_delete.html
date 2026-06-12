@@ -1,0 +1,71 @@
+{% extends "logistics/base.html" %}
+
+{% block title %}Delete {{ client.name }} - GMI TERRALINK Logistics Portal{% endblock %}
+
+{% block extra_css %}
+<style>
+    .delete-shell { display: grid; gap: 1rem; max-width: 980px; margin: 0 auto; }
+    .delete-panel {
+        border: 1px solid #fecaca;
+        background: #fff;
+    }
+    .delete-panel-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 1rem;
+        padding: .9rem 1rem;
+        border-bottom: 1px solid #fecaca;
+        background: #fff1f2;
+    }
+    .delete-panel-head h1 { margin: 0; font-size: 1.12rem; color: #991b1b; }
+    .delete-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
+        gap: .55rem;
+        padding: 1rem;
+    }
+    .delete-stat {
+        border: 1px solid #ece7cd;
+        background: #fbf7e4;
+        padding: .65rem .75rem;
+    }
+    .delete-stat strong { display: block; color: #1a1a1a; font-size: 1rem; }
+    .delete-stat span {
+        color: #6b6b6b;
+        font-size: .66rem;
+        text-transform: uppercase;
+        letter-spacing: .06em;
+        font-weight: 700;
+    }
+    .delete-form { padding: 1rem; border-top: 1px solid #fecaca; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="delete-shell">
+    <section class="delete-panel">
+        <div class="delete-panel-head">
+            <h1><i class="bi bi-trash me-1"></i> Delete {{ client.name }}</h1>
+            <a href="{% url 'client_detail' client.id %}" class="btn btn-sm btn-outline-dark"><i class="bi bi-arrow-left"></i> Back</a>
+        </div>
+        <div class="delete-grid">
+            <div class="delete-stat"><strong>{{ cleanup_summary.transactions }}</strong><span>Transactions</span></div>
+            <div class="delete-stat"><strong>{{ cleanup_summary.uploaded_documents }}</strong><span>Documents</span></div>
+            <div class="delete-stat"><strong>{{ cleanup_summary.loadings }}</strong><span>Cargo</span></div>
+            <div class="delete-stat"><strong>{{ cleanup_summary.final_invoices }}</strong><span>Invoices</span></div>
+            <div class="delete-stat"><strong>{{ cleanup_summary.purchase_orders }}</strong><span>Purchase orders</span></div>
+            <div class="delete-stat"><strong>{{ cleanup_summary.total_records }}</strong><span>Related rows</span></div>
+        </div>
+        <form method="post" class="delete-form">
+            {% csrf_token %}
+            <label class="form-label fw-semibold">Confirm client name</label>
+            <input type="text" name="confirm_name" class="form-control mb-3" placeholder="{{ client.name }}" required>
+            <div class="d-flex gap-2 justify-content-end">
+                <a href="{% url 'client_detail' client.id %}" class="btn btn-outline-secondary">Cancel</a>
+                <button type="submit" class="btn btn-danger"><i class="bi bi-trash"></i> Delete client and related data</button>
+            </div>
+        </form>
+    </section>
+</div>
+{% endblock %}

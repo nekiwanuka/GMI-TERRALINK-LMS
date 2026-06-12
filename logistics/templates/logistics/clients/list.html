@@ -166,7 +166,7 @@
                     <tr>
                         <td><span class="client-id-chip">{{ client.client_id }}</span></td>
                         <td>
-                            <div class="client-name">{{ client.name }}</div>
+                            <a href="{% url 'client_detail' client.id %}" class="client-name text-decoration-none">{{ client.name }}</a>
                             {% if client.company_name %}<small class="client-meta">{{ client.company_name }}</small>{% endif %}
                             <small class="client-meta">{{ client.email|default:'No email on file' }}</small>
                         </td>
@@ -187,7 +187,7 @@
                                 <a href="{% url 'client_update' client.id %}" class="btn btn-sm btn-warning" data-bs-toggle="tooltip" data-bs-placement="top" title="Edit client" aria-label="Edit client">
                                     <i class="bi bi-pencil"></i>
                                 </a>
-                                <a href="{% url 'client_delete' client.id %}" class="btn btn-sm btn-outline-danger" onclick="return confirm('Delete this client? This action cannot be undone.')" data-bs-toggle="tooltip" data-bs-placement="top" title="Delete client" aria-label="Delete client">
+                                <a href="{% url 'client_delete' client.id %}" class="btn btn-sm btn-outline-danger" data-bs-toggle="tooltip" data-bs-placement="top" title="Delete client data" aria-label="Delete client data">
                                     <i class="bi bi-trash"></i>
                                 </a>
                                 {% endif %}

@@ -64,6 +64,20 @@
   }
   .dash-lane a:hover { color: #fff; }
   .dash-lane a.is-active { background: var(--gmi-cream); color: var(--gmi-black); }
+  .dash-cleanup-link {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    padding: .35rem .75rem;
+    border: 1px solid rgba(245,230,168,.28);
+    border-radius: 7px;
+    color: var(--gmi-cream);
+    text-decoration: none;
+    font-size: .74rem;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+  .dash-cleanup-link:hover { background: rgba(245,230,168,.1); color: #fff; }
 
   /* ── Compact KPI grid ────────────────────────────── */
   .kpi-grid {
@@ -272,6 +286,9 @@
       <a href="?lane=sourcing" class="{% if active_lane == 'sourcing' %}is-active{% endif %}">Sourcing</a>
     </div>
     {% endif %}
+    {% if can_manage_client_cleanup %}
+    <a class="dash-cleanup-link" href="{% url 'client_list' %}"><i class="bi bi-database-x"></i> Client cleanup</a>
+    {% endif %}
   </div>
 
   <!-- Unified KPI grid -->
@@ -339,7 +356,30 @@
     </div>
 
     <div class="dash-panel">
-      {% if can_view_financials %}
+      {% if can_manage_client_cleanup %}
+      <div class="dash-panel-head">
+        <h3><i class="bi bi-database-x"></i> Client cleanup</h3>
+        <a href="{% url 'client_list' %}">Open registry</a>
+      </div>
+      {% if recent_clients %}
+      <div class="table-responsive">
+        <table class="table mb-0">
+          <thead><tr><th>ID</th><th>Client</th><th>Phone</th></tr></thead>
+          <tbody>
+            {% for client in recent_clients %}
+            <tr>
+              <td><a href="{% url 'client_detail' client.id %}" class="text-decoration-none fw-semibold">{{ client.client_id }}</a></td>
+              <td><a href="{% url 'client_detail' client.id %}" class="text-decoration-none fw-semibold">{{ client.name }}</a></td>
+              <td class="text-muted">{{ client.phone }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="empty">No clients yet</div>
+      {% endif %}
+      {% elif can_view_financials %}
       <div class="dash-panel-head">
         <h3><i class="bi bi-trophy"></i> Top clients</h3>
         <a href="{% url 'reports_dashboard' %}">Reports</a>
