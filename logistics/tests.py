@@ -1220,6 +1220,24 @@ class ClientCleanupTests(TestCase):
             ).exists()
         )
 
+    def test_client_detail_lists_transaction_documents_inline(self):
+        response = self.client.get(
+            reverse("client_detail", kwargs={"pk": self.customer.pk})
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self.transaction.transaction_id)
+        self.assertContains(response, "Cleanup goods")
+        self.assertContains(response, "derrick-pi")
+        self.assertContains(
+            response, reverse("transaction_update", kwargs={"pk": self.transaction.pk})
+        )
+        self.assertContains(
+            response, reverse("document_update", kwargs={"pk": self.document.pk})
+        )
+        self.assertContains(response, "Delete selected documents")
+        self.assertNotContains(response, "other-pi")
+
     def test_client_delete_get_renders_confirmation_without_deleting(self):
         response = self.client.get(
             reverse("client_delete", kwargs={"pk": self.customer.pk})

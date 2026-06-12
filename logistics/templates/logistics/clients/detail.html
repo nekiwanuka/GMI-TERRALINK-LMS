@@ -4,278 +4,220 @@
 
 {% block extra_css %}
 <style>
-    .client-cleanup-stack { display: grid; gap: 1rem; }
-    .client-cleanup-header {
+    .client-workspace { display: grid; gap: .85rem; }
+    .client-topbar,
+    .workspace-toolbar,
+    .transaction-record,
+    .cargo-panel,
+    .client-danger { border: 1px solid #ece7cd; background: #fff; }
+    .client-topbar { padding: 1rem; }
+    .client-topbar-row,
+    .workspace-toolbar,
+    .transaction-head,
+    .client-danger {
         display: flex;
         align-items: flex-start;
         justify-content: space-between;
-        gap: 1rem;
-        padding: 1rem;
-        border: 1px solid #ece7cd;
-        background: #fff;
+        gap: .8rem;
     }
-    .client-cleanup-header h1 {
-        margin: .1rem 0 .35rem;
-        color: #1a1a1a;
-        font-size: 1.35rem;
-        line-height: 1.15;
-    }
-    .client-cleanup-meta {
-        display: flex;
-        flex-wrap: wrap;
-        gap: .45rem;
-        color: #6b6b6b;
-        font-size: .82rem;
-    }
-    .client-cleanup-actions { display: inline-flex; gap: .4rem; align-items: center; }
-    .cleanup-stat-grid {
+    .client-title h1 { margin: .1rem 0 .35rem; color: #1a1a1a; font-size: 1.35rem; line-height: 1.15; }
+    .client-meta,
+    .toolbar-meta,
+    .record-subtitle,
+    .doc-meta,
+    .danger-meta { color: #6b6b6b; font-size: .82rem; }
+    .client-meta { display: flex; flex-wrap: wrap; gap: .45rem; }
+    .client-actions,
+    .toolbar-actions,
+    .record-actions,
+    .doc-actions { display: inline-flex; flex-wrap: wrap; gap: .4rem; align-items: center; justify-content: flex-end; }
+    .client-summary-grid,
+    .record-fields {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(135px, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
         gap: .55rem;
+        margin-top: .8rem;
     }
-    .cleanup-stat {
-        border: 1px solid #ece7cd;
-        background: #fbf7e4;
-        padding: .65rem .75rem;
-    }
-    .cleanup-stat strong {
+    .summary-item,
+    .record-field { border: 1px solid #ece7cd; background: #fbf7e4; padding: .62rem .7rem; }
+    .summary-item span,
+    .record-field span,
+    .document-strip-head span {
         display: block;
-        color: #1a1a1a;
-        font-size: 1rem;
-        line-height: 1.1;
-    }
-    .cleanup-stat span {
         color: #6b6b6b;
         font-size: .66rem;
         text-transform: uppercase;
         letter-spacing: .06em;
-        font-weight: 700;
+        font-weight: 800;
     }
-    .cleanup-grid {
+    .summary-item strong,
+    .record-field strong { display: block; color: #1a1a1a; overflow-wrap: anywhere; }
+    .workspace-toolbar { padding: .75rem .9rem; background: #faf8ef; }
+    .workspace-toolbar h2 { margin: 0; color: #1a1a1a; font-size: .98rem; font-weight: 800; }
+    .select-all-label { display: inline-flex; align-items: center; gap: .35rem; margin: 0; color: #1a1a1a; font-size: .82rem; font-weight: 700; }
+    .transaction-stack { display: grid; gap: .75rem; }
+    .transaction-record { padding: .9rem; }
+    .record-title { display: flex; flex-wrap: wrap; align-items: center; gap: .45rem; }
+    .record-id { color: #1a1a1a; font-size: 1rem; font-weight: 800; text-decoration: none; }
+    .status-pill { border: 1px solid #d8d8d8; background: #f6f6f6; color: #1a1a1a; padding: .18rem .45rem; font-size: .72rem; font-weight: 700; }
+    .document-strip { margin-top: .85rem; border-top: 1px solid #ece7cd; }
+    .document-strip-head { display: flex; justify-content: space-between; gap: .5rem; padding: .6rem 0 .45rem; }
+    .document-row {
         display: grid;
-        grid-template-columns: minmax(0, 1.5fr) minmax(280px, .75fr);
-        gap: 1rem;
-        align-items: start;
-    }
-    .cleanup-panel {
-        border: 1px solid #ece7cd;
-        background: #fff;
-    }
-    .cleanup-panel-head {
-        display: flex;
+        grid-template-columns: auto minmax(0, 1.35fr) minmax(155px, .6fr) auto;
+        gap: .65rem;
         align-items: center;
-        justify-content: space-between;
-        gap: .75rem;
-        padding: .75rem .9rem;
-        border-bottom: 1px solid #ece7cd;
-        background: #faf8ef;
+        padding: .58rem 0;
+        border-top: 1px solid #f1ecd8;
     }
-    .cleanup-panel-head h2 {
-        margin: 0;
-        color: #1a1a1a;
-        font-size: .9rem;
-        font-weight: 800;
-    }
-    .cleanup-table { margin: 0; font-size: .84rem; }
-    .cleanup-table th {
-        color: #6b6b6b;
-        font-size: .66rem;
-        letter-spacing: .06em;
-        text-transform: uppercase;
-        white-space: nowrap;
-    }
-    .cleanup-table td { vertical-align: middle; }
-    .cleanup-empty { padding: 1.4rem; color: #6b6b6b; text-align: center; }
-    .cleanup-detail-grid {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: .75rem;
-        padding: .9rem;
-    }
-    .cleanup-detail-item span {
-        display: block;
-        color: #6b6b6b;
-        font-size: .66rem;
-        font-weight: 800;
-        letter-spacing: .06em;
-        text-transform: uppercase;
-    }
-    .cleanup-detail-item strong {
-        display: block;
-        margin-top: .12rem;
-        color: #1a1a1a;
-        overflow-wrap: anywhere;
-    }
-    .cleanup-danger { border-color: #fecaca; background: #fff; }
-    .cleanup-danger .cleanup-panel-head { border-bottom-color: #fecaca; background: #fff1f2; }
+    .document-row:first-of-type { border-top: 0; }
+    .document-check { width: 1.05rem; height: 1.05rem; }
+    .document-spacer { width: 1.05rem; }
+    .doc-main { min-width: 0; }
+    .doc-name { display: block; margin-top: .22rem; color: #1a1a1a; font-weight: 700; overflow-wrap: anywhere; }
+    .doc-note { display: block; margin-top: .18rem; color: #6b6b6b; font-size: .78rem; overflow-wrap: anywhere; }
+    .empty-state { padding: 1.2rem; border: 1px dashed #d8d8d8; color: #6b6b6b; text-align: center; background: #fff; }
+    .cargo-panel-head { display: flex; justify-content: space-between; gap: .7rem; align-items: center; padding: .75rem .9rem; background: #faf8ef; border-bottom: 1px solid #ece7cd; }
+    .cargo-panel-head h2,
+    .client-danger h2 { margin: 0; color: #1a1a1a; font-size: .95rem; font-weight: 800; }
+    .cargo-table { margin: 0; font-size: .84rem; }
+    .cargo-table th { color: #6b6b6b; font-size: .66rem; letter-spacing: .06em; text-transform: uppercase; white-space: nowrap; }
+    .client-danger { padding: .85rem; border-color: #fecaca; background: #fff7f7; align-items: center; }
+    .client-danger form { display: flex; gap: .45rem; align-items: center; }
+    .client-danger input { min-width: 220px; }
     @media (max-width: 991.98px) {
-        .client-cleanup-header,
-        .cleanup-grid { grid-template-columns: 1fr; }
-        .client-cleanup-header { flex-direction: column; }
-        .cleanup-detail-grid { grid-template-columns: 1fr; }
+        .client-topbar-row,
+        .workspace-toolbar,
+        .transaction-head,
+        .client-danger { flex-direction: column; align-items: stretch; }
+        .client-actions,
+        .toolbar-actions,
+        .record-actions,
+        .doc-actions { justify-content: flex-start; }
+        .document-row { grid-template-columns: auto minmax(0, 1fr); }
+        .doc-meta,
+        .doc-actions { grid-column: 2; }
+        .client-danger form { flex-direction: column; align-items: stretch; }
+        .client-danger input { min-width: 0; }
     }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="client-cleanup-stack">
-    <section class="client-cleanup-header">
-        <div>
-            <span class="eyebrow-label"><i class="bi bi-person-badge-fill"></i> Client record</span>
-            <h1>{{ client.name }}</h1>
-            <div class="client-cleanup-meta">
-                <span>{{ client.client_id }}</span>
-                <span>{{ client.get_country_display|default:'No country' }}</span>
-                <span>{{ client.date_registered|date:"d M Y" }}</span>
+<div class="client-workspace">
+    <section class="client-topbar">
+        <div class="client-topbar-row">
+            <div class="client-title">
+                <span class="eyebrow-label"><i class="bi bi-person-badge-fill"></i> Client</span>
+                <h1>{{ client.name }}</h1>
+                <div class="client-meta">
+                    <span>{{ client.client_id }}</span>
+                    <span>{{ client.get_country_display|default:'No country' }}</span>
+                    <span>{{ client.date_registered|date:"d M Y" }}</span>
+                </div>
+            </div>
+            <div class="client-actions">
+                {% if can_manage_client_cleanup %}
+                <a href="{% url 'client_update' client.id %}" class="btn btn-sm btn-warning"><i class="bi bi-pencil"></i> Edit client</a>
+                <a href="{% url 'client_delete' client.id %}" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i> Delete client</a>
+                {% endif %}
+                <a href="{% url 'client_list' %}" class="btn btn-sm btn-outline-dark"><i class="bi bi-arrow-left"></i> Registry</a>
             </div>
         </div>
-        <div class="client-cleanup-actions">
-            {% if can_manage_client_cleanup %}
-            <a href="{% url 'client_update' client.id %}" class="btn btn-sm btn-warning"><i class="bi bi-pencil"></i> Edit client</a>
-            <a href="{% url 'client_delete' client.id %}" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i> Delete client</a>
-            {% endif %}
-            <a href="{% url 'client_list' %}" class="btn btn-sm btn-outline-dark"><i class="bi bi-arrow-left"></i> Registry</a>
+        <div class="client-summary-grid">
+            <div class="summary-item"><span>Contact</span><strong>{{ client.contact_person|default:'-' }}</strong></div>
+            <div class="summary-item"><span>Phone</span><strong>{{ client.phone|default:'-' }}</strong></div>
+            <div class="summary-item"><span>Email</span><strong>{% if client.email %}<a href="mailto:{{ client.email }}">{{ client.email }}</a>{% else %}-{% endif %}</strong></div>
+            <div class="summary-item"><span>Transactions</span><strong>{{ cleanup_summary.transactions }}</strong></div>
+            <div class="summary-item"><span>Documents</span><strong>{{ cleanup_summary.uploaded_documents }}</strong></div>
+            <div class="summary-item"><span>Related rows</span><strong>{{ cleanup_summary.total_records }}</strong></div>
         </div>
     </section>
 
-    <section class="cleanup-stat-grid">
-        <div class="cleanup-stat"><strong>{{ cleanup_summary.transactions }}</strong><span>Transactions</span></div>
-        <div class="cleanup-stat"><strong>{{ cleanup_summary.uploaded_documents }}</strong><span>Documents</span></div>
-        <div class="cleanup-stat"><strong>{{ cleanup_summary.loadings }}</strong><span>Cargo</span></div>
-        <div class="cleanup-stat"><strong>{{ cleanup_summary.final_invoices }}</strong><span>Invoices</span></div>
-        <div class="cleanup-stat"><strong>{{ cleanup_summary.purchase_orders }}</strong><span>Purchase orders</span></div>
-        <div class="cleanup-stat"><strong>{{ cleanup_summary.total_records }}</strong><span>Related rows</span></div>
-    </section>
-
-    <div class="cleanup-grid">
-        <section class="cleanup-panel">
-            <div class="cleanup-panel-head">
-                <h2><i class="bi bi-person-lines-fill me-1"></i> Account information</h2>
+    <form method="post" action="{% url 'client_documents_bulk_delete' client.id %}" id="clientCleanupForm">
+        {% csrf_token %}
+        <section class="workspace-toolbar">
+            <div>
+                <h2><i class="bi bi-diagram-3 me-1"></i> Transactions and documents</h2>
+                <div class="toolbar-meta">{{ cleanup_summary.transactions }} transactions &middot; {{ cleanup_summary.uploaded_documents }} documents</div>
             </div>
-            <div class="cleanup-detail-grid">
-                <div class="cleanup-detail-item"><span>Company</span><strong>{{ client.company_name|default:'-' }}</strong></div>
-                <div class="cleanup-detail-item"><span>Contact</span><strong>{{ client.contact_person|default:'-' }}</strong></div>
-                <div class="cleanup-detail-item"><span>Phone</span><strong>{{ client.phone|default:'-' }}</strong></div>
-                <div class="cleanup-detail-item"><span>Email</span><strong>{% if client.email %}<a href="mailto:{{ client.email }}">{{ client.email }}</a>{% else %}-{% endif %}</strong></div>
-                <div class="cleanup-detail-item"><span>Address</span><strong>{{ client.address|default:'-' }}</strong></div>
-                <div class="cleanup-detail-item"><span>Remarks</span><strong>{{ client.remarks|default:'-' }}</strong></div>
+            <div class="toolbar-actions">
+                {% if can_manage_client_cleanup and client_documents %}
+                <label class="select-all-label"><input type="checkbox" id="selectDocuments"> Select all documents</label>
+                <button type="submit" class="btn btn-sm btn-danger" id="deleteSelectedDocuments" disabled><i class="bi bi-trash"></i> Delete selected documents</button>
+                {% endif %}
+                <a href="{% url 'transaction_create' %}" class="btn btn-sm btn-outline-dark"><i class="bi bi-plus-lg"></i> New transaction</a>
             </div>
         </section>
 
-        {% if can_manage_client_cleanup %}
-        <section class="cleanup-panel cleanup-danger">
-            <div class="cleanup-panel-head">
-                <h2><i class="bi bi-exclamation-triangle me-1"></i> Client deletion</h2>
-            </div>
-            <div class="p-3">
-                <form method="post" action="{% url 'client_delete' client.id %}">
-                    {% csrf_token %}
-                    <label class="form-label fw-semibold">Confirm client name</label>
-                    <input type="text" name="confirm_name" class="form-control form-control-sm mb-2" placeholder="{{ client.name }}" required>
-                    <button type="submit" class="btn btn-sm btn-danger w-100">
-                        <i class="bi bi-trash"></i> Delete client and related data
-                    </button>
-                </form>
-            </div>
-        </section>
-        {% endif %}
-    </div>
-
-    <section class="cleanup-panel">
-        <div class="cleanup-panel-head">
-            <h2><i class="bi bi-diagram-3 me-1"></i> Transactions</h2>
-            <a href="{% url 'transaction_create' %}" class="btn btn-sm btn-outline-dark"><i class="bi bi-plus-lg"></i> New transaction</a>
-        </div>
         {% if transactions %}
-        <div class="table-responsive">
-            <table class="table table-hover cleanup-table">
-                <thead>
-                    <tr>
-                        <th>Entry</th>
-                        <th>Status</th>
-                        <th>Documents</th>
-                        <th>Created</th>
-                        <th class="text-end">Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for txn in transactions %}
-                    <tr>
-                        <td><a href="{% url 'transaction_detail' txn.pk %}" class="fw-semibold text-decoration-none">{{ txn.transaction_id }}</a></td>
-                        <td><span class="badge bg-light text-dark border">{{ txn.get_status_display }}</span></td>
-                        <td>{{ txn.document_count }}</td>
-                        <td class="text-muted">{{ txn.created_at|date:"d M Y" }}</td>
-                        <td class="text-end">
-                            <a href="{% url 'transaction_detail' txn.pk %}" class="btn btn-sm btn-outline-dark"><i class="bi bi-eye"></i></a>
-                            {% if can_manage_client_cleanup %}<a href="{% url 'transaction_update' txn.pk %}" class="btn btn-sm btn-warning"><i class="bi bi-pencil"></i></a>{% endif %}
-                        </td>
-                    </tr>
+        <div class="transaction-stack mt-3">
+            {% for txn in transactions %}
+            <article class="transaction-record">
+                <div class="transaction-head">
+                    <div>
+                        <div class="record-title">
+                            <a href="{% url 'transaction_detail' txn.pk %}" class="record-id">{{ txn.transaction_id }}</a>
+                            <span class="status-pill">{{ txn.get_status_display }}</span>
+                        </div>
+                        <div class="record-subtitle">{{ txn.description|default:'No description' }}</div>
+                    </div>
+                    <div class="record-actions">
+                        <a href="{% url 'transaction_detail' txn.pk %}" class="btn btn-sm btn-outline-dark"><i class="bi bi-eye"></i> Open</a>
+                        {% if can_manage_client_cleanup %}<a href="{% url 'transaction_update' txn.pk %}" class="btn btn-sm btn-warning"><i class="bi bi-pencil"></i> Edit transaction</a>{% endif %}
+                    </div>
+                </div>
+                <div class="record-fields">
+                    <div class="record-field"><span>Customer</span><strong>{{ txn.customer.name }}</strong></div>
+                    <div class="record-field"><span>Cargo</span><strong>{% if txn.source_loading %}<a href="{% url 'loading_detail' txn.source_loading.id %}">{{ txn.source_loading.loading_id }}</a>{% else %}-{% endif %}</strong></div>
+                    <div class="record-field"><span>Created</span><strong>{{ txn.created_at|date:"d M Y H:i" }}</strong></div>
+                    <div class="record-field"><span>Created by</span><strong>{{ txn.created_by.get_full_name|default:txn.created_by.username|default:'-' }}</strong></div>
+                    <div class="record-field"><span>Documents</span><strong>{{ txn.document_count }}</strong></div>
+                </div>
+                <div class="document-strip">
+                    <div class="document-strip-head"><span>Documents for {{ txn.transaction_id }}</span><strong>{{ txn.document_count }}</strong></div>
+                    {% if txn.cleanup_documents %}
+                    {% for doc in txn.cleanup_documents %}
+                    <div class="document-row">
+                        {% if can_manage_client_cleanup %}<input type="checkbox" name="document_ids" value="{{ doc.id }}" class="document-check" aria-label="Select {{ doc.get_document_type_display }}">{% else %}<span class="document-spacer"></span>{% endif %}
+                        <div class="doc-main">
+                            <span class="badge {% if doc.document_type == 'CLIENT_PI' %}bg-primary{% else %}bg-secondary{% endif %}">{{ doc.get_document_type_display }}</span>
+                            <span class="doc-name">{{ doc.original_file.name|default:'No file attached' }}</span>
+                            {% if doc.extracted_text %}<span class="doc-note">{{ doc.extracted_text|truncatechars:150 }}</span>{% endif %}
+                        </div>
+                        <div class="doc-meta">
+                            <span>{{ doc.timestamp|date:"d M Y H:i" }}</span><br>
+                            <span>{{ doc.uploaded_by.get_full_name|default:doc.uploaded_by.username|default:'-' }}</span>
+                        </div>
+                        <div class="doc-actions">
+                            {% if doc.original_file %}<a href="{% url 'protected_media' doc.original_file.name %}" class="btn btn-sm btn-outline-dark" target="_blank" rel="noopener noreferrer"><i class="bi bi-box-arrow-up-right"></i> View</a>{% endif %}
+                            {% if can_manage_client_cleanup %}
+                            <a href="{% url 'document_update' doc.pk %}?next={{ request.get_full_path|urlencode }}" class="btn btn-sm btn-warning"><i class="bi bi-pencil"></i> Edit</a>
+                            {% if doc.document_type == 'CLIENT_PI' %}<a href="{% url 'document_edit_pi' doc.pk %}" class="btn btn-sm btn-outline-primary"><i class="bi bi-list-check"></i> PI</a>{% endif %}
+                            {% endif %}
+                        </div>
+                    </div>
                     {% endfor %}
-                </tbody>
-            </table>
+                    {% else %}
+                    <div class="empty-state">No documents linked to this transaction.</div>
+                    {% endif %}
+                </div>
+            </article>
+            {% endfor %}
         </div>
         {% else %}
-        <div class="cleanup-empty">No transaction data is linked to this client.</div>
+        <div class="empty-state mt-3">No transaction data is linked to this client.</div>
         {% endif %}
-    </section>
+    </form>
 
-    <section class="cleanup-panel">
-        <form method="post" action="{% url 'client_documents_bulk_delete' client.id %}">
-            {% csrf_token %}
-            <div class="cleanup-panel-head">
-                <h2><i class="bi bi-files me-1"></i> Uploaded documents</h2>
-                {% if can_manage_client_cleanup %}
-                <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i> Delete selected</button>
-                {% endif %}
-            </div>
-            {% if client_documents %}
-            <div class="table-responsive">
-                <table class="table table-hover cleanup-table">
-                    <thead>
-                        <tr>
-                            {% if can_manage_client_cleanup %}<th><input type="checkbox" id="selectDocuments" aria-label="Select documents"></th>{% endif %}
-                            <th>Document</th>
-                            <th>Transaction</th>
-                            <th>Uploaded</th>
-                            <th class="text-end">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for doc in client_documents %}
-                        <tr>
-                            {% if can_manage_client_cleanup %}<td><input type="checkbox" name="document_ids" value="{{ doc.id }}" class="document-check" aria-label="Select {{ doc.get_document_type_display }}"></td>{% endif %}
-                            <td>
-                                <span class="badge {% if doc.document_type == 'CLIENT_PI' %}bg-primary{% else %}bg-secondary{% endif %}">{{ doc.get_document_type_display }}</span>
-                                <span class="d-block small text-muted mt-1">{{ doc.original_file.name|default:'-' }}</span>
-                            </td>
-                            <td><a href="{% url 'transaction_detail' doc.transaction.pk %}" class="text-decoration-none fw-semibold">{{ doc.transaction.transaction_id }}</a></td>
-                            <td class="text-muted">{{ doc.timestamp|date:"d M Y H:i" }}</td>
-                            <td class="text-end">
-                                {% if doc.original_file %}<a href="{% url 'protected_media' doc.original_file.name %}" class="btn btn-sm btn-outline-dark" target="_blank" rel="noopener noreferrer"><i class="bi bi-box-arrow-up-right"></i></a>{% endif %}
-                                {% if can_manage_client_cleanup %}
-                                <a href="{% url 'document_update' doc.pk %}?next={{ request.get_full_path|urlencode }}" class="btn btn-sm btn-warning"><i class="bi bi-pencil"></i></a>
-                                {% if doc.document_type == 'CLIENT_PI' %}<a href="{% url 'document_edit_pi' doc.pk %}" class="btn btn-sm btn-outline-primary"><i class="bi bi-list-check"></i></a>{% endif %}
-                                {% endif %}
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-            {% else %}
-            <div class="cleanup-empty">No uploaded documents are linked to this client.</div>
-            {% endif %}
-        </form>
-    </section>
-
-    <section class="cleanup-panel">
-        <div class="cleanup-panel-head">
-            <h2><i class="bi bi-box-seam me-1"></i> Associated cargo</h2>
+    <section class="cargo-panel">
+        <div class="cargo-panel-head">
+            <h2><i class="bi bi-box-seam me-1"></i> Cargo records</h2>
             <a href="{% url 'loading_create' %}" class="btn btn-sm btn-outline-dark"><i class="bi bi-plus-lg"></i> Add cargo</a>
         </div>
         {% if loadings %}
         <div class="table-responsive">
-            <table class="table table-hover cleanup-table">
+            <table class="table table-hover cargo-table">
                 <thead><tr><th>Cargo</th><th>Destination</th><th>Container</th><th>Date</th></tr></thead>
                 <tbody>
                     {% for loading in loadings %}
@@ -290,9 +232,23 @@
             </table>
         </div>
         {% else %}
-        <div class="cleanup-empty">No cargo records are linked to this client.</div>
+        <div class="empty-state">No cargo records are linked to this client.</div>
         {% endif %}
     </section>
+
+    {% if can_manage_client_cleanup %}
+    <section class="client-danger">
+        <div>
+            <h2><i class="bi bi-exclamation-triangle me-1"></i> Delete entire client</h2>
+            <div class="danger-meta">{{ cleanup_summary.total_records }} related rows will be removed with {{ client.name }}.</div>
+        </div>
+        <form method="post" action="{% url 'client_delete' client.id %}">
+            {% csrf_token %}
+            <input type="text" name="confirm_name" class="form-control form-control-sm" placeholder="{{ client.name }}" required>
+            <button type="submit" class="btn btn-sm btn-danger"><i class="bi bi-trash"></i> Delete client</button>
+        </form>
+    </section>
+    {% endif %}
 </div>
 {% endblock %}
 
@@ -300,12 +256,26 @@
 <script>
 document.addEventListener('DOMContentLoaded', function () {
     var selectAll = document.getElementById('selectDocuments');
-    if (!selectAll) return;
-    selectAll.addEventListener('change', function () {
-        document.querySelectorAll('.document-check').forEach(function (checkbox) {
-            checkbox.checked = selectAll.checked;
+    var deleteButton = document.getElementById('deleteSelectedDocuments');
+    var checks = Array.prototype.slice.call(document.querySelectorAll('.document-check'));
+    function updateDeleteButton() {
+        if (!deleteButton) return;
+        var selected = checks.filter(function (checkbox) { return checkbox.checked; }).length;
+        deleteButton.disabled = selected === 0;
+        deleteButton.innerHTML = '<i class="bi bi-trash"></i> Delete selected documents' + (selected ? ' (' + selected + ')' : '');
+        if (selectAll) {
+            selectAll.checked = selected > 0 && selected === checks.length;
+            selectAll.indeterminate = selected > 0 && selected < checks.length;
+        }
+    }
+    if (selectAll) {
+        selectAll.addEventListener('change', function () {
+            checks.forEach(function (checkbox) { checkbox.checked = selectAll.checked; });
+            updateDeleteButton();
         });
-    });
+    }
+    checks.forEach(function (checkbox) { checkbox.addEventListener('change', updateDeleteButton); });
+    updateDeleteButton();
 });
 </script>
 {% endblock %}

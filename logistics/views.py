@@ -22,7 +22,7 @@ from django.core.mail import send_mail
 from django.core.paginator import Paginator
 from django.core.validators import validate_email
 from django.db import transaction
-from django.db.models import Count, ProtectedError, Q, Sum
+from django.db.models import Count, Prefetch, ProtectedError, Q, Sum
 from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -2331,10 +2331,21 @@ def client_create(request):
 @login_required
 def client_detail(request, pk):
     client = get_object_or_404(Client, pk=pk)
+    transaction_documents = Document.objects.select_related("uploaded_by").order_by(
+        "-timestamp"
+    )
     transactions = (
         _client_transactions_queryset(client)
         .select_related("customer", "source_loading", "created_by")
+        .prefetch_related(
+            Prefetch(
+                "documents",
+                queryset=transaction_documents,
+                to_attr="cleanup_documents",
+            )
+        )
         .annotate(document_count=Count("documents"))
+        .order_by("-created_at")
     )
     documents = (
         _client_documents_queryset(client)
