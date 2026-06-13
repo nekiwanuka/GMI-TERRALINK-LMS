@@ -2440,11 +2440,30 @@ def _generate_login_otp():
     return f"{secrets.randbelow(1000000):06d}"
 
 
-def _login_otp_recipient_email():
-    return getattr(settings, "OTP_EMAIL_TO", "otp@gmiterralink.com")
+def _configured_login_otp_fallback_email():
+    return (
+        getattr(settings, "OTP_EMAIL_TO", "")
+        or getattr(settings, "DEFAULT_FROM_EMAIL", "")
+        or "otp@gmiterralink.com"
+    ).strip()
 
 
-def _store_login_otp(request, user, code, next_url, remember):
+def _login_otp_recipient_email(user=None):
+    user_email = (getattr(user, "email", "") or "").strip().lower()
+    if user_email:
+        try:
+            validate_email(user_email)
+        except ValidationError:
+            logger.warning(
+                "Invalid login OTP email configured for user %s; using fallback inbox.",
+                getattr(user, "pk", "unknown"),
+            )
+        else:
+            return user_email
+    return _configured_login_otp_fallback_email()
+
+
+def _store_login_otp(request, user, code, next_url, remember, recipient_email):
     expires_at = timezone.now() + timedelta(
         minutes=getattr(settings, "LOGIN_OTP_EXPIRY_MINUTES", 10)
     )
@@ -2455,7 +2474,7 @@ def _store_login_otp(request, user, code, next_url, remember):
         "attempts": 0,
         "next": next_url,
         "remember": bool(remember),
-        "email": _login_otp_recipient_email(),
+        "email": recipient_email,
     }
     request.session.modified = True
 
@@ -2465,7 +2484,7 @@ def _clear_login_otp(request):
     request.session.modified = True
 
 
-def _send_login_otp(user, code):
+def _send_login_otp(user, code, recipient_email):
     subject = "Your GMI Terralink sign-in OTP"
     message = (
         f"Hello {user.get_full_name() or user.username},\n\n"
@@ -2477,21 +2496,22 @@ def _send_login_otp(user, code):
         subject,
         message,
         getattr(settings, "OTP_EMAIL_FROM", settings.DEFAULT_FROM_EMAIL),
-        [_login_otp_recipient_email()],
+        [recipient_email],
         fail_silently=False,
     )
 
 
 def _start_login_otp(request, user, next_url, remember):
     code = _generate_login_otp()
-    _store_login_otp(request, user, code, next_url, remember)
+    recipient_email = _login_otp_recipient_email(user)
+    _store_login_otp(request, user, code, next_url, remember, recipient_email)
     try:
-        _send_login_otp(user, code)
+        _send_login_otp(user, code, recipient_email)
     except Exception as exc:  # noqa: BLE001
         logger.exception(
             "Failed to send login OTP email via %s to %s using host %s:%s as %s",
             getattr(settings, "EMAIL_BACKEND", ""),
-            _login_otp_recipient_email(),
+            recipient_email,
             getattr(settings, "EMAIL_HOST", ""),
             getattr(settings, "EMAIL_PORT", ""),
             getattr(settings, "EMAIL_HOST_USER", ""),
@@ -2510,7 +2530,7 @@ def _start_login_otp(request, user, next_url, remember):
         return False
     messages.success(
         request,
-        f"We sent a sign-in OTP to {_mask_email_address(_login_otp_recipient_email())}.",
+        f"We sent a sign-in OTP to {_mask_email_address(recipient_email)}.",
     )
     return True
 
@@ -2734,13 +2754,14 @@ def user_list(request):
     if request.method == "POST":
         action = request.POST.get("action") or "update_role"
         if action == "test_otp_email":
+            recipient_email = _login_otp_recipient_email(request.user)
             subject = "GMI Terralink OTP email configuration test"
             message = (
                 f"Hello {request.user.get_full_name() or request.user.username},\n\n"
-                "This is a test email for the configured OTP delivery channel.\n\n"
+                "This is a test email for your assigned OTP delivery address.\n\n"
                 f"Backend: {getattr(settings, 'EMAIL_BACKEND', '')}\n"
                 f"From: {getattr(settings, 'OTP_EMAIL_FROM', settings.DEFAULT_FROM_EMAIL)}\n"
-                f"To: {_login_otp_recipient_email()}\n"
+                f"To: {recipient_email}\n"
                 f"Host: {getattr(settings, 'EMAIL_HOST', '')}:{getattr(settings, 'EMAIL_PORT', '')}\n"
                 f"User: {getattr(settings, 'EMAIL_HOST_USER', '')}\n"
             )
@@ -2749,7 +2770,7 @@ def user_list(request):
                     subject,
                     message,
                     getattr(settings, "OTP_EMAIL_FROM", settings.DEFAULT_FROM_EMAIL),
-                    [_login_otp_recipient_email()],
+                    [recipient_email],
                     fail_silently=False,
                 )
             except Exception as exc:  # noqa: BLE001
@@ -2761,7 +2782,7 @@ def user_list(request):
             else:
                 messages.success(
                     request,
-                    f"OTP email test sent successfully to {_login_otp_recipient_email()}.",
+                    f"OTP email test sent successfully to {recipient_email}.",
                 )
             return redirect(request.resolver_match.url_name or "user_list")
 

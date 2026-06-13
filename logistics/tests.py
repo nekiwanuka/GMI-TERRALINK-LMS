@@ -140,7 +140,8 @@ class LoginOtpTests(TestCase):
         self.assertNotIn("_auth_user_id", self.client.session)
         self.assertIn("Your GMI Terralink sign-in OTP", mail.outbox[0].subject)
         self.assertEqual(mail.outbox[0].from_email, "otp@gmiterralink.com")
-        self.assertEqual(mail.outbox[0].to, ["otp@gmiterralink.com"])
+        self.assertEqual(mail.outbox[0].to, ["ops@example.com"])
+        self.assertEqual(self.client.session["login_otp"]["email"], "ops@example.com")
 
     def test_correct_otp_completes_login(self):
         self.client.post(
@@ -186,6 +187,25 @@ class LoginOtpTests(TestCase):
         self.assertNotIn("_auth_user_id", self.client.session)
         self.assertEqual(len(mail.outbox), 1)
         self.assertEqual(mail.outbox[0].to, ["otp@gmiterralink.com"])
+
+    def test_otp_email_test_uses_current_users_assigned_email(self):
+        admin_user = CustomUser.objects.create_user(
+            username="otp-admin",
+            password="testpass123",
+            email="admin-otp@example.com",
+            role="ADMIN",
+        )
+        self.client.force_login(admin_user)
+
+        response = self.client.post(
+            reverse("user_list"),
+            {"action": "test_otp_email"},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].to, ["admin-otp@example.com"])
+        self.assertIn("assigned OTP delivery address", mail.outbox[0].body)
 
 
 class LaneSwitchingTests(TestCase):
