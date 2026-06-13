@@ -77,6 +77,22 @@
     .document-row:first-of-type { border-top: 0; }
     .document-check { width: 1.05rem; height: 1.05rem; }
     .document-spacer { width: 1.05rem; }
+    .document-cleanup-panel { border: 1px solid #ece7cd; background: #fff; margin-top: .85rem; }
+    .document-cleanup-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: .75rem;
+        padding: .75rem .9rem;
+        border-bottom: 1px solid #ece7cd;
+        background: #fffdf6;
+    }
+    .document-cleanup-head h3 { margin: 0; color: #1a1a1a; font-size: .94rem; font-weight: 800; }
+    .document-cleanup-actions { display: inline-flex; flex-wrap: wrap; gap: .4rem; align-items: center; justify-content: flex-end; }
+    .document-cleanup-table { margin: 0; font-size: .84rem; }
+    .document-cleanup-table th { color: #6b6b6b; font-size: .66rem; letter-spacing: .06em; text-transform: uppercase; white-space: nowrap; }
+    .document-cleanup-table td { vertical-align: middle; }
+    .document-cleanup-table .document-check { display: block; margin: 0 auto; }
     .doc-main { min-width: 0; }
     .doc-name { display: block; margin-top: .22rem; color: #1a1a1a; font-weight: 700; overflow-wrap: anywhere; }
     .doc-note { display: block; margin-top: .18rem; color: #6b6b6b; font-size: .78rem; overflow-wrap: anywhere; }
@@ -120,6 +136,8 @@
         .document-row { grid-template-columns: auto minmax(0, 1fr); }
         .doc-meta,
         .doc-actions { grid-column: 2; }
+        .document-cleanup-head { flex-direction: column; align-items: stretch; }
+        .document-cleanup-actions { justify-content: flex-start; }
         .sourcing-card { grid-template-columns: 1fr; }
         .sourcing-card > .sourcing-card-actions { grid-column: 1; grid-row: auto; justify-content: flex-start; }
         .client-danger form { flex-direction: column; align-items: stretch; }
@@ -172,10 +190,64 @@
             <div class="toolbar-actions">
                 {% if can_manage_client_cleanup and client_documents %}
                 <label class="select-all-label"><input type="checkbox" id="selectDocuments"> Select all documents</label>
-                <button type="submit" class="btn btn-sm btn-danger" id="deleteSelectedDocuments" disabled><i class="bi bi-trash"></i> Delete selected documents</button>
+                <button type="submit" class="btn btn-sm btn-danger delete-selected-documents" disabled><i class="bi bi-trash"></i> Delete selected documents</button>
                 {% endif %}
                 <a href="{% url 'transaction_create' %}" class="btn btn-sm btn-outline-dark"><i class="bi bi-plus-lg"></i> New transaction</a>
             </div>
+        </section>
+
+        <section class="document-cleanup-panel">
+            <div class="document-cleanup-head">
+                <div>
+                    <h3><i class="bi bi-files me-1"></i> Documents to delete or edit</h3>
+                    <div class="toolbar-meta">Select one or more documents, then delete them together. Use Edit on the row to change one document.</div>
+                </div>
+                {% if can_manage_client_cleanup and client_documents %}
+                <div class="document-cleanup-actions">
+                    <label class="select-all-label"><input type="checkbox" id="selectDocumentsTop"> Select all</label>
+                    <button type="submit" class="btn btn-sm btn-danger delete-selected-documents" disabled><i class="bi bi-trash"></i> Delete selected documents</button>
+                </div>
+                {% endif %}
+            </div>
+            {% if client_documents %}
+            <div class="table-responsive">
+                <table class="table table-hover document-cleanup-table">
+                    <thead>
+                        <tr>
+                            {% if can_manage_client_cleanup %}<th class="text-center">Select</th>{% endif %}
+                            <th>Document</th>
+                            <th>Transaction</th>
+                            <th>Uploaded</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for doc in client_documents %}
+                        <tr>
+                            {% if can_manage_client_cleanup %}<td><input type="checkbox" name="document_ids" value="{{ doc.id }}" class="document-check" aria-label="Select {{ doc.get_document_type_display }} for deletion"></td>{% endif %}
+                            <td>
+                                <span class="badge {% if doc.document_type == 'CLIENT_PI' %}bg-primary{% else %}bg-secondary{% endif %}">{{ doc.get_document_type_display }}</span>
+                                <span class="doc-name">{{ doc.original_file.name|default:'No file attached' }}</span>
+                            </td>
+                            <td><a href="{% url 'transaction_detail' doc.transaction.pk %}" class="fw-semibold text-decoration-none">{{ doc.transaction.transaction_id }}</a></td>
+                            <td class="text-muted">{{ doc.timestamp|date:"d M Y H:i" }}</td>
+                            <td class="text-end">
+                                <div class="doc-actions">
+                                    {% if doc.original_file %}<a href="{% url 'protected_media' doc.original_file.name %}" class="btn btn-sm btn-outline-dark" target="_blank" rel="noopener noreferrer"><i class="bi bi-box-arrow-up-right"></i> View</a>{% endif %}
+                                    {% if can_manage_client_cleanup %}
+                                    <a href="{% url 'document_update' doc.pk %}?next={{ request.get_full_path|urlencode }}" class="btn btn-sm btn-warning"><i class="bi bi-pencil"></i> Edit</a>
+                                    {% if doc.document_type == 'CLIENT_PI' %}<a href="{% url 'document_edit_pi' doc.pk %}" class="btn btn-sm btn-outline-primary"><i class="bi bi-list-check"></i> PI</a>{% endif %}
+                                    {% endif %}
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="empty-state">No uploaded documents are linked to this client.</div>
+            {% endif %}
         </section>
 
         {% if transactions %}
@@ -329,7 +401,7 @@
                     {% if txn.cleanup_documents %}
                     {% for doc in txn.cleanup_documents %}
                     <div class="document-row">
-                        {% if can_manage_client_cleanup %}<input type="checkbox" name="document_ids" value="{{ doc.id }}" class="document-check" aria-label="Select {{ doc.get_document_type_display }}">{% else %}<span class="document-spacer"></span>{% endif %}
+                        <span class="document-spacer"></span>
                         <div class="doc-main">
                             <span class="badge {% if doc.document_type == 'CLIENT_PI' %}bg-primary{% else %}bg-secondary{% endif %}">{{ doc.get_document_type_display }}</span>
                             <span class="doc-name">{{ doc.original_file.name|default:'No file attached' }}</span>
@@ -406,24 +478,28 @@
 <script>
 document.addEventListener('DOMContentLoaded', function () {
     var selectAll = document.getElementById('selectDocuments');
-    var deleteButton = document.getElementById('deleteSelectedDocuments');
+    var selectAllTop = document.getElementById('selectDocumentsTop');
+    var deleteButtons = Array.prototype.slice.call(document.querySelectorAll('.delete-selected-documents'));
     var checks = Array.prototype.slice.call(document.querySelectorAll('.document-check'));
     function updateDeleteButton() {
-        if (!deleteButton) return;
         var selected = checks.filter(function (checkbox) { return checkbox.checked; }).length;
-        deleteButton.disabled = selected === 0;
-        deleteButton.innerHTML = '<i class="bi bi-trash"></i> Delete selected documents' + (selected ? ' (' + selected + ')' : '');
-        if (selectAll) {
-            selectAll.checked = selected > 0 && selected === checks.length;
-            selectAll.indeterminate = selected > 0 && selected < checks.length;
-        }
-    }
-    if (selectAll) {
-        selectAll.addEventListener('change', function () {
-            checks.forEach(function (checkbox) { checkbox.checked = selectAll.checked; });
-            updateDeleteButton();
+        deleteButtons.forEach(function (button) {
+            button.disabled = selected === 0;
+            button.innerHTML = '<i class="bi bi-trash"></i> Delete selected documents' + (selected ? ' (' + selected + ')' : '');
+        });
+        [selectAll, selectAllTop].forEach(function (checkbox) {
+            if (!checkbox) return;
+            checkbox.checked = selected > 0 && selected === checks.length;
+            checkbox.indeterminate = selected > 0 && selected < checks.length;
         });
     }
+    [selectAll, selectAllTop].forEach(function (masterCheckbox) {
+        if (!masterCheckbox) return;
+        masterCheckbox.addEventListener('change', function () {
+            checks.forEach(function (checkbox) { checkbox.checked = masterCheckbox.checked; });
+            updateDeleteButton();
+        });
+    });
     checks.forEach(function (checkbox) { checkbox.addEventListener('change', updateDeleteButton); });
     updateDeleteButton();
 });

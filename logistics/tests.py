@@ -1293,6 +1293,9 @@ class ClientCleanupTests(TestCase):
         self.assertContains(response, "Supplier payment")
         self.assertContains(response, "Client payment")
         self.assertContains(response, "CLIENT-CLEAN-1")
+        self.assertContains(response, "Documents to delete or edit")
+        self.assertContains(response, 'name="document_ids"')
+        self.assertContains(response, "Select all")
         self.assertContains(response, "derrick-pi")
         self.assertContains(
             response, reverse("sourcing_update", kwargs={"pk": sourcing.pk})
