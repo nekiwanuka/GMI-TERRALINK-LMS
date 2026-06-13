@@ -29,10 +29,12 @@ from logistics.models import (
     GeneralInvoice,
     GeneralPayment,
     GeneralQuotation,
+    GeneralReceipt,
     Loading,
     PaymentTransaction,
     PurchaseOrder,
     ProformaInvoice,
+    Receipt,
     SignatureProfile,
     Sourcing,
     SupplierPayment,
@@ -1294,8 +1296,9 @@ class ClientCleanupTests(TestCase):
         self.assertContains(response, "Client payment")
         self.assertContains(response, "CLIENT-CLEAN-1")
         self.assertContains(response, "Documents to delete or edit")
-        self.assertContains(response, 'name="document_ids"')
-        self.assertContains(response, "Select all")
+        self.assertContains(response, "Uploaded document")
+        self.assertContains(response, "Client payment receipt")
+        self.assertContains(response, "Supplier payment receipt")
         self.assertContains(response, "derrick-pi")
         self.assertContains(
             response, reverse("sourcing_update", kwargs={"pk": sourcing.pk})
@@ -1317,8 +1320,89 @@ class ClientCleanupTests(TestCase):
         self.assertContains(
             response, reverse("document_update", kwargs={"pk": self.document.pk})
         )
-        self.assertContains(response, "Delete selected documents")
+        self.assertContains(
+            response,
+            reverse(
+                "client_cleanup_record_delete",
+                kwargs={
+                    "pk": self.customer.pk,
+                    "record_type": "final_invoice",
+                    "record_pk": final_invoice.pk,
+                },
+            ),
+        )
+        self.assertContains(response, "Delete")
+        self.assertNotContains(response, 'name="document_ids"')
         self.assertNotContains(response, "other-pi")
+
+    def test_client_cleanup_record_delete_removes_final_invoice_dependencies(self):
+        proforma = ProformaInvoice.objects.create(
+            transaction=self.transaction,
+            items=[{"description": "Cleanup item", "quantity": "1", "total": 100}],
+            subtotal=Decimal("100.00"),
+            validity_date="2026-06-18",
+            created_by=self.admin,
+        )
+        final_invoice = FinalInvoice.objects.create(
+            transaction=self.transaction,
+            proforma=proforma,
+            items=[{"description": "Cleanup item", "quantity": "1", "total": 100}],
+            subtotal=Decimal("100.00"),
+            total_amount=Decimal("100.00"),
+            created_by=self.admin,
+        )
+        purchase_order = PurchaseOrder.objects.create(
+            transaction=self.transaction,
+            proforma=proforma,
+            final_invoice=final_invoice,
+            supplier_name="Cleanup Supplier",
+            items=[{"description": "Cleanup item", "quantity": "1", "total": 100}],
+            subtotal=Decimal("100.00"),
+            created_by=self.admin,
+        )
+        supplier_payment = SupplierPayment.objects.create(
+            purchase_order=purchase_order,
+            supplier_name="Cleanup Supplier",
+            amount=Decimal("50.00"),
+            currency="USD",
+            method="BANK",
+            reference="SUP-CLEAN-DELETE",
+            created_by=self.admin,
+        )
+        client_payment = TransactionPaymentRecord.objects.create(
+            transaction=self.transaction,
+            final_invoice=final_invoice,
+            amount_due_snapshot=Decimal("100.00"),
+            amount=Decimal("60.00"),
+            currency="USD",
+            payment_method="bank_transfer",
+            reference="CLIENT-CLEAN-DELETE",
+            created_by=self.admin,
+        )
+        receipt_pk = client_payment.receipt.pk
+
+        response = self.client.post(
+            reverse(
+                "client_cleanup_record_delete",
+                kwargs={
+                    "pk": self.customer.pk,
+                    "record_type": "final_invoice",
+                    "record_pk": final_invoice.pk,
+                },
+            )
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(FinalInvoice.objects.filter(pk=final_invoice.pk).exists())
+        self.assertFalse(PurchaseOrder.objects.filter(pk=purchase_order.pk).exists())
+        self.assertFalse(
+            SupplierPayment.objects.filter(pk=supplier_payment.pk).exists()
+        )
+        self.assertFalse(
+            TransactionPaymentRecord.objects.filter(pk=client_payment.pk).exists()
+        )
+        self.assertFalse(Receipt.objects.filter(pk=receipt_pk).exists())
+        self.assertTrue(ProformaInvoice.objects.filter(pk=proforma.pk).exists())
 
     def test_client_delete_get_renders_confirmation_without_deleting(self):
         response = self.client.get(
@@ -1401,6 +1485,30 @@ class ClientCleanupTests(TestCase):
             currency="USD",
             created_by=self.admin,
         )
+        general_quotation = GeneralQuotation.objects.create(
+            client=self.customer,
+            purpose="SERVICE",
+            items=[{"description": "Cleanup service", "quantity": "1", "total": 100}],
+            subtotal=Decimal("100.00"),
+            created_by=self.admin,
+        )
+        general_invoice = GeneralInvoice.objects.create(
+            client=self.customer,
+            quotation=general_quotation,
+            purpose="SERVICE",
+            items=[{"description": "Cleanup service", "quantity": "1", "total": 100}],
+            subtotal=Decimal("100.00"),
+            created_by=self.admin,
+        )
+        general_payment = GeneralPayment.objects.create(
+            invoice=general_invoice,
+            amount=Decimal("40.00"),
+            currency="USD",
+            method="BANK_TRANSFER",
+            reference="GEN-CLEAN-1",
+            created_by=self.admin,
+        )
+        general_receipt_pk = general_payment.receipt.pk
 
         response = self.client.post(
             reverse("client_delete", kwargs={"pk": self.customer.pk}),
@@ -1414,6 +1522,12 @@ class ClientCleanupTests(TestCase):
         self.assertFalse(Document.objects.filter(pk=self.document.pk).exists())
         self.assertFalse(ProformaInvoice.objects.filter(pk=proforma.pk).exists())
         self.assertFalse(FinalInvoice.objects.filter(pk=final_invoice.pk).exists())
+        self.assertFalse(
+            GeneralQuotation.objects.filter(pk=general_quotation.pk).exists()
+        )
+        self.assertFalse(GeneralInvoice.objects.filter(pk=general_invoice.pk).exists())
+        self.assertFalse(GeneralPayment.objects.filter(pk=general_payment.pk).exists())
+        self.assertFalse(GeneralReceipt.objects.filter(pk=general_receipt_pk).exists())
         self.assertFalse(ContainerReturn.objects.filter(loading=loading).exists())
         self.assertFalse(Commission.objects.filter(client_id=self.customer.pk).exists())
         self.assertTrue(Client.objects.filter(pk=self.other_customer.pk).exists())

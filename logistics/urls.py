@@ -59,6 +59,11 @@ urlpatterns = [
     path("clients/<int:pk>/update/", views.client_update, name="client_update"),
     path("clients/<int:pk>/delete/", views.client_delete, name="client_delete"),
     path(
+        "clients/<int:pk>/cleanup/<str:record_type>/<int:record_pk>/delete/",
+        views.client_cleanup_record_delete,
+        name="client_cleanup_record_delete",
+    ),
+    path(
         "clients/<int:pk>/documents/delete/",
         views.client_documents_bulk_delete,
         name="client_documents_bulk_delete",

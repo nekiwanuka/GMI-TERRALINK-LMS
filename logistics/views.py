@@ -847,6 +847,609 @@ def _delete_purchase_orders(purchase_order_ids, stats):
     return deleted
 
 
+def _client_related_scope(client):
+    transaction_ids = list(
+        _client_transactions_queryset(client).values_list("pk", flat=True)
+    )
+    loading_ids = list(
+        Loading.objects.filter(client=client).values_list("pk", flat=True)
+    )
+    final_invoice_ids = list(
+        FinalInvoice.objects.filter(
+            Q(transaction_id__in=transaction_ids) | Q(loading_id__in=loading_ids)
+        ).values_list("pk", flat=True)
+    )
+    proforma_ids = list(
+        ProformaInvoice.objects.filter(
+            Q(transaction_id__in=transaction_ids) | Q(loading_id__in=loading_ids)
+        ).values_list("pk", flat=True)
+    )
+    purchase_order_ids = list(
+        PurchaseOrder.objects.filter(
+            Q(transaction_id__in=transaction_ids)
+            | Q(proforma_id__in=proforma_ids)
+            | Q(final_invoice_id__in=final_invoice_ids)
+        ).values_list("pk", flat=True)
+    )
+    general_quotation_ids = list(
+        GeneralQuotation.objects.filter(
+            Q(client=client) | Q(transaction_id__in=transaction_ids)
+        ).values_list("pk", flat=True)
+    )
+    general_invoice_ids = list(
+        GeneralInvoice.objects.filter(
+            Q(client=client)
+            | Q(transaction_id__in=transaction_ids)
+            | Q(quotation_id__in=general_quotation_ids)
+        ).values_list("pk", flat=True)
+    )
+    return {
+        "transaction_ids": transaction_ids,
+        "loading_ids": loading_ids,
+        "final_invoice_ids": final_invoice_ids,
+        "proforma_ids": proforma_ids,
+        "purchase_order_ids": purchase_order_ids,
+        "general_quotation_ids": general_quotation_ids,
+        "general_invoice_ids": general_invoice_ids,
+    }
+
+
+def _client_cleanup_delete_url(client, record_type, record_pk):
+    return reverse(
+        "client_cleanup_record_delete",
+        kwargs={"pk": client.pk, "record_type": record_type, "record_pk": record_pk},
+    )
+
+
+def _add_client_cleanup_row(
+    rows,
+    client,
+    *,
+    record_type,
+    record_pk,
+    kind,
+    title,
+    meta="",
+    transaction_label="",
+    date_value=None,
+    open_url="",
+    edit_url="",
+    edit_note="",
+    open_new_tab=False,
+):
+    rows.append(
+        {
+            "record_type": record_type,
+            "record_pk": record_pk,
+            "kind": kind,
+            "title": title,
+            "meta": meta,
+            "transaction_label": transaction_label,
+            "date": date_value,
+            "sort_date": str(date_value or ""),
+            "open_url": open_url,
+            "edit_url": edit_url,
+            "edit_note": edit_note,
+            "delete_url": _client_cleanup_delete_url(client, record_type, record_pk),
+            "open_new_tab": open_new_tab,
+        }
+    )
+
+
+def _purchase_order_family_ids(purchase_order_ids):
+    family_ids = list(dict.fromkeys(purchase_order_ids))
+    pending_ids = list(family_ids)
+    while pending_ids:
+        child_ids = list(
+            PurchaseOrder.objects.filter(parent_po_id__in=pending_ids).values_list(
+                "pk", flat=True
+            )
+        )
+        child_ids = [child_id for child_id in child_ids if child_id not in family_ids]
+        if not child_ids:
+            break
+        family_ids.extend(child_ids)
+        pending_ids = child_ids
+    return family_ids
+
+
+def _delete_payment_transactions_by_ids(payment_transaction_ids, stats):
+    payment_transaction_ids = list(dict.fromkeys(payment_transaction_ids))
+    if not payment_transaction_ids:
+        return 0
+    receipt_ids = Receipt.objects.filter(
+        logistics_payment_id__in=payment_transaction_ids
+    ).values_list("pk", flat=True)
+    _delete_document_signatures_for_model(Receipt, receipt_ids, stats)
+    _delete_queryset_records(
+        DocumentArchive.objects.filter(
+            _source_archive_q("PaymentTransaction", payment_transaction_ids)
+        ).distinct(),
+        stats,
+        "document_archives",
+        ("archived_file",),
+    )
+    _delete_queryset_records(
+        Receipt.objects.filter(logistics_payment_id__in=payment_transaction_ids),
+        stats,
+        "payment_receipts",
+    )
+    return _delete_queryset_records(
+        PaymentTransaction.objects.filter(pk__in=payment_transaction_ids),
+        stats,
+        "payment_transactions",
+        ("proof_of_payment",),
+    )
+
+
+def _delete_trade_payment_records_by_ids(trade_payment_ids, stats):
+    trade_payment_ids = list(dict.fromkeys(trade_payment_ids))
+    if not trade_payment_ids:
+        return 0
+    receipt_ids = Receipt.objects.filter(
+        sourcing_payment_id__in=trade_payment_ids
+    ).values_list("pk", flat=True)
+    _delete_document_signatures_for_model(Receipt, receipt_ids, stats)
+    _delete_queryset_records(
+        DocumentArchive.objects.filter(
+            _source_archive_q("TransactionPaymentRecord", trade_payment_ids)
+        ).distinct(),
+        stats,
+        "document_archives",
+        ("archived_file",),
+    )
+    _delete_queryset_records(
+        Receipt.objects.filter(sourcing_payment_id__in=trade_payment_ids),
+        stats,
+        "payment_receipts",
+    )
+    return _delete_queryset_records(
+        TransactionPaymentRecord.objects.filter(pk__in=trade_payment_ids),
+        stats,
+        "trade_payments",
+        ("proof_of_payment",),
+    )
+
+
+def _delete_supplier_payments_for_purchase_orders(purchase_order_ids, stats):
+    supplier_payment_ids = list(
+        SupplierPayment.objects.filter(
+            purchase_order_id__in=purchase_order_ids
+        ).values_list("pk", flat=True)
+    )
+    if not supplier_payment_ids:
+        return 0
+    _delete_queryset_records(
+        DocumentArchive.objects.filter(
+            _source_archive_q("SupplierPayment", supplier_payment_ids)
+        ).distinct(),
+        stats,
+        "document_archives",
+        ("archived_file",),
+    )
+    return _delete_queryset_records(
+        SupplierPayment.objects.filter(pk__in=supplier_payment_ids),
+        stats,
+        "supplier_payments",
+        ("proof_of_payment",),
+    )
+
+
+def _delete_purchase_order_records_by_ids(purchase_order_ids, stats):
+    purchase_order_ids = _purchase_order_family_ids(purchase_order_ids)
+    if not purchase_order_ids:
+        return 0
+    _delete_supplier_payments_for_purchase_orders(purchase_order_ids, stats)
+    _delete_document_signatures_for_model(PurchaseOrder, purchase_order_ids, stats)
+    return _delete_purchase_orders(purchase_order_ids, stats)
+
+
+def _delete_final_invoice_records_by_ids(final_invoice_ids, stats):
+    final_invoice_ids = list(dict.fromkeys(final_invoice_ids))
+    if not final_invoice_ids:
+        return 0
+    purchase_order_ids = list(
+        PurchaseOrder.objects.filter(
+            final_invoice_id__in=final_invoice_ids
+        ).values_list("pk", flat=True)
+    )
+    _delete_purchase_order_records_by_ids(purchase_order_ids, stats)
+    trade_payment_ids = list(
+        TransactionPaymentRecord.objects.filter(
+            final_invoice_id__in=final_invoice_ids
+        ).values_list("pk", flat=True)
+    )
+    _delete_trade_payment_records_by_ids(trade_payment_ids, stats)
+    payment_ids = list(
+        Payment.objects.filter(final_invoice_id__in=final_invoice_ids).values_list(
+            "pk", flat=True
+        )
+    )
+    payment_transaction_ids = list(
+        PaymentTransaction.objects.filter(payment_id__in=payment_ids).values_list(
+            "pk", flat=True
+        )
+    )
+    _delete_payment_transactions_by_ids(payment_transaction_ids, stats)
+    _delete_queryset_records(
+        Payment.objects.filter(pk__in=payment_ids),
+        stats,
+        "logistics_payments",
+    )
+    _delete_document_signatures_for_model(FinalInvoice, final_invoice_ids, stats)
+    return _delete_queryset_records(
+        FinalInvoice.objects.filter(pk__in=final_invoice_ids),
+        stats,
+        "final_invoices",
+    )
+
+
+def _delete_proforma_records_by_ids(proforma_ids, stats):
+    proforma_ids = list(dict.fromkeys(proforma_ids))
+    if not proforma_ids:
+        return 0
+    final_invoice_ids = list(
+        FinalInvoice.objects.filter(proforma_id__in=proforma_ids).values_list(
+            "pk", flat=True
+        )
+    )
+    _delete_final_invoice_records_by_ids(final_invoice_ids, stats)
+    purchase_order_ids = list(
+        PurchaseOrder.objects.filter(proforma_id__in=proforma_ids).values_list(
+            "pk", flat=True
+        )
+    )
+    _delete_purchase_order_records_by_ids(purchase_order_ids, stats)
+    _delete_document_signatures_for_model(ProformaInvoice, proforma_ids, stats)
+    return _delete_queryset_records(
+        ProformaInvoice.objects.filter(pk__in=proforma_ids),
+        stats,
+        "proformas",
+    )
+
+
+def _delete_general_payments_by_ids(general_payment_ids, stats):
+    general_payment_ids = list(dict.fromkeys(general_payment_ids))
+    if not general_payment_ids:
+        return 0
+    receipt_ids = GeneralReceipt.objects.filter(
+        payment_id__in=general_payment_ids
+    ).values_list("pk", flat=True)
+    _delete_document_signatures_for_model(GeneralReceipt, receipt_ids, stats)
+    _delete_queryset_records(
+        GeneralReceipt.objects.filter(payment_id__in=general_payment_ids),
+        stats,
+        "general_receipts",
+    )
+    return _delete_queryset_records(
+        GeneralPayment.objects.filter(pk__in=general_payment_ids),
+        stats,
+        "general_payments",
+        ("proof_of_payment",),
+    )
+
+
+def _delete_general_invoice_records_by_ids(general_invoice_ids, stats):
+    general_invoice_ids = list(dict.fromkeys(general_invoice_ids))
+    if not general_invoice_ids:
+        return 0
+    general_payment_ids = list(
+        GeneralPayment.objects.filter(invoice_id__in=general_invoice_ids).values_list(
+            "pk", flat=True
+        )
+    )
+    _delete_general_payments_by_ids(general_payment_ids, stats)
+    _delete_document_signatures_for_model(GeneralInvoice, general_invoice_ids, stats)
+    return _delete_queryset_records(
+        GeneralInvoice.objects.filter(pk__in=general_invoice_ids),
+        stats,
+        "general_invoices",
+    )
+
+
+def _delete_general_quotation_records_by_ids(general_quotation_ids, stats):
+    general_quotation_ids = list(dict.fromkeys(general_quotation_ids))
+    if not general_quotation_ids:
+        return 0
+    general_invoice_ids = list(
+        GeneralInvoice.objects.filter(
+            quotation_id__in=general_quotation_ids
+        ).values_list("pk", flat=True)
+    )
+    _delete_general_invoice_records_by_ids(general_invoice_ids, stats)
+    _delete_document_signatures_for_model(
+        GeneralQuotation, general_quotation_ids, stats
+    )
+    return _delete_queryset_records(
+        GeneralQuotation.objects.filter(pk__in=general_quotation_ids),
+        stats,
+        "general_quotations",
+    )
+
+
+def _delete_uploaded_documents_by_ids(document_ids, stats):
+    document_ids = list(dict.fromkeys(document_ids))
+    if not document_ids:
+        return 0
+    _delete_queryset_records(
+        DocumentArchive.objects.filter(
+            Q(document_id__in=document_ids)
+            | _source_archive_q("Document", document_ids)
+        ).distinct(),
+        stats,
+        "document_archives",
+        ("archived_file",),
+    )
+    return _delete_queryset_records(
+        Document.objects.filter(pk__in=document_ids),
+        stats,
+        "uploaded_documents",
+        ("original_file", "processed_file"),
+    )
+
+
+def _client_cleanup_document_rows(client):
+    scope = _client_related_scope(client)
+    rows = []
+    client_detail_url = reverse("client_detail", kwargs={"pk": client.pk})
+    next_query = quote(client_detail_url, safe="")
+
+    for doc in (
+        Document.objects.filter(transaction_id__in=scope["transaction_ids"])
+        .select_related("transaction", "uploaded_by")
+        .order_by("-timestamp", "-pk")
+    ):
+        _add_client_cleanup_row(
+            rows,
+            client,
+            record_type="document",
+            record_pk=doc.pk,
+            kind="Uploaded document",
+            title=doc.get_document_type_display(),
+            meta=doc.original_file.name if doc.original_file else "No file attached",
+            transaction_label=doc.transaction.transaction_id,
+            date_value=doc.timestamp,
+            open_url=(
+                reverse("protected_media", kwargs={"path": doc.original_file.name})
+                if doc.original_file
+                else ""
+            ),
+            edit_url=f"{reverse('document_update', kwargs={'pk': doc.pk})}?next={next_query}",
+            open_new_tab=True,
+        )
+
+    for sourcing in (
+        Sourcing.objects.filter(transaction_id__in=scope["transaction_ids"])
+        .select_related("transaction")
+        .order_by("-created_at", "-pk")
+    ):
+        _add_client_cleanup_row(
+            rows,
+            client,
+            record_type="sourcing",
+            record_pk=sourcing.pk,
+            kind="Sourcing record",
+            title=sourcing.supplier_name or "Sourcing record",
+            meta=f"{len(sourcing.item_details or [])} item(s)",
+            transaction_label=sourcing.transaction.transaction_id,
+            date_value=sourcing.created_at,
+            open_url=reverse("sourcing_pdf", kwargs={"pk": sourcing.pk}),
+            edit_url=reverse("sourcing_update", kwargs={"pk": sourcing.pk}),
+            open_new_tab=True,
+        )
+
+    for proforma in (
+        ProformaInvoice.objects.filter(pk__in=scope["proforma_ids"])
+        .select_related("transaction", "loading")
+        .order_by("-created_at", "-pk")
+    ):
+        _add_client_cleanup_row(
+            rows,
+            client,
+            record_type="proforma",
+            record_pk=proforma.pk,
+            kind="Proforma invoice",
+            title=display_document_number(proforma, "PI"),
+            meta=f"{proforma.status} - {proforma.total_amount}",
+            transaction_label=proforma.transaction.transaction_id,
+            date_value=proforma.created_at,
+            open_url=reverse(
+                _proforma_route_name(proforma, "detail"), kwargs={"pk": proforma.pk}
+            ),
+            edit_url=reverse(
+                _proforma_route_name(proforma, "update"), kwargs={"pk": proforma.pk}
+            ),
+        )
+
+    for invoice in (
+        FinalInvoice.objects.filter(pk__in=scope["final_invoice_ids"])
+        .select_related("transaction", "loading")
+        .order_by("-created_at", "-pk")
+    ):
+        paid_total = _final_invoice_total_paid(invoice)
+        _add_client_cleanup_row(
+            rows,
+            client,
+            record_type="final_invoice",
+            record_pk=invoice.pk,
+            kind="Final invoice",
+            title=display_document_number(invoice, "FI"),
+            meta=f"{invoice.currency} {invoice.total_amount}",
+            transaction_label=invoice.transaction.transaction_id,
+            date_value=invoice.created_at,
+            open_url=reverse(
+                _final_invoice_route_name(invoice, "detail"), kwargs={"pk": invoice.pk}
+            ),
+            edit_url=(
+                ""
+                if paid_total > 0
+                else reverse(
+                    _final_invoice_route_name(invoice, "update"),
+                    kwargs={"pk": invoice.pk},
+                )
+            ),
+            edit_note="Payment locked" if paid_total > 0 else "",
+        )
+
+    for po in (
+        PurchaseOrder.objects.filter(pk__in=scope["purchase_order_ids"])
+        .select_related("transaction", "proforma", "final_invoice")
+        .annotate(
+            cleanup_supplier_payment_count=Count("supplier_payments", distinct=True)
+        )
+        .order_by("-created_at", "-pk")
+    ):
+        payment_count = getattr(po, "cleanup_supplier_payment_count", 0)
+        _add_client_cleanup_row(
+            rows,
+            client,
+            record_type="purchase_order",
+            record_pk=po.pk,
+            kind="Purchase order",
+            title=po.po_number,
+            meta=f"{po.supplier_name} - {po.subtotal}",
+            transaction_label=po.transaction.transaction_id,
+            date_value=po.created_at,
+            open_url=reverse("purchase_order_detail", kwargs={"pk": po.pk}),
+            edit_url=(
+                ""
+                if payment_count
+                else reverse("purchase_order_update", kwargs={"pk": po.pk})
+            ),
+            edit_note="Payment locked" if payment_count else "",
+        )
+
+    for payment in (
+        TransactionPaymentRecord.objects.filter(
+            Q(transaction_id__in=scope["transaction_ids"])
+            | Q(final_invoice_id__in=scope["final_invoice_ids"])
+        )
+        .select_related("transaction", "final_invoice")
+        .order_by("-payment_date", "-pk")
+    ):
+        _add_client_cleanup_row(
+            rows,
+            client,
+            record_type="sourcing_payment",
+            record_pk=payment.pk,
+            kind="Client payment receipt",
+            title=payment.reference or str(payment),
+            meta=f"{payment.currency} {payment.amount}",
+            transaction_label=payment.transaction.transaction_id,
+            date_value=payment.payment_date,
+            open_url=reverse(
+                "sourcing_payment_list",
+                kwargs={"transaction_pk": payment.transaction_id},
+            ),
+            edit_note="No edit form",
+        )
+
+    for payment in (
+        SupplierPayment.objects.filter(
+            purchase_order_id__in=scope["purchase_order_ids"]
+        )
+        .select_related("purchase_order__transaction")
+        .order_by("-paid_at", "-pk")
+    ):
+        _add_client_cleanup_row(
+            rows,
+            client,
+            record_type="supplier_payment",
+            record_pk=payment.pk,
+            kind="Supplier payment receipt",
+            title=payment.reference or str(payment),
+            meta=f"{payment.currency} {payment.amount}",
+            transaction_label=payment.purchase_order.transaction.transaction_id,
+            date_value=payment.paid_at,
+            open_url=reverse(
+                "purchase_order_detail", kwargs={"pk": payment.purchase_order_id}
+            ),
+            edit_note="No edit form",
+        )
+
+    for quotation in (
+        GeneralQuotation.objects.filter(pk__in=scope["general_quotation_ids"])
+        .select_related("transaction")
+        .order_by("-created_at", "-pk")
+    ):
+        _add_client_cleanup_row(
+            rows,
+            client,
+            record_type="general_quotation",
+            record_pk=quotation.pk,
+            kind="General quotation",
+            title=quotation.quotation_number,
+            meta=f"{quotation.currency} {quotation.total_amount}",
+            transaction_label=(
+                quotation.transaction.transaction_id
+                if quotation.transaction_id
+                else "General"
+            ),
+            date_value=quotation.created_at,
+            open_url=reverse("general_quotation_detail", kwargs={"pk": quotation.pk}),
+            edit_url=reverse("general_quotation_update", kwargs={"pk": quotation.pk}),
+        )
+
+    for invoice in (
+        GeneralInvoice.objects.filter(pk__in=scope["general_invoice_ids"])
+        .select_related("transaction", "quotation")
+        .order_by("-created_at", "-pk")
+    ):
+        _add_client_cleanup_row(
+            rows,
+            client,
+            record_type="general_invoice",
+            record_pk=invoice.pk,
+            kind="General invoice",
+            title=invoice.invoice_number,
+            meta=f"{invoice.currency} {invoice.total_amount}",
+            transaction_label=(
+                invoice.transaction.transaction_id
+                if invoice.transaction_id
+                else "General"
+            ),
+            date_value=invoice.created_at,
+            open_url=reverse("general_invoice_detail", kwargs={"pk": invoice.pk}),
+            edit_url=(
+                reverse("general_invoice_update", kwargs={"pk": invoice.pk})
+                if not invoice.amount_paid
+                else ""
+            ),
+            edit_note="Payment locked" if invoice.amount_paid else "",
+        )
+
+    general_payment_qs = GeneralPayment.objects.filter(
+        invoice_id__in=scope["general_invoice_ids"]
+    ).select_related("invoice__transaction")
+    for payment in general_payment_qs.order_by("-paid_at", "-pk"):
+        _add_client_cleanup_row(
+            rows,
+            client,
+            record_type="general_payment",
+            record_pk=payment.pk,
+            kind="General payment receipt",
+            title=payment.reference or str(payment),
+            meta=f"{payment.currency} {payment.amount}",
+            transaction_label=(
+                payment.invoice.transaction.transaction_id
+                if payment.invoice.transaction_id
+                else "General"
+            ),
+            date_value=payment.paid_at,
+            open_url=(
+                reverse("general_receipt_detail", kwargs={"pk": payment.receipt.pk})
+                if hasattr(payment, "receipt")
+                else reverse(
+                    "general_invoice_detail", kwargs={"pk": payment.invoice_id}
+                )
+            ),
+            edit_note="No edit form",
+        )
+
+    rows.sort(key=lambda row: row["sort_date"], reverse=True)
+    return rows
+
+
 def _client_cleanup_summary(client):
     transaction_ids = list(
         _client_transactions_queryset(client).values_list("pk", flat=True)
@@ -884,6 +1487,18 @@ def _client_cleanup_summary(client):
             | Q(final_invoice_id__in=final_invoice_ids)
         ).values_list("pk", flat=True)
     )
+    general_quotation_ids = list(
+        GeneralQuotation.objects.filter(
+            Q(client=client) | Q(transaction_id__in=transaction_ids)
+        ).values_list("pk", flat=True)
+    )
+    general_invoice_ids = list(
+        GeneralInvoice.objects.filter(
+            Q(client=client)
+            | Q(transaction_id__in=transaction_ids)
+            | Q(quotation_id__in=general_quotation_ids)
+        ).values_list("pk", flat=True)
+    )
     billing_invoice_ids = list(
         BillingInvoice.objects.filter(
             Q(client=client) | Q(shipment_id__in=workflow_shipment_ids)
@@ -904,6 +1519,7 @@ def _client_cleanup_summary(client):
         ).count(),
         "payment_receipts": Receipt.objects.filter(
             Q(logistics_payment__payment__loading_id__in=loading_ids)
+            | Q(logistics_payment__payment__final_invoice_id__in=final_invoice_ids)
             | Q(sourcing_payment__transaction_id__in=transaction_ids)
         ).count(),
         "sourcing_records": Sourcing.objects.filter(
@@ -929,6 +1545,14 @@ def _client_cleanup_summary(client):
         "workflow_shipments": len(workflow_shipment_ids),
         "workflow_cargo_items": len(cargo_item_ids),
         "workflow_billing_invoices": len(billing_invoice_ids),
+        "general_quotations": len(general_quotation_ids),
+        "general_invoices": len(general_invoice_ids),
+        "general_payments": GeneralPayment.objects.filter(
+            invoice_id__in=general_invoice_ids
+        ).count(),
+        "general_receipts": GeneralReceipt.objects.filter(
+            payment__invoice_id__in=general_invoice_ids
+        ).count(),
         "commissions": Commission.objects.filter(client=client).count(),
     }
     summary["total_records"] = sum(summary.values())
@@ -976,7 +1600,8 @@ def _delete_client_with_related_data(client, user):
         )
         payment_transaction_ids = list(
             PaymentTransaction.objects.filter(
-                payment__loading_id__in=loading_ids
+                Q(payment__loading_id__in=loading_ids)
+                | Q(payment__final_invoice_id__in=final_invoice_ids)
             ).values_list("pk", flat=True)
         )
         trade_payment_ids = list(
@@ -1000,6 +1625,23 @@ def _delete_client_with_related_data(client, user):
                 invoice_id__in=billing_invoice_ids
             ).values_list("pk", flat=True)
         )
+        general_quotation_ids = list(
+            GeneralQuotation.objects.filter(
+                Q(client=client) | Q(transaction_id__in=transaction_ids)
+            ).values_list("pk", flat=True)
+        )
+        general_invoice_ids = list(
+            GeneralInvoice.objects.filter(
+                Q(client=client)
+                | Q(transaction_id__in=transaction_ids)
+                | Q(quotation_id__in=general_quotation_ids)
+            ).values_list("pk", flat=True)
+        )
+        general_payment_ids = list(
+            GeneralPayment.objects.filter(
+                invoice_id__in=general_invoice_ids
+            ).values_list("pk", flat=True)
+        )
 
         _delete_document_signatures_for_model(
             Receipt,
@@ -1012,6 +1654,19 @@ def _delete_client_with_related_data(client, user):
         _delete_document_signatures_for_model(ProformaInvoice, proforma_ids, stats)
         _delete_document_signatures_for_model(FinalInvoice, final_invoice_ids, stats)
         _delete_document_signatures_for_model(PurchaseOrder, purchase_order_ids, stats)
+        _delete_document_signatures_for_model(
+            GeneralReceipt,
+            GeneralReceipt.objects.filter(
+                payment_id__in=general_payment_ids
+            ).values_list("pk", flat=True),
+            stats,
+        )
+        _delete_document_signatures_for_model(
+            GeneralInvoice, general_invoice_ids, stats
+        )
+        _delete_document_signatures_for_model(
+            GeneralQuotation, general_quotation_ids, stats
+        )
 
         archive_filter = (
             Q(transaction_id__in=transaction_ids)
@@ -1157,6 +1812,8 @@ def _delete_client_with_related_data(client, user):
             stats,
             "fulfillment_orders",
         )
+        _delete_general_invoice_records_by_ids(general_invoice_ids, stats)
+        _delete_general_quotation_records_by_ids(general_quotation_ids, stats)
         _delete_queryset_records(
             InventoryItem.objects.filter(transaction_id__in=transaction_ids),
             stats,
@@ -2416,6 +3073,7 @@ def client_detail(request, pk):
             "loadings": client.loadings.all(),
             "transactions": transactions,
             "client_documents": documents,
+            "cleanup_document_rows": _client_cleanup_document_rows(client),
             "cleanup_summary": _client_cleanup_summary(client),
             "can_manage_client_cleanup": _can_manage_client_cleanup(request.user),
         },
@@ -2555,6 +3213,161 @@ def client_documents_bulk_delete(request, pk):
         f"{client.name} documents",
         request.user,
         changes={"document_ids": document_ids, "deleted_documents": document_count},
+    )
+    return redirect("client_detail", pk=client.pk)
+
+
+@login_required
+def client_cleanup_record_delete(request, pk, record_type, record_pk):
+    client = get_object_or_404(Client, pk=pk)
+    if not _can_manage_client_cleanup(request.user):
+        messages.error(
+            request,
+            "Only the Director or System Administrator can delete client cleanup records.",
+        )
+        return redirect("client_detail", pk=client.pk)
+    if request.method != "POST":
+        return redirect("client_detail", pk=client.pk)
+
+    scope = _client_related_scope(client)
+    stats = {}
+    label = "record"
+    try:
+        with transaction.atomic():
+            if record_type == "document":
+                document = get_object_or_404(
+                    _client_documents_queryset(client), pk=record_pk
+                )
+                label = document.get_document_type_display()
+                _delete_uploaded_documents_by_ids([document.pk], stats)
+            elif record_type == "sourcing":
+                sourcing = get_object_or_404(
+                    Sourcing.objects.filter(
+                        transaction_id__in=scope["transaction_ids"]
+                    ),
+                    pk=record_pk,
+                )
+                label = sourcing.supplier_name or "Sourcing record"
+                _delete_queryset_records(
+                    Sourcing.objects.filter(pk=sourcing.pk),
+                    stats,
+                    "sourcing_records",
+                )
+            elif record_type == "proforma":
+                proforma = get_object_or_404(
+                    ProformaInvoice.objects.filter(pk__in=scope["proforma_ids"]),
+                    pk=record_pk,
+                )
+                label = display_document_number(proforma, "PI")
+                _delete_proforma_records_by_ids([proforma.pk], stats)
+            elif record_type == "final_invoice":
+                invoice = get_object_or_404(
+                    FinalInvoice.objects.filter(pk__in=scope["final_invoice_ids"]),
+                    pk=record_pk,
+                )
+                label = display_document_number(invoice, "FI")
+                _delete_final_invoice_records_by_ids([invoice.pk], stats)
+            elif record_type == "purchase_order":
+                purchase_order = get_object_or_404(
+                    PurchaseOrder.objects.filter(pk__in=scope["purchase_order_ids"]),
+                    pk=record_pk,
+                )
+                label = purchase_order.po_number
+                _delete_purchase_order_records_by_ids([purchase_order.pk], stats)
+            elif record_type == "sourcing_payment":
+                payment = get_object_or_404(
+                    TransactionPaymentRecord.objects.filter(
+                        Q(transaction_id__in=scope["transaction_ids"])
+                        | Q(final_invoice_id__in=scope["final_invoice_ids"])
+                    ),
+                    pk=record_pk,
+                )
+                label = payment.reference or str(payment)
+                _delete_trade_payment_records_by_ids([payment.pk], stats)
+            elif record_type == "supplier_payment":
+                payment = get_object_or_404(
+                    SupplierPayment.objects.filter(
+                        purchase_order_id__in=scope["purchase_order_ids"]
+                    ),
+                    pk=record_pk,
+                )
+                label = payment.reference or str(payment)
+                _delete_queryset_records(
+                    DocumentArchive.objects.filter(
+                        _source_archive_q("SupplierPayment", [payment.pk])
+                    ).distinct(),
+                    stats,
+                    "document_archives",
+                    ("archived_file",),
+                )
+                _delete_queryset_records(
+                    SupplierPayment.objects.filter(pk=payment.pk),
+                    stats,
+                    "supplier_payments",
+                    ("proof_of_payment",),
+                )
+            elif record_type == "general_quotation":
+                quotation = get_object_or_404(
+                    GeneralQuotation.objects.filter(
+                        pk__in=scope["general_quotation_ids"]
+                    ),
+                    pk=record_pk,
+                )
+                label = quotation.quotation_number
+                _delete_general_quotation_records_by_ids([quotation.pk], stats)
+            elif record_type == "general_invoice":
+                invoice = get_object_or_404(
+                    GeneralInvoice.objects.filter(pk__in=scope["general_invoice_ids"]),
+                    pk=record_pk,
+                )
+                label = invoice.invoice_number
+                _delete_general_invoice_records_by_ids([invoice.pk], stats)
+            elif record_type == "general_payment":
+                payment = get_object_or_404(
+                    GeneralPayment.objects.filter(
+                        invoice_id__in=scope["general_invoice_ids"]
+                    ).select_related("invoice"),
+                    pk=record_pk,
+                )
+                label = payment.reference or str(payment)
+                invoice = payment.invoice
+                _delete_general_payments_by_ids([payment.pk], stats)
+                if GeneralInvoice.objects.filter(pk=invoice.pk).exists():
+                    invoice.save(
+                        update_fields=[
+                            "amount_paid",
+                            "balance",
+                            "status",
+                            "total_amount",
+                            "updated_at",
+                        ]
+                    )
+            else:
+                raise Http404("Unknown cleanup record type")
+    except ProtectedError as exc:
+        messages.error(
+            request,
+            f"{label} still has protected related records. Delete the dependent rows first.",
+        )
+        log_audit(
+            "client_cleanup",
+            "delete_failed",
+            record_pk,
+            f"{record_type}:{label}",
+            request.user,
+            changes={"error": str(exc), "client_id": client.pk},
+        )
+        return redirect("client_detail", pk=client.pk)
+
+    deleted_count = sum(stats.values())
+    messages.success(request, f"Deleted {label} and {deleted_count} related row(s).")
+    log_audit(
+        "client_cleanup",
+        "delete",
+        record_pk,
+        f"{record_type}:{label}",
+        request.user,
+        changes={"client_id": client.pk, **stats},
     )
     return redirect("client_detail", pk=client.pk)
 
