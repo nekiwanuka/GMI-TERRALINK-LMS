@@ -31,7 +31,6 @@ from logistics.models import (
     GeneralQuotation,
     GeneralReceipt,
     Loading,
-    PaymentTransaction,
     PurchaseOrder,
     ProformaInvoice,
     Receipt,
@@ -719,26 +718,50 @@ class PurchaseOrderSplitTests(TestCase):
         )
         return PurchaseOrder.objects.get(parent_po=self.purchase_order)
 
-    def test_purchase_order_pdf_renders_inline(self):
+    def test_purchase_order_pdf_redirects_to_uniform_preview(self):
+        preview_url = reverse(
+            "purchase_order_html_preview", kwargs={"pk": self.purchase_order.pk}
+        )
+
         response = self.client.get(
             reverse("purchase_order_pdf", kwargs={"pk": self.purchase_order.pk})
         )
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response["Content-Type"], "application/pdf")
-        self.assertTrue(response.content.startswith(b"%PDF"))
-        self.assertIn("inline", response["Content-Disposition"])
-        self.assertIn(
-            f"{self.purchase_order.po_number}.pdf", response["Content-Disposition"]
+
+        self.assertRedirects(
+            response,
+            f"{preview_url}?download=1",
+            fetch_redirect_response=False,
         )
 
-    def test_purchase_order_pdf_downloads_as_attachment(self):
+    def test_purchase_order_preview_uses_uniform_item_columns(self):
         response = self.client.get(
-            f"{reverse('purchase_order_pdf', kwargs={'pk': self.purchase_order.pk})}?download=1"
+            reverse(
+                "purchase_order_html_preview", kwargs={"pk": self.purchase_order.pk}
+            )
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response["Content-Type"], "application/pdf")
-        self.assertIn("attachment", response["Content-Disposition"])
+        self.assertContains(response, "Unit Cost")
+        self.assertContains(response, "Line Total")
+        self.assertContains(response, "Solar battery")
+        self.assertContains(response, "USD 100.00")
+        self.assertContains(response, "USD 500.00")
+
+    def test_purchase_order_detail_embeds_uniform_preview(self):
+        response = self.client.get(
+            reverse("purchase_order_detail", kwargs={"pk": self.purchase_order.pk})
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="purchase-order-preview-frame"')
+        self.assertContains(
+            response,
+            reverse(
+                "purchase_order_html_preview", kwargs={"pk": self.purchase_order.pk}
+            ),
+        )
+        self.assertContains(response, "Print Preview")
+        self.assertContains(response, "Download PDF")
 
     def test_parent_po_detail_exposes_split_document_actions(self):
         split_po = self._create_split("2")
@@ -804,14 +827,20 @@ class PurchaseOrderSplitTests(TestCase):
 
     def test_base_and_split_pos_are_paid_individually_with_shared_deposit_cap(self):
         split_po = self._create_split("2")
-        PaymentTransaction.objects.create(
+        finance_user = CustomUser.objects.create_user(
+            username="po-finance",
+            password="testpass123",
+            role="FINANCE",
+        )
+        self.client.force_login(finance_user)
+        TransactionPaymentRecord.objects.create(
             transaction=self.transaction,
             amount_due_snapshot=Decimal("500.00"),
             amount=Decimal("350.00"),
             currency="USD",
             payment_method="bank_transfer",
             reference="CLIENT-DEP-1",
-            created_by=self.user,
+            created_by=finance_user,
         )
 
         base_payment_response = self.client.post(
@@ -1123,7 +1152,7 @@ class PurchaseOrderSplitTests(TestCase):
         self.assertEqual(edit_response.status_code, 302)
         self.purchase_order.refresh_from_db()
         self.assertEqual(self.purchase_order.supplier_name, "Edited Supplier")
-        self.assertEqual(self.purchase_order.items[0]["description"], "Changed item")
+        self.assertEqual(self.purchase_order.items[0]["description"], "Changed Item")
 
         split_response = self.client.post(
             reverse(

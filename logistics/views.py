@@ -8587,189 +8587,13 @@ def purchase_order_html_preview(request, pk):
     return _prevent_stale_pdf_cache(response)
 
 
-def _render_purchase_order_pdf_bytes(purchase_order):
-    buffer = BytesIO()
-    doc = SimpleDocTemplate(
-        buffer,
-        pagesize=A4,
-        rightMargin=36,
-        leftMargin=36,
-        topMargin=36,
-        bottomMargin=36,
-    )
-    styles = getSampleStyleSheet()
-    title_style = styles["Title"]
-    title_style.fontSize = 18
-    title_style.leading = 22
-    normal = styles["BodyText"]
-    normal.fontSize = 8.5
-    normal.leading = 11
-    small = styles["BodyText"]
-    small.fontSize = 7.5
-    small.leading = 9
-
-    story = []
-    story.append(Paragraph("GMI TERRALINK", title_style))
-    story.append(Paragraph("PURCHASE ORDER", styles["Heading2"]))
-    story.append(Spacer(1, 8))
-
-    detail_rows = [
-        [
-            "PO No.",
-            purchase_order.po_number,
-            "Transaction",
-            purchase_order.transaction.transaction_id,
-        ],
-        [
-            "Supplier",
-            purchase_order.supplier_name or "-",
-            "Customer",
-            purchase_order.transaction.customer.name,
-        ],
-        [
-            "Issue Date",
-            purchase_order.created_at.strftime("%d %b %Y"),
-            "Status",
-            getattr(purchase_order, "effective_status_display", None)
-            or purchase_order.get_status_display(),
-        ],
-    ]
-    if purchase_order.final_invoice:
-        detail_rows.append(
-            [
-                "Invoice",
-                display_document_number(purchase_order.final_invoice, "FI"),
-                "",
-                "",
-            ]
-        )
-    detail_table = Table(detail_rows, colWidths=[70, 170, 70, 170])
-    detail_table.setStyle(
-        TableStyle(
-            [
-                ("BACKGROUND", (0, 0), (-1, -1), colors.whitesmoke),
-                ("TEXTCOLOR", (0, 0), (0, -1), colors.HexColor("#8a6d1d")),
-                ("TEXTCOLOR", (2, 0), (2, -1), colors.HexColor("#8a6d1d")),
-                ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
-                ("FONTNAME", (2, 0), (2, -1), "Helvetica-Bold"),
-                ("GRID", (0, 0), (-1, -1), 0.35, colors.lightgrey),
-                ("VALIGN", (0, 0), (-1, -1), "TOP"),
-                ("FONTSIZE", (0, 0), (-1, -1), 8.5),
-                ("LEFTPADDING", (0, 0), (-1, -1), 6),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 6),
-                ("TOPPADDING", (0, 0), (-1, -1), 5),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
-            ]
-        )
-    )
-    story.append(detail_table)
-    story.append(Spacer(1, 10))
-
-    if purchase_order.supplier_address:
-        story.append(Paragraph("Supplier Address", styles["Heading4"]))
-        story.append(
-            Paragraph(
-                escape(purchase_order.supplier_address).replace("\n", "<br />"), normal
-            )
-        )
-        story.append(Spacer(1, 8))
-
-    item_rows = [["No", "Item Description", "Quantity", "Unit Cost", "Amount"]]
-    for index, item in enumerate(purchase_order.items or [], start=1):
-        description = (
-            item.get("description")
-            or item.get("name")
-            or "Item description not recorded"
-        )
-        quantity = _purchase_order_item_quantity(item)
-        unit_price = _purchase_order_item_unit_price(item)
-        amount = (quantity * unit_price).quantize(Decimal("0.01"))
-        item_rows.append(
-            [
-                str(index),
-                Paragraph(escape(str(description)), normal),
-                _format_decimal_for_json(quantity),
-                f"USD {unit_price:,.2f}",
-                f"USD {amount:,.2f}",
-            ]
-        )
-    if len(item_rows) == 1:
-        item_rows.append(["-", "No line items.", "-", "-", "-"])
-    items_table = Table(item_rows, colWidths=[30, 250, 70, 75, 80], repeatRows=1)
-    items_table.setStyle(
-        TableStyle(
-            [
-                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#222222")),
-                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-                ("ALIGN", (0, 0), (0, -1), "CENTER"),
-                ("ALIGN", (2, 1), (-1, -1), "RIGHT"),
-                ("GRID", (0, 0), (-1, -1), 0.35, colors.lightgrey),
-                ("VALIGN", (0, 0), (-1, -1), "TOP"),
-                ("FONTSIZE", (0, 0), (-1, -1), 8.5),
-                ("TOPPADDING", (0, 0), (-1, -1), 6),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
-            ]
-        )
-    )
-    story.append(items_table)
-    story.append(Spacer(1, 8))
-
-    total_table = Table(
-        [["PO Subtotal", f"USD {purchase_order.subtotal:,.2f}"]],
-        colWidths=[380, 125],
-    )
-    total_table.setStyle(
-        TableStyle(
-            [
-                ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#d4af37")),
-                ("FONTNAME", (0, 0), (-1, -1), "Helvetica-Bold"),
-                ("ALIGN", (1, 0), (1, 0), "RIGHT"),
-                ("GRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#8a6d1d")),
-                ("FONTSIZE", (0, 0), (-1, -1), 9),
-                ("TOPPADDING", (0, 0), (-1, -1), 7),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
-            ]
-        )
-    )
-    story.append(total_table)
-    story.append(Spacer(1, 12))
-
-    if purchase_order.notes:
-        story.append(Paragraph("Notes", styles["Heading4"]))
-        story.append(
-            Paragraph(escape(purchase_order.notes).replace("\n", "<br />"), normal)
-        )
-        story.append(Spacer(1, 10))
-
-    story.append(
-        Paragraph(
-            "This purchase order authorises supplier procurement for the listed goods only. Quote the PO number on all supplier correspondence.",
-            small,
-        )
-    )
-    doc.build(story)
-    return buffer.getvalue()
-
-
 @login_required
 def purchase_order_pdf(request, pk):
     purchase_order = get_object_or_404(_purchase_order_document_queryset(), pk=pk)
-    context = _purchase_order_display_context(purchase_order, request.user)
-    context.update(
-        {
-            "document_number": purchase_order.po_number,
-            "auto_print_pdf": False,
-        }
+    preview_url = reverse(
+        "purchase_order_html_preview", kwargs={"pk": purchase_order.pk}
     )
-    pdf_bytes = _render_purchase_order_pdf_bytes(purchase_order)
-    response = HttpResponse(pdf_bytes, content_type="application/pdf")
-    disposition = "attachment" if request.GET.get("download") == "1" else "inline"
-    response["Content-Disposition"] = (
-        f'{disposition}; filename="{purchase_order.po_number}.pdf"; '
-        f"filename*=UTF-8''{quote(f'{purchase_order.po_number}.pdf')}"
-    )
-    return _prevent_stale_pdf_cache(response)
+    return redirect(f"{preview_url}?download=1")
 
 
 @login_required
@@ -12528,14 +12352,16 @@ def _purchase_order_effective_status(purchase_order, total_paid=None):
     if total_paid is None:
         _, total_paid, _ = _po_supplier_summary(purchase_order)
     subtotal = purchase_order.subtotal or Decimal("0.00")
+    supplier_name = (purchase_order.supplier_name or "").strip().lower()
+    has_named_supplier = supplier_name and "pending" not in supplier_name
     if purchase_order.status in {"RECEIVED", "FULFILLED"} and (
         subtotal <= 0 or total_paid >= subtotal
     ):
         return purchase_order.status
+    if purchase_order.status in {"RECEIVED", "FULFILLED"}:
+        return "SENT" if total_paid > 0 or has_named_supplier else "PENDING"
     if subtotal > 0 and total_paid >= subtotal:
         return "FULFILLED"
-    supplier_name = (purchase_order.supplier_name or "").strip().lower()
-    has_named_supplier = supplier_name and "pending" not in supplier_name
     if total_paid > 0 or has_named_supplier:
         return "SENT"
     return purchase_order.status or "PENDING"
